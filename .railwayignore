@@ -1,0 +1,45 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Development and logs
+streamlit.log
+*.log
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed for deployment)
+CHANGES_SUMMARY.md
+LAUNCH_INSTRUCTIONS.md
+NEW_FEATURES_GUIDE.md
+PROJECT_SUMMARY.md
+PYTHON_STATUS.md
+QUICKSTART.md
+START_HERE.txt
+RUN_LOCALLY.sh
+
+# Test files
+test_python.py
+validate.py
+
+
