@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
-
+import os
 class Settings(BaseSettings):
-    database_url: str = "postgresql://postgres:password@localhost:5432/beton"
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/beton")
     env: str = "DEV"
     supabase_url: str = ""
     supabase_key: str = ""
