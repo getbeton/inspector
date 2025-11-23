@@ -419,6 +419,9 @@ async def get_concrete_grades_info(current_user: dict = Depends(get_current_user
     }
 
 
+
+from datetime import datetime
+
 @app.post("/api/heuristics/process-all")
 async def process_all_accounts(
     current_user: dict = Depends(get_current_user),
@@ -458,4 +461,41 @@ async def process_all_accounts(
             "status": "error",
             "message": str(e)
         }
+
+
+# ===== DASHBOARD ENDPOINTS =====
+
+from app.services.dashboard import DashboardService
+
+@app.post("/api/dashboard/metrics")
+async def get_dashboard_metrics(
+    filters: dict = {},
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all aggregated metrics for the main dashboard.
+    Includes North Star metrics, Growth Velocity, and Momentum data.
+    """
+    try:
+        service = DashboardService(db)
+        
+        north_star = service.get_north_star_metrics(filters)
+        velocity = service.get_growth_velocity_metrics(filters)
+        momentum = service.get_momentum_data(filters)
+        
+        return {
+            "status": "success",
+            "north_star": north_star,
+            "velocity": velocity,
+            "momentum": momentum,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get dashboard metrics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 

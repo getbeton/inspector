@@ -17,3 +17,4 @@ httpx
 # Testing
 pytest
 pytest-asyncio
+PyYAML
