@@ -6,3 +6,14 @@ pydantic-settings
 psycopg2-binary
 python-multipart
 requests
+faker
+
+# Integration SDKs
+posthog
+stripe
+pyyaml==6.0.1
+httpx
+
+# Testing
+pytest
+pytest-asyncio

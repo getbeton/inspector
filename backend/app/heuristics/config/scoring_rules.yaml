@@ -1,0 +1,265 @@
+# Scoring Rules Configuration for Heuristics Engine
+# This file defines signal weights, thresholds, and scoring parameters
+
+signals:
+  # ===== PRODUCT USAGE SIGNALS =====
+  
+  # Signal 1: Usage Spike
+  usage_spike:
+    weight: 10
+    category: expansion
+    threshold: 0.20  # 20% increase
+    time_window_days: 14
+    description: "Significant increase in product usage indicates engagement and upsell opportunity"
+  
+  # Signal 2: Usage Drop  
+  usage_drop:
+    weight: -15
+    category: churn_risk
+    threshold: -0.20  # 20% decrease
+    time_window_days: 14
+    description: "Declining usage signals disengagement and churn risk"
+  
+  # Signal 3: Nearing Paywall
+  nearing_paywall:
+    weight: 15
+    category: expansion
+    threshold: 0.80  # 80% of plan limit
+    description: "Account approaching usage limits ready for upgrade conversation"
+  
+  # Signal 4: Director+ Signup
+  director_signup:
+    weight: 25
+    category: expansion
+    title_patterns:
+      - "Director"
+      - "VP"
+      - "Vice President"
+      - "Head of"
+      - "Chief"
+      - "C-level"
+      - "CTO"
+      - "CEO"
+      - "CFO"
+      - "COO"
+    description: "Decision maker signup indicates serious evaluation"
+  
+  # Signal 5: Invites Sent
+  invites_sent:
+    weight: 12
+    category: expansion
+    threshold: 5  # 5+ invites
+    time_window_days: 30
+    description: "Internal adoption through invites signals enterprise readiness"
+  
+  # Signal 6: New Department User
+  new_department_user:
+    weight: 18
+    category: expansion
+    description: "Cross-department expansion indicates broader use case"
+  
+  # Signal 7: High NPS Score
+  high_nps:
+    weight: 20
+    category: expansion
+    threshold: 9  # NPS >= 9
+    description: "Product champions perfect for case studies and expansion"
+  
+  # Signal 8: Low NPS Score
+  low_nps:
+    weight: -20
+    category: churn_risk
+    threshold: 6  # NPS <= 6
+    time_window_days: 90
+    description: "Detractor score requires immediate intervention"
+  
+  # Signal 9: Inactivity (Last active >60 days)
+  inactivity:
+    weight: -12
+    category: churn_risk
+    threshold_days: 60
+    description: "Extended inactivity indicates disengagement"
+  
+  # Signal 10: Usage WoW Decline
+  usage_wow_decline:
+    weight: -10
+    category: churn_risk
+    threshold: -0.15  # 15% week-over-week decline
+    description: "Consistent usage decline signals churn risk"
+  
+  # Signal 11: Trial Ending
+  trial_ending:
+    weight: 22
+    category: expansion
+    threshold_days: 7  # <7 days remaining
+    description: "Trial expiring soon - conversion opportunity"
+  
+  # Signal 12: Upcoming Renewal
+  upcoming_renewal:
+    weight: 15
+    category: expansion
+    threshold_days: 60  # <60 days to renewal
+    description: "Contract renewal approaching - retention/expansion opportunity"
+  
+  # Signal 13: Free Decision Maker
+  free_decision_maker:
+    weight: 28
+    category: expansion
+    description: "Decision maker on free plan likely sees value and ready to pay"
+  
+  # Signal 14: Upgrade Page Visit
+  upgrade_page_visit:
+    weight: 20
+    category: expansion
+    page_patterns:
+      - "/pricing"
+      - "/upgrade"
+      - "/plans"
+    description: "Free user viewing pricing shows buying intent"
+  
+  # Signal 15: Approaching Seat Limit
+  approaching_seat_limit:
+    weight: 16
+    category: expansion
+    threshold: 0.85  # 85% of seats used
+    description: "High seat utilization indicates need for more licenses"
+  
+  # Signal 16: Overage
+  overage:
+    weight: 18
+    category: expansion
+    description: "Usage beyond plan limits creates upgrade urgency"
+  
+  # Signal 17: Health Score Decrease
+  health_score_decrease:
+    weight: -18
+    category: churn_risk
+    threshold: -0.20  # 20% decrease
+    time_window_days: 30
+    description: "Declining health score indicates systemic issues"
+  
+  # Signal 18: ARR Decrease
+  arr_decrease:
+    weight: -25
+    category: churn_risk
+    time_window_days: 7  # Week-over-week
+    description: "Revenue decline signals churn or downgrades"
+  
+  # Signal 19: Incomplete Onboarding
+  incomplete_onboarding:
+    weight: -8
+    category: churn_risk
+    threshold: 1.0  # 100% completion expected
+    threshold_days: 14  # After 14 days
+    description: "Incomplete onboarding predicts poor adoption"
+  
+  # Signal 20: Future Cancellation
+  future_cancellation:
+    weight: -30
+    category: churn_risk
+    description: "Scheduled cancellation - last chance for winback"
+
+# ===== SCORING CONFIGURATION =====
+
+scoring:
+  # Health score calculation formula
+  formula: "(signal_sum * fit_multiplier) * recency_decay"
+  
+  # Score scale
+  scale_min: 0
+  scale_max: 100  # 0-100 as requested by user
+  
+  # Recency decay parameters
+  # Signals lose weight over time to reflect current state
+  recency_decay_days: 30  # Signals fully decay after 30 days
+  recency_decay_factor: 0.5  # Half-life decay
+  
+  # How to handle score boundaries
+  clamp_scores: true  # Ensure scores stay within [scale_min, scale_max]
+
+# ===== FIT MULTIPLIERS =====
+
+fit_multipliers:
+  # ICP match (fit_score >= 0.8)
+  icp_match: 1.5
+  
+  # Near ICP (fit_score 0.5-0.8)
+  near_icp: 1.0
+  
+  # Poor fit (fit_score < 0.5)
+  poor_fit: 0.5
+
+# ===== SCORE THRESHOLDS =====
+
+thresholds:
+  # Health score categories
+  high_health: 80
+  medium_health: 50
+  low_health: 20
+  
+  # Opportunity triggers
+  expansion_threshold: 70  # Create expansion opp if score >= 70
+  churn_risk_threshold: 30  # Create churn risk opp if score <= 30
+
+# ===== ICP CRITERIA =====
+
+icp_criteria:
+  # Industries that match our ICP
+  industries:
+    - "Software"
+    - "Technology"
+    - "SaaS"
+    - "Information Technology"
+    - "Computer Software"
+    - "Internet"
+  
+  # Company size (number of employees)
+  employee_count_min: 50
+  employee_count_max: 5000
+  
+  # Revenue range (ARR in USD)
+  revenue_min: 1000000  # $1M minimum ARR
+  revenue_max: 50000000  # $50M maximum ARR
+  
+  # Geographic regions
+  regions:
+    - "North America"
+    - "Europe"
+    - "Asia Pacific"
+  
+  # Scoring weights for ICP calculation
+  # Total should sum to 1.0
+  weights:
+    industry: 0.30
+    employee_count: 0.25
+    revenue: 0.25
+    region: 0.10
+    other: 0.10  # Custom firmographic factors
+
+# ===== SIGNAL PROCESSING =====
+
+signal_processing:
+  # Batch size for processing events
+  batch_size: 100
+  
+  # How often to recalculate scores
+  recalculation_frequency_hours: 24
+  
+  # Deduplication window for events
+  deduplication_window_seconds: 60
+  
+  # Maximum age of signals to consider
+  max_signal_age_days: 90
+
+# ===== OPPORTUNITY GENERATION =====
+
+opportunity_generation:
+  # Minimum number of signals to trigger opportunity
+  min_signals_for_opportunity: 2
+  
+  # Cool-down period between opportunities for same account
+  opportunity_cooldown_days: 30
+  
+  # Opportunity value estimation (multiplier of ARR)
+  expansion_value_multiplier: 0.3  # 30% of current ARR
+  churn_risk_value_multiplier: 1.0  # Full ARR at risk
