@@ -479,11 +479,11 @@ async def get_dashboard_metrics(
     """
     try:
         service = DashboardService(db)
-        
+
         north_star = service.get_north_star_metrics(filters)
         velocity = service.get_growth_velocity_metrics(filters)
         momentum = service.get_momentum_data(filters)
-        
+
         return {
             "status": "success",
             "north_star": north_star,
@@ -498,4 +498,191 @@ async def get_dashboard_metrics(
             "message": str(e)
         }
 
+
+# ===== SIGNAL DISCOVERY ENDPOINTS =====
+
+from app.signal_stub_data import (
+    DISCOVERED_SIGNALS,
+    DATA_SOURCES,
+    COMPANY_SETTINGS,
+    RECENT_LEADS,
+    POSTHOG_EVENTS,
+    POSTHOG_PROPERTIES,
+    PLAYBOOKS,
+    ATTIO_FIELDS,
+    calculate_estimated_arr,
+    simulate_backtest
+)
+
+@app.get("/api/signals/list")
+async def get_signals_list():
+    """Get list of all discovered signals with calculated ARR."""
+    signals_with_arr = []
+    for signal in DISCOVERED_SIGNALS:
+        signal_copy = signal.copy()
+        signal_copy['estimated_arr'] = calculate_estimated_arr(signal)
+        signals_with_arr.append(signal_copy)
+
+    return {
+        "status": "success",
+        "signals": signals_with_arr,
+        "total": len(signals_with_arr)
+    }
+
+@app.get("/api/signals/{signal_id}")
+async def get_signal_detail(signal_id: str):
+    """Get detailed information for a specific signal."""
+    signal = next((s for s in DISCOVERED_SIGNALS if s['id'] == signal_id), None)
+
+    if not signal:
+        return {
+            "status": "error",
+            "message": f"Signal {signal_id} not found"
+        }
+
+    signal_copy = signal.copy()
+    signal_copy['estimated_arr'] = calculate_estimated_arr(signal)
+
+    return {
+        "status": "success",
+        "signal": signal_copy
+    }
+
+@app.get("/api/signals/dashboard/metrics")
+async def get_signal_dashboard_metrics():
+    """Get aggregated metrics for signal discovery dashboard."""
+    # Calculate totals
+    total_leads = sum(s['leads_per_month'] for s in DISCOVERED_SIGNALS)
+    enabled_signals = [s for s in DISCOVERED_SIGNALS if s['status'] == 'enabled']
+
+    # Calculate average conversion (weighted by leads)
+    total_weighted_conversion = sum(
+        s['conversion_with'] * s['leads_per_month']
+        for s in enabled_signals
+    )
+    avg_conversion = total_weighted_conversion / total_leads if total_leads > 0 else 0
+
+    # Calculate total pipeline influenced
+    total_pipeline = sum(calculate_estimated_arr(s) for s in enabled_signals)
+
+    # Calculate average accuracy
+    all_accuracies = []
+    for signal in enabled_signals:
+        if signal['accuracy_trend']:
+            all_accuracies.extend(signal['accuracy_trend'])
+    avg_accuracy = sum(all_accuracies) / len(all_accuracies) if all_accuracies else 0
+
+    # Get degrading signals
+    degrading_count = sum(1 for s in DISCOVERED_SIGNALS if s['health'] == 'degrading')
+
+    return {
+        "status": "success",
+        "metrics": {
+            "leads_this_month": total_leads,
+            "conversion_rate": round(avg_conversion, 3),
+            "pipeline_influenced": total_pipeline,
+            "signal_accuracy": round(avg_accuracy, 2),
+        },
+        "summary": {
+            "total_signals": len(DISCOVERED_SIGNALS),
+            "enabled_signals": len(enabled_signals),
+            "degrading_signals": degrading_count
+        },
+        "recent_leads": RECENT_LEADS
+    }
+
+@app.get("/api/sources/status")
+async def get_sources_status():
+    """Get status of all data sources."""
+    return {
+        "status": "success",
+        "sources": DATA_SOURCES
+    }
+
+@app.post("/api/signals/backtest")
+async def run_backtest(signal_definition: dict):
+    """Run backtest simulation for a user-defined signal."""
+    result = simulate_backtest(signal_definition)
+
+    # Calculate projected ARR
+    monthly_matches = result['monthly_matches']
+    lift = result['lift']
+    baseline_conversion = COMPANY_SETTINGS['baseline_conversion']
+    avg_acv = COMPANY_SETTINGS['avg_acv']
+
+    adjusted_conversion = baseline_conversion * lift
+    monthly_conversions = monthly_matches * adjusted_conversion
+    baseline_conversions = monthly_matches * baseline_conversion
+    incremental_conversions = monthly_conversions - baseline_conversions
+    incremental_arr = incremental_conversions * 12 * avg_acv
+
+    result['projected_arr'] = round(incremental_arr, 0)
+
+    return {
+        "status": "success",
+        "backtest_results": result
+    }
+
+@app.get("/api/playbooks/list")
+async def get_playbooks_list():
+    """Get list of all playbooks."""
+    return {
+        "status": "success",
+        "playbooks": PLAYBOOKS
+    }
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get company settings."""
+    return {
+        "status": "success",
+        "settings": COMPANY_SETTINGS
+    }
+
+@app.post("/api/settings")
+async def update_settings(settings: dict):
+    """Update company settings."""
+    # In a real app, this would update the database
+    # For now, we'll just return success
+    return {
+        "status": "success",
+        "message": "Settings updated successfully"
+    }
+
+@app.get("/api/destinations/attio/fields")
+async def get_attio_fields():
+    """Get Attio field mapping configuration."""
+    return {
+        "status": "success",
+        "fields": ATTIO_FIELDS
+    }
+
+@app.post("/api/destinations/attio/auto-match")
+async def auto_match_attio_fields():
+    """Auto-match Attio fields with Beton fields."""
+    # Simulate matching all fields
+    for field in ATTIO_FIELDS:
+        field['mapped'] = True
+
+    return {
+        "status": "success",
+        "message": "All fields matched successfully",
+        "fields": ATTIO_FIELDS
+    }
+
+@app.get("/api/posthog/events")
+async def get_posthog_events():
+    """Get list of PostHog events for filter builder."""
+    return {
+        "status": "success",
+        "events": POSTHOG_EVENTS
+    }
+
+@app.get("/api/posthog/properties")
+async def get_posthog_properties():
+    """Get list of PostHog properties for filter builder."""
+    return {
+        "status": "success",
+        "properties": POSTHOG_PROPERTIES
+    }
 
