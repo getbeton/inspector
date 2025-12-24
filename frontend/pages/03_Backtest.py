@@ -461,11 +461,11 @@ col_back, col_next = st.columns([0.5, 0.5])
 
 with col_back:
     if st.button("← Back: Signals", use_container_width=True):
-        st.switch_page("pages/03_Signals.py")
+        st.switch_page("pages/01_Signals.py")
 
 with col_next:
     if st.button("Next: Playbooks →", use_container_width=True):
-        st.switch_page("pages/06_Playbooks.py")
+        st.switch_page("pages/04_Playbooks.py")
 
 # Progress indicator
 st.markdown("---")

@@ -4,7 +4,19 @@
       "Bash(ls:*)",
       "Bash(tree:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(psql:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker network ls:*)",
+      "Bash(docker volume ls:*)",
+      "Bash(docker network rm:*)",
+      "Bash(cat:*)"
     ]
   }
 }

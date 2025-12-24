@@ -71,7 +71,7 @@ if st.session_state.use_mock_data:
     with col_btn1:
         if st.button("Next: Signal Explorer →", use_container_width=True, key="next_to_signals"):
             st.session_state.current_page = "03_Signals"
-            st.switch_page("pages/03_Signals.py")
+            st.switch_page("pages/01_Signals.py")
 
     with col_btn2:
         if st.button("Learn More", use_container_width=True):
@@ -245,7 +245,7 @@ else:
         with col_proceed:
             if st.button("✓ Setup Complete → Signal Explorer", use_container_width=True):
                 st.session_state.current_page = "03_Signals"
-                st.switch_page("pages/03_Signals.py")
+                st.switch_page("pages/01_Signals.py")
 
         with col_back:
             if st.button("← Use Mock Data Instead", use_container_width=True):
