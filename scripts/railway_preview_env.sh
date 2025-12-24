@@ -36,16 +36,6 @@ if [[ -z "$BRANCH_NAME" ]]; then
   exit 2
 fi
 
-if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
-  echo "RAILWAY_TOKEN is required" >&2
-  exit 2
-fi
-
-if [[ -z "${RAILWAY_PROJECT_ID:-}" ]]; then
-  echo "RAILWAY_PROJECT_ID is required" >&2
-  exit 2
-fi
-
 sanitize_env_name() {
   local raw="$1"
   # Normalize:
@@ -57,6 +47,9 @@ sanitize_env_name() {
   local s
   s="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/_]+#-#g' | sed -E 's/[^a-z0-9-]+//g' | sed -E 's/-+/-/g' | sed -E 's/^-+//; s/-+$//')"
   s="${s:0:30}"
+  # Truncation can reintroduce a trailing '-' (e.g. cutting at a dash boundary).
+  # Trim again to keep env names valid and predictable.
+  s="$(echo "$s" | sed -E 's/^-+//; s/-+$//')"
   if [[ -z "$s" ]]; then
     s="preview"
   fi
@@ -68,6 +61,16 @@ ENV_NAME="$(sanitize_env_name "$BRANCH_NAME")"
 if [[ "$PRINT_ENV_NAME_ONLY" == "1" ]]; then
   echo "$ENV_NAME"
   exit 0
+fi
+
+if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
+  echo "RAILWAY_TOKEN is required" >&2
+  exit 2
+fi
+
+if [[ -z "${RAILWAY_PROJECT_ID:-}" ]]; then
+  echo "RAILWAY_PROJECT_ID is required" >&2
+  exit 2
 fi
 
 echo "Preview env for branch:"

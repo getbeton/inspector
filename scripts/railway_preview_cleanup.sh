@@ -34,6 +34,9 @@ sanitize_env_name() {
   local s
   s="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/_]+#-#g' | sed -E 's/[^a-z0-9-]+//g' | sed -E 's/-+/-/g' | sed -E 's/^-+//; s/-+$//')"
   s="${s:0:30}"
+  # Truncation can reintroduce a trailing '-' (e.g. cutting at a dash boundary).
+  # Trim again so cleanup targets the same valid name creation uses.
+  s="$(echo "$s" | sed -E 's/^-+//; s/-+$//')"
   if [[ -z "$s" ]]; then
     s="preview"
   fi
