@@ -16,7 +16,21 @@
       "Bash(docker network ls:*)",
       "Bash(docker volume ls:*)",
       "Bash(docker network rm:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(brew install:*)",
+      "Bash(npm install:*)",
+      "Bash(railway status:*)",
+      "Bash(railway logs:*)",
+      "Bash(railway up:*)",
+      "Bash(timeout 30 railway logs:*)",
+      "Bash(chmod:*)",
+      "Bash(git push:*)",
+      "Bash(railway whoami:*)",
+      "Bash(railway environment:*)",
+      "Bash(railway service:*)",
+      "Bash(railway link:*)",
+      "Bash(railway init:*)",
+      "Bash(railway:*)"
     ]
   }
 }
