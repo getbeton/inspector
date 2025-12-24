@@ -11,12 +11,26 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.data_handler import (
     is_mock_mode,
-    render_data_mode_toggle,
-    show_mock_data_banner,
     get_mock_signals
+)
+from utils.ui_components import (
+    render_page_header,
+    apply_compact_button_styles,
+    apply_global_styles
+)
+
+# Page config - emoji only in page_icon, NOT in title
+st.set_page_config(
+    page_title="Playbooks | Beton Inspector",
+    page_icon="📋",
+    layout="wide"
 )
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
+
+# Apply styles
+apply_compact_button_styles()
+apply_global_styles()
 
 # Mock playbooks data
 MOCK_PLAYBOOKS = [
@@ -57,15 +71,8 @@ MOCK_PLAYBOOKS = [
     }
 ]
 
-# Header with mock mode toggle
-col_title, col_toggle = st.columns([0.85, 0.15])
-with col_title:
-    st.title("Playbooks")
-with col_toggle:
-    render_data_mode_toggle(location="top")
-
-if is_mock_mode():
-    show_mock_data_banner()
+# === PAGE HEADER ===
+render_page_header("Playbooks", show_data_toggle=True)
 
 # New Playbook button
 col_header_left, col_header_right = st.columns([3, 1])

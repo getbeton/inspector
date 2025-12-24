@@ -1,0 +1,10 @@
+{
+  "name": "beton-inspector",
+  "private": true,
+  "scripts": {
+    "setup": "bash -lc 'chmod +x ./scripts/python.sh ./scripts/setup.sh && ./scripts/setup.sh'",
+    "build": "bash -lc './scripts/python.sh -m compileall -q backend/app backend/tests frontend'",
+    "test": "bash -lc './scripts/python.sh -m pytest -q backend/tests'"
+  }
+}
+

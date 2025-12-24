@@ -30,7 +30,9 @@
       "Bash(railway service:*)",
       "Bash(railway link:*)",
       "Bash(railway init:*)",
-      "Bash(railway:*)"
+      "Bash(railway:*)",
+      "Bash(find:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

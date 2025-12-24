@@ -9,18 +9,23 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from utils.data_handler import (
-    is_mock_mode,
-    render_data_mode_toggle,
-    show_mock_data_banner
+from utils.data_handler import is_mock_mode
+from utils.ui_components import (
+    render_page_header,
+    apply_compact_button_styles,
+    apply_global_styles
 )
 
-# Page config
+# Page config - emoji only in page_icon, NOT in title
 st.set_page_config(
     page_title="Identities | Beton Inspector",
     page_icon="👤",
     layout="wide"
 )
+
+# Apply styles
+apply_compact_button_styles()
+apply_global_styles()
 
 # Mock identities data
 MOCK_IDENTITIES = [
@@ -38,15 +43,8 @@ MOCK_IDENTITIES = [
     {"email": "chris@devtools.com", "company": "DevTools", "user_id": "usr_012", "status": "partial", "sources": "PostHog", "last_seen": "5 days ago", "signals_count": 1},
 ]
 
-# Header with mock mode toggle
-col_title, col_toggle = st.columns([0.85, 0.15])
-with col_title:
-    st.title("Identities")
-with col_toggle:
-    render_data_mode_toggle(location="top")
-
-if is_mock_mode():
-    show_mock_data_banner()
+# === PAGE HEADER ===
+render_page_header("User Identities", show_data_toggle=True)
 
 st.markdown("---")
 
@@ -172,7 +170,7 @@ col_back, col_signals = st.columns(2)
 
 with col_back:
     if st.button("Back to Settings", use_container_width=True):
-        st.switch_page("pages/05_Settings.py")
+        st.switch_page("pages/06_Settings.py")
 
 with col_signals:
     if st.button("View Signals", use_container_width=True):

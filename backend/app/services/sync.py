@@ -199,6 +199,19 @@ class SyncService:
             
             # Extract value if available
             value = properties.get("value", 0.0)
+
+            # Parse timestamp safely (PostHog often returns ISO8601 with a trailing 'Z')
+            raw_ts = event.get("timestamp")
+            timestamp = datetime.utcnow()
+            if raw_ts:
+                try:
+                    if isinstance(raw_ts, str) and raw_ts.endswith("Z"):
+                        raw_ts = raw_ts.replace("Z", "+00:00")
+                    timestamp = datetime.fromisoformat(raw_ts)
+                except Exception as e:
+                    logger.warning(
+                        f"Invalid PostHog timestamp format ({raw_ts}); falling back to now(). Error: {e}"
+                    )
             
             # Create signal
             signal = Signal(
@@ -211,7 +224,7 @@ class SyncService:
                     "distinct_id": event.get("distinct_id"),
                     "event_id": event.get("id") or event.get("uuid")
                 },
-                timestamp=datetime.fromisoformat(event.get("timestamp")) if event.get("timestamp") else datetime.utcnow(),
+                timestamp=timestamp,
                 source="posthog"
             )
             

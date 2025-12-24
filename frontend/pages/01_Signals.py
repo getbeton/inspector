@@ -1,28 +1,29 @@
 """
 Signal Explorer Page - Advanced Signal Management
-List, filter, create, and manage discovered signals with backtesting and CRM export
+List, filter, create, and manage discovered signals with comparison metrics
 """
 
 import streamlit as st
-import requests
 import pandas as pd
 import os
 import sys
 import time
-from datetime import datetime
 
 # Add utils to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.data_handler import (
     is_mock_mode,
-    render_data_mode_toggle,
-    show_mock_data_banner,
-    show_empty_state_with_cta,
     get_mock_signals,
     get_api_data
 )
+from utils.ui_components import (
+    render_page_header,
+    apply_compact_button_styles,
+    apply_global_styles
+)
+from components.states import render_empty_state
 
-# Page config
+# Page config - emoji only in page_icon, NOT in title
 st.set_page_config(
     page_title="Signals | Beton Inspector",
     page_icon="🎯",
@@ -35,16 +36,50 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 BASELINE_CONVERSION = 0.034
 ACV = 27000
 
-# === PAGE HEADER ===
-col_title, col_toggle = st.columns([0.85, 0.15])
-with col_title:
-    st.title("Signal Explorer")
-with col_toggle:
-    render_data_mode_toggle(location="top")
+# Apply styles
+apply_compact_button_styles()
+apply_global_styles()
 
-# Show mock data banner if active
-if is_mock_mode():
-    show_mock_data_banner()
+# Custom CSS for clickable signal names
+st.markdown("""
+<style>
+    /* Clickable signal name styling */
+    .signal-link {
+        color: #0173B2;
+        text-decoration: none;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .signal-link:hover {
+        color: #015a8c;
+        text-decoration: underline;
+    }
+    .signal-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .copy-icon {
+        color: #999;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+    .copy-icon:hover {
+        color: #666;
+    }
+    /* Comparison metrics styling */
+    .comparison-positive {
+        color: #029E73;
+        font-weight: 500;
+    }
+    .comparison-neutral {
+        color: #666;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# === PAGE HEADER ===
+render_page_header("Signal Explorer", show_data_toggle=True)
 
 st.markdown("---")
 
@@ -68,7 +103,7 @@ with filter_col2:
 with filter_col3:
     source_filter = st.selectbox(
         "Source",
-        ["All", "Beton-Discovered", "User-Defined", "PostHog", "Attio"],
+        ["All", "Beton", "User-defined"],
         key="source_filter"
     )
 
@@ -80,118 +115,25 @@ with filter_col4:
     )
 
 # Search and action buttons
-col_search, col_export, col_new, col_recalc = st.columns([2, 1, 1, 1])
+col_search, col_export, col_new = st.columns([2, 1, 1])
 
 with col_search:
-    search_query = st.text_input("Search signals by name", placeholder="e.g., Onboarding...", key="signal_search", label_visibility="collapsed")
+    search_query = st.text_input(
+        "Search signals by name",
+        placeholder="e.g., Onboarding...",
+        key="signal_search",
+        label_visibility="collapsed"
+    )
 
 with col_export:
-    if st.button("Export to Attio", use_container_width=True):
-        st.info("Select signals below to export to your CRM")
+    if st.button("Export", use_container_width=True):
+        st.info("Select signals below to export to your CRM", icon="ℹ️")
 
 with col_new:
-    if st.button("+ New Signal", use_container_width=True):
-        st.session_state.show_create_signal = True
-
-with col_recalc:
-    if st.button("Recalculate", use_container_width=True):
-        st.session_state.show_recalc_modal = True
+    if st.button("+ Add Signal", use_container_width=True):
+        st.switch_page("pages/04_Add_Signal.py")
 
 st.markdown("---")
-
-# === RECALCULATION MODAL ===
-if st.session_state.get("show_recalc_modal", False):
-    with st.container():
-        st.markdown("### Recalculate Signals")
-        st.markdown("""
-        This will reprocess all signals against your historical data.
-        This may take a few minutes.
-        """)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Confirm Recalculation"):
-                with st.spinner("Recalculating signals..."):
-                    time.sleep(2)  # Simulate processing
-                    st.success("Signal recalculation complete!")
-                    st.session_state.show_recalc_modal = False
-                    st.rerun()
-
-        with col2:
-            if st.button("Cancel"):
-                st.session_state.show_recalc_modal = False
-                st.rerun()
-
-# === CREATE NEW SIGNAL MODAL ===
-if st.session_state.get("show_create_signal", False):
-    with st.container():
-        st.markdown("### Create New Custom Signal")
-
-        signal_name = st.text_input("Signal Name", placeholder="e.g., High-intent enterprise accounts")
-        signal_description = st.text_area("Description", placeholder="Describe the signal...")
-
-        # Tabs for Visual Builder vs SQL
-        tab1, tab2 = st.tabs(["Visual Builder", "SQL Query"])
-
-        with tab1:
-            st.markdown("#### Define Conditions")
-            st.markdown("Create filter-like conditions to define your signal")
-
-            # Condition builder
-            col_event, col_operator, col_value = st.columns([0.35, 0.35, 0.3])
-            with col_event:
-                event = st.selectbox("Event/Property", ["onboarding_completed", "api_key_created", "pricing_page_visited"])
-            with col_operator:
-                operator = st.selectbox("Operator", ["=", ">", ">=", "<", "<=", "within days"])
-            with col_value:
-                value = st.text_input("Value", "3")
-
-            if st.button("+ Add Condition"):
-                st.info("Additional conditions would be added here")
-
-        with tab2:
-            st.markdown("#### SQL Query")
-            sql_query = st.text_area(
-                "Define your signal with SQL",
-                value="SELECT DISTINCT user_id FROM events WHERE event = 'onboarding_completed'",
-                height=150
-            )
-
-            st.markdown("Available tables: events, users, companies, deals")
-
-        # Buttons
-        col_test, col_save, col_cancel = st.columns(3)
-
-        with col_test:
-            if st.button("Test Signal"):
-                if signal_name:
-                    with st.spinner("Testing signal..."):
-                        time.sleep(1)
-                        st.success(f"""
-                        **Signal Test Results**
-
-                        Matches: 127 users
-                        Historical Lift: 3.4x
-                        Confidence: 92%
-                        """)
-                else:
-                    st.error("Please enter a signal name")
-
-        with col_save:
-            if st.button("Save as Draft"):
-                if signal_name:
-                    st.success(f"Signal '{signal_name}' saved as Draft")
-                    st.session_state.show_create_signal = False
-                    st.rerun()
-                else:
-                    st.error("Please enter a signal name")
-
-        with col_cancel:
-            if st.button("Cancel", key="cancel_create"):
-                st.session_state.show_create_signal = False
-                st.rerun()
-
-        st.markdown("---")
 
 # === SIGNALS TABLE ===
 
@@ -228,7 +170,9 @@ if confidence_filter != "All":
 
 # Source filter
 if source_filter != "All":
-    filtered_signals = [s for s in filtered_signals if source_filter in [s.get('source', ''), s.get('source_type', '')]]
+    source_map = {"Beton": "Beton-Discovered", "User-defined": "User-Defined"}
+    target_source = source_map.get(source_filter, source_filter)
+    filtered_signals = [s for s in filtered_signals if s.get('source', '') == target_source or s.get('source', '') == source_filter]
 
 # Search filter
 if search_query:
@@ -240,100 +184,151 @@ if search_query:
 
 # Display signals
 if not signals:
-    # Empty state
-    show_empty_state_with_cta(
-        title="No signals yet",
-        message="Start exploring signals by either:\n1. Create your first custom signal\n2. Switch to mock data mode\n3. Check integrations to load real signals",
-        cta_text="Setup Data Sources",
-        go_to_setup=True
+    render_empty_state(
+        "no_signals",
+        custom_message="Start by creating your first custom signal, switching to demo data, or checking your integrations."
     )
 
 elif filtered_signals:
-    # Prepare table data with new columns
-    table_data = []
-    for idx, signal in enumerate(filtered_signals):
-        status_badge = {
-            "active": "Active",
-            "draft": "Draft",
-            "paused": "Paused"
-        }.get(signal.get('status', 'active'), "Unknown")
+    # Table header
+    header_cols = st.columns([0.05, 0.35, 0.1, 0.15, 0.15, 0.1, 0.1])
+    with header_cols[0]:
+        st.markdown("**☐**")
+    with header_cols[1]:
+        st.markdown("**Signal Name**")
+    with header_cols[2]:
+        st.markdown("**Status**")
+    with header_cols[3]:
+        st.markdown("**With Signal**")
+    with header_cols[4]:
+        st.markdown("**Without Signal**")
+    with header_cols[5]:
+        st.markdown("**Lift**")
+    with header_cols[6]:
+        st.markdown("**Source**")
 
-        # Calculate projected and actual deals/revenue
-        leads = signal.get('leads_per_month', 0)
+    st.markdown("---")
+
+    # Track selected signals
+    if "selected_signals" not in st.session_state:
+        st.session_state.selected_signals = set()
+
+    # Render each signal row
+    for idx, signal in enumerate(filtered_signals):
+        signal_id = signal.get('id', f'sig_{idx}')
+        signal_name = signal.get('name', 'Unknown')
+        status = signal.get('status', 'active').capitalize()
         lift = signal.get('lift', 1.0)
         confidence = signal.get('confidence', 0)
+        source = signal.get('source', 'Beton')
 
-        # Projected = based on lift multiplier
-        projected_deals = int(leads * BASELINE_CONVERSION * lift)
-        # Actual = based on observed conversion (simulate with slight variation)
-        actual_conversion = signal.get('conversion_with', BASELINE_CONVERSION * lift * 0.9)
-        actual_deals = int(leads * actual_conversion)
+        # Display source correctly
+        if source == "Beton-Discovered":
+            source_display = "Beton"
+        elif source == "User-Defined":
+            source_display = "User"
+        else:
+            source_display = source[:6]
 
-        projected_revenue = projected_deals * ACV
-        actual_revenue = actual_deals * ACV
+        # Calculate comparison metrics
+        leads = signal.get('leads_per_month', 50)
+        conversion_with = signal.get('conversion_with', BASELINE_CONVERSION * lift)
+        conversion_without = signal.get('conversion_without', BASELINE_CONVERSION)
 
-        table_data.append({
-            "Name": signal.get('name', 'Unknown'),
-            "Status": status_badge,
-            "Proj. Deals": projected_deals,
-            "Actual Deals": actual_deals,
-            "Proj. Revenue": f"${projected_revenue:,.0f}",
-            "Actual Revenue": f"${actual_revenue:,.0f}",
-            "Conf": f"{confidence * 100:.0f}%",
-            "Source": signal.get('source', 'Unknown'),
-            "Enabled": signal.get('status') == 'active',
-            "ID": signal.get('id', f'sig_{idx}')
-        })
+        # Users with/without signal
+        users_with = signal.get('sample_with', int(leads * 30))  # ~30 days of data
+        users_without = signal.get('sample_without', int(leads * 30 * 5))  # 5x more without
 
-    df = pd.DataFrame(table_data)
+        # Revenue comparison
+        revenue_with = int(users_with * conversion_with * ACV)
+        revenue_without = int(users_without * conversion_without * ACV)
 
-    # Display table with editable Enabled column
-    edited_df = st.data_editor(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Enabled": st.column_config.CheckboxColumn(
-                "Enabled",
-                help="Enable/disable this signal",
-                default=True
-            ),
-            "Proj. Deals": st.column_config.NumberColumn(
-                "Proj. Deals",
-                help="Projected deals based on lift"
-            ),
-            "Actual Deals": st.column_config.NumberColumn(
-                "Actual Deals",
-                help="Actual observed deals"
-            ),
-            "ID": st.column_config.TextColumn(
-                "ID",
-                width="small"
+        # Per-user revenue
+        per_user_with = conversion_with * ACV
+        per_user_without = conversion_without * ACV
+
+        row_cols = st.columns([0.05, 0.35, 0.1, 0.15, 0.15, 0.1, 0.1])
+
+        with row_cols[0]:
+            is_selected = st.checkbox(
+                "Select",
+                value=signal_id in st.session_state.selected_signals,
+                key=f"select_{signal_id}",
+                label_visibility="collapsed"
             )
-        },
-        disabled=["Name", "Status", "Proj. Deals", "Actual Deals", "Proj. Revenue", "Actual Revenue", "Conf", "Source", "ID"],
-        height=400
-    )
+            if is_selected:
+                st.session_state.selected_signals.add(signal_id)
+            else:
+                st.session_state.selected_signals.discard(signal_id)
 
-    # Handle enable/disable changes
-    for idx, row in edited_df.iterrows():
-        original_enabled = filtered_signals[idx].get('status') == 'active'
-        new_enabled = row.get('Enabled', original_enabled)
-        if new_enabled != original_enabled:
-            signal_name = row['Name']
-            st.toast(f"Signal '{signal_name}' {'enabled' if new_enabled else 'disabled'}")
-
-    # View buttons for each signal
-    st.markdown("##### Quick Actions")
-    cols = st.columns(min(5, len(filtered_signals)))
-    for idx, signal in enumerate(filtered_signals[:5]):
-        with cols[idx % 5]:
-            if st.button(f"View: {signal['name'][:15]}...", key=f"view_{signal['id']}", use_container_width=True):
-                st.session_state.selected_signal_id = signal['id']
+        with row_cols[1]:
+            # Clickable signal name
+            if st.button(
+                f"🔗 {signal_name}",
+                key=f"link_{signal_id}",
+                help="Click to view signal details",
+                use_container_width=True
+            ):
+                st.session_state.selected_signal_id = signal_id
                 st.switch_page("pages/02_Signal_Detail.py")
 
-    if len(filtered_signals) > 5:
-        st.caption(f"+{len(filtered_signals) - 5} more signals. Use filters to narrow down.")
+        with row_cols[2]:
+            status_color = {
+                "Active": "🟢",
+                "Draft": "🟡",
+                "Paused": "⚪"
+            }.get(status, "⚪")
+            st.caption(f"{status_color} {status}")
+
+        with row_cols[3]:
+            # With signal metrics
+            st.markdown(f"**{conversion_with*100:.1f}%** conv")
+            st.caption(f"{users_with:,} users • ${per_user_with:,.0f}/user")
+
+        with row_cols[4]:
+            # Without signal metrics
+            st.markdown(f"{conversion_without*100:.1f}% conv")
+            st.caption(f"{users_without:,} users • ${per_user_without:,.0f}/user")
+
+        with row_cols[5]:
+            st.markdown(f"**{lift}x**")
+            st.caption(f"{confidence*100:.0f}% conf")
+
+        with row_cols[6]:
+            st.caption(source_display)
+
+        # Subtle divider between rows
+        st.markdown("<hr style='margin: 0.5rem 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+
+    # === BULK ACTIONS ===
+    selected_count = len(st.session_state.selected_signals)
+
+    if selected_count > 0:
+        st.markdown("")
+        st.markdown(f"**{selected_count} signal(s) selected**")
+        bulk_col1, bulk_col2, bulk_col3, bulk_col4 = st.columns(4)
+
+        with bulk_col1:
+            if st.button(f"Enable ({selected_count})", use_container_width=True, key="bulk_enable"):
+                for sig_id in st.session_state.selected_signals:
+                    st.toast(f"Enabled signal")
+                st.session_state.selected_signals = set()
+                st.rerun()
+
+        with bulk_col2:
+            if st.button(f"Disable ({selected_count})", use_container_width=True, key="bulk_disable"):
+                for sig_id in st.session_state.selected_signals:
+                    st.toast(f"Disabled signal")
+                st.session_state.selected_signals = set()
+                st.rerun()
+
+        with bulk_col3:
+            if st.button(f"Export ({selected_count})", use_container_width=True, key="bulk_export"):
+                st.success(f"Exporting {selected_count} signals to CRM...")
+
+        with bulk_col4:
+            if st.button(f"Delete ({selected_count})", use_container_width=True, key="bulk_delete"):
+                st.warning(f"Are you sure you want to delete {selected_count} signals?")
 
     # Summary row
     active_count = sum(1 for s in filtered_signals if s.get('status') == 'active')
@@ -341,13 +336,20 @@ elif filtered_signals:
     paused_count = sum(1 for s in filtered_signals if s.get('status') == 'paused')
 
     st.markdown("---")
-    col_summary1, col_summary2 = st.columns([0.7, 0.3])
-    with col_summary1:
-        st.caption(f"Summary: {len(filtered_signals)} signals | {active_count} active | {draft_count} draft | {paused_count} paused")
+    st.caption(f"Showing {len(filtered_signals)} signals | {active_count} active | {draft_count} draft | {paused_count} paused")
 
 else:
     # No results for filters
-    st.info("No signals match your filters. Try adjusting them or creating a new signal.")
+    render_empty_state(
+        "no_results",
+        on_cta_click=lambda: st.session_state.update({
+            "status_filter": "All",
+            "lift_filter": "All",
+            "confidence_filter": "All",
+            "source_filter": "All",
+            "signal_search": ""
+        })
+    )
 
 st.markdown("---")
 
@@ -355,9 +357,9 @@ st.markdown("---")
 col_back, col_next = st.columns([0.5, 0.5])
 
 with col_back:
-    if st.button("Back: Setup", use_container_width=True):
+    if st.button("← Setup", use_container_width=True):
         st.switch_page("Home.py")
 
 with col_next:
-    if st.button("Next: Backtest", use_container_width=True):
-        st.switch_page("pages/03_Backtest.py")
+    if st.button("Add Signal Manually →", use_container_width=True):
+        st.switch_page("pages/04_Add_Signal.py")
