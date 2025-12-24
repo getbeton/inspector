@@ -60,13 +60,25 @@ if git merge-base --is-ancestor "$STAGING_REF" "$MAIN_REF"; then
   exit 0
 fi
 
-echo "[sync] ERROR: ${STAGING_REF} is NOT an ancestor of ${MAIN_REF}." >&2
-echo "[sync] This means staging has commits that main does not (diverged)." >&2
+# Common case BEFORE promotion:
+# - main is behind staging (meaning you still need to promote staging -> main).
+if git merge-base --is-ancestor "$MAIN_REF" "$STAGING_REF"; then
+  echo "[sync] Not ready: ${MAIN_REF} is behind ${STAGING_REF}." >&2
+  echo "[sync] This is expected BEFORE you promote staging -> main." >&2
+  echo "" >&2
+  echo "[sync] Next step:" >&2
+  echo "  - Open and merge a PR: staging -> main" >&2
+  echo "  - Then re-run: ./scripts/sync_staging_to_main.sh" >&2
+  exit 3
+fi
+
+echo "[sync] ERROR: ${STAGING_REF} and ${MAIN_REF} have diverged (neither is an ancestor)." >&2
 echo "[sync] We will NOT reset staging automatically (would lose commits)." >&2
 echo "" >&2
 echo "[sync] Options:" >&2
-echo "  1) If staging should include main (typical): open a PR main -> staging and merge it." >&2
-echo "  2) If staging should be reset to main (rare): do it manually with explicit approval." >&2
-exit 3
+echo "  1) If staging should include main (typical for hotfixes): open a PR main -> staging and merge it." >&2
+echo "  2) If main should include staging (typical release): open a PR staging -> main and merge it." >&2
+echo "  3) If you want to hard-reset a branch (rare): do it manually with explicit approval." >&2
+exit 4
 
 
