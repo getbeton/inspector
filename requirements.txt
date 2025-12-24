@@ -1,0 +1,21 @@
+# Backend dependencies
+fastapi
+uvicorn
+sqlalchemy
+alembic
+pydantic-settings
+psycopg2-binary
+python-multipart
+requests
+faker
+posthog
+stripe
+pyyaml==6.0.1
+httpx
+
+# Frontend dependencies
+streamlit
+pandas
+altair
+plotly
+streamlit-aggrid
