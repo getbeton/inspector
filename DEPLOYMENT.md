@@ -41,6 +41,26 @@ Local pre-push checks (recommended):
 - `npm run build`
 - `npm test`
 
+### 2.3 Preview environments for feature branches (automatic)
+
+When you push to a branch matching `feature/**`, GitHub Actions will:
+- Create (or re-use) a Railway environment derived from the branch name (duplicated from `staging`)
+- Deploy `backend` + `frontend` into that environment
+
+When a PR is merged into `staging`, GitHub Actions will:
+- Delete the corresponding Railway preview environment
+
+Workflows:
+- `.github/workflows/preview_env.yml`
+- `.github/workflows/preview_env_cleanup.yml`
+
+Required GitHub secrets:
+- `RAILWAY_TOKEN` (Railway CI token)
+- `RAILWAY_PROJECT_ID` (Railway project id)
+
+Naming rule:
+- Branch `feature/my-thing` -> Railway env `pr-feature-my-thing` (sanitized + truncated)
+
 ### 2.2 Release to production (promotion)
 
 Production release is a **PR from `staging` → `main`**.
