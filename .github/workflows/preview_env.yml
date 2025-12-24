@@ -22,6 +22,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify required Railway secrets are configured
+        run: |
+          if [ -z "${RAILWAY_TOKEN}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
+            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
+            exit 1
+          fi
+          if [ -z "${RAILWAY_PROJECT_ID}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
+            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
+            exit 1
+          fi
+
       - name: Install Railway CLI
         run: |
           curl -fsSL https://railway.app/install.sh | sh
