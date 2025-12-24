@@ -1,0 +1,54 @@
+name: Preview Env (Railway)
+
+on:
+  push:
+    branches:
+      - "feature/**"
+
+jobs:
+  create-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Required to authenticate Railway CLI in CI.
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      # Required to link the correct Railway project.
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      # Source environment to duplicate from.
+      BASE_ENV_NAME: staging
+      # Ensure frontend can reach backend over Railway internal networking.
+      FRONTEND_API_URL: http://backend.railway.internal:8000
+      FRONTEND_SERVICE_NAME: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Compute preview environment name
+        id: envname
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          chmod +x scripts/railway_preview_env.sh
+          ENV_NAME="$(PRINT_ENV_NAME_ONLY=1 BRANCH_NAME="$BRANCH_NAME" ./scripts/railway_preview_env.sh)"
+          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Create/ensure preview environment
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          chmod +x scripts/railway_preview_env.sh
+          ./scripts/railway_preview_env.sh
+
+      - name: Deploy backend to preview environment
+        run: |
+          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service backend
+
+      - name: Deploy frontend to preview environment
+        run: |
+          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service frontend
+
+
