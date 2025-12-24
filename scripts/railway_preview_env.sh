@@ -36,16 +36,6 @@ if [[ -z "$BRANCH_NAME" ]]; then
   exit 2
 fi
 
-if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
-  echo "RAILWAY_TOKEN is required" >&2
-  exit 2
-fi
-
-if [[ -z "${RAILWAY_PROJECT_ID:-}" ]]; then
-  echo "RAILWAY_PROJECT_ID is required" >&2
-  exit 2
-fi
-
 sanitize_env_name() {
   local raw="$1"
   # Normalize:
@@ -68,6 +58,16 @@ ENV_NAME="$(sanitize_env_name "$BRANCH_NAME")"
 if [[ "$PRINT_ENV_NAME_ONLY" == "1" ]]; then
   echo "$ENV_NAME"
   exit 0
+fi
+
+if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
+  echo "RAILWAY_TOKEN is required" >&2
+  exit 2
+fi
+
+if [[ -z "${RAILWAY_PROJECT_ID:-}" ]]; then
+  echo "RAILWAY_PROJECT_ID is required" >&2
+  exit 2
 fi
 
 echo "Preview env for branch:"
