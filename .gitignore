@@ -47,3 +47,6 @@ project_docs/
 # Local task logs (keep process logs out of git/GitHub)
 .task_logs/
 task_logs/
+
+# Local sqlite test DB (should never be committed)
+test.db
