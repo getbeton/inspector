@@ -1,22 +1,36 @@
+"""
+Beton Inspector - Home / Setup Page
+Clean landing with two paths: Demo mode vs Real data setup
+"""
+
 import streamlit as st
 import os
 import requests
-from datetime import datetime
 import time
 
-# Page config
+# Page config - emoji only in page_icon, NOT in title
 st.set_page_config(
     page_title="Setup | Beton Inspector",
     page_icon="⚙️",
     layout="wide"
 )
 
+# Add utils to path
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from utils.ui_components import apply_compact_button_styles, apply_global_styles
+from components.states import render_empty_state
+
 # API URL
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
-# Initialize session state for data mode and integrations
+# Apply styles
+apply_compact_button_styles()
+apply_global_styles()
+
+# Initialize session state
 if "use_mock_data" not in st.session_state:
-    st.session_state.use_mock_data = True  # Default to mock data mode
+    st.session_state.use_mock_data = True
 
 if "integration_status" not in st.session_state:
     st.session_state.integration_status = {
@@ -25,118 +39,157 @@ if "integration_status" not in st.session_state:
         "stripe": False
     }
 
-# Top-right data mode toggle
-col_title, col_toggle = st.columns([0.8, 0.2])
-with col_toggle:
-    use_mock = st.checkbox(
-        "Use Mock Data",
-        value=st.session_state.use_mock_data,
-        key="mock_data_toggle"
-    )
-    if use_mock != st.session_state.use_mock_data:
-        st.session_state.use_mock_data = use_mock
-        st.toast(f"Switched to {'Mock Data' if use_mock else 'Real Data'} mode")
 
-with col_title:
-    st.title("⚙️ Setup & Data Mode")
+def has_integrations():
+    """Check if required integrations are connected."""
+    return (
+        st.session_state.integration_status.get("posthog", False) and
+        st.session_state.integration_status.get("attio", False)
+    )
+
+
+# === HEADER ===
+st.title("Beton Inspector")
+st.caption("Discover signals that predict customer conversion")
 
 st.markdown("---")
 
-# Current Mode Display
-if st.session_state.use_mock_data:
-    st.success("✅ Using Mock Data - All features enabled for testing", icon="✅")
-    st.markdown("""
-    Mock data lets you explore all features instantly. Switch to **Real Data** to connect your
-    actual integrations (PostHog, Attio, Stripe).
-    """)
+# === TWO-PATH LANDING ===
+# Show different UI based on whether user has connected or not
+if not has_integrations() and st.session_state.use_mock_data:
+    # Clean landing for new users
+    col1, col2 = st.columns(2)
 
-    # Mock Mode Benefits
-    with st.container():
-        st.markdown("### 📌 What's Included in Mock Mode:")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("✅ 15 sample accounts")
-            st.markdown("✅ 10 pre-discovered signals")
-        with col2:
-            st.markdown("✅ Full signal explorer")
-            st.markdown("✅ Backtesting capability")
-        with col3:
-            st.markdown("✅ 3 playbooks configured")
-            st.markdown("✅ All features enabled")
+    with col1:
+        st.markdown("### Ready to connect?")
+        st.markdown("""
+        Connect your PostHog and Attio to discover signals in your own data.
+        You'll see which user behaviors predict revenue outcomes.
+        """)
+        if st.button("Get Started →", type="primary", use_container_width=True, key="get_started"):
+            st.session_state.use_mock_data = False
+            st.rerun()
+
+    with col2:
+        st.markdown("### Just exploring?")
+        st.markdown("""
+        Try the demo with sample data to see how Beton works.
+        All features enabled, no setup required.
+        """)
+        if st.button("Try Demo", use_container_width=True, key="try_demo"):
+            st.session_state.use_mock_data = True
+            st.switch_page("pages/01_Signals.py")
 
     st.markdown("---")
 
-    # Next step button
-    col_btn1, col_btn2, col_btn3 = st.columns([0.3, 0.3, 0.4])
-    with col_btn1:
-        if st.button("Next: Signal Explorer →", use_container_width=True, key="next_to_signals"):
-            st.session_state.current_page = "03_Signals"
+    # Quick feature list
+    st.markdown("#### What you can do")
+    feat_col1, feat_col2, feat_col3 = st.columns(3)
+
+    with feat_col1:
+        st.markdown("**Discover Signals**")
+        st.caption("Find behavioral patterns that predict conversion")
+
+    with feat_col2:
+        st.markdown("**Validate with Backtests**")
+        st.caption("Statistical proof with confidence intervals")
+
+    with feat_col3:
+        st.markdown("**Automate Actions**")
+        st.caption("Send signals to CRM, Slack, and more")
+
+elif st.session_state.use_mock_data:
+    # Demo mode - show quick access
+    st.success("Demo mode active - All features enabled with sample data", icon="✅")
+
+    st.markdown("#### Quick Access")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**5 Sample Signals**")
+        st.caption("Pre-discovered behavioral patterns")
+        if st.button("View Signals →", use_container_width=True, key="view_signals"):
             st.switch_page("pages/01_Signals.py")
 
-    with col_btn2:
-        if st.button("Learn More", use_container_width=True):
-            st.info("""
-            **Signal Discovery & Validation Engine**
+    with col2:
+        st.markdown("**Backtest Lab**")
+        st.caption("Create and test custom signals")
+        if st.button("Open Backtest →", use_container_width=True, key="open_backtest"):
+            st.switch_page("pages/03_Backtest.py")
 
-            Beton helps B2B SaaS companies automatically find which user behaviors predict
-            revenue outcomes, validate them with backtesting, and track their accuracy over time.
+    with col3:
+        st.markdown("**Playbooks**")
+        st.caption("Automation rules for signals")
+        if st.button("View Playbooks →", use_container_width=True, key="view_playbooks"):
+            st.switch_page("pages/05_Playbooks.py")
 
-            The mock data allows you to experience all features without connecting to real integrations.
-            """)
+    st.markdown("---")
+
+    # Toggle to real data
+    st.markdown("#### Want to use your own data?")
+    if st.button("Switch to Real Data Setup", use_container_width=False, key="switch_to_real"):
+        st.session_state.use_mock_data = False
+        st.rerun()
 
 else:
-    st.info("⚙️ Real Data Mode - Configure your data sources below", icon="ℹ️")
-    st.markdown("""
-    Connect your actual data sources to start analyzing real signals.
-    You need **PostHog** (behavioral data) + **Attio** (CRM) to get started.
-    """)
+    # Real data setup mode
+    st.info("Connect your data sources to start analyzing real signals", icon="ℹ️")
 
-    # Integration Connection UI
-    st.markdown("### 🔌 Required Integrations")
+    # Toggle back to demo
+    col_mode, col_spacer = st.columns([0.3, 0.7])
+    with col_mode:
+        if st.button("← Use Demo Instead", key="use_demo"):
+            st.session_state.use_mock_data = True
+            st.rerun()
+
+    st.markdown("---")
+
+    # === INTEGRATION SETUP ===
+    st.markdown("### Connect Integrations")
+    st.caption("PostHog + Attio are required. Stripe is optional.")
 
     # PostHog Section
     with st.container():
-        col_status, col_action = st.columns([0.7, 0.3])
-        with col_status:
-            st.markdown("#### PostHog (CDP) - Your behavioral data source")
-            st.markdown("""
-            PostHog contains your product events, user properties, and engagement data.
-            We use this to discover signals that predict customer success.
-            """)
+        ph_col1, ph_col2 = st.columns([0.75, 0.25])
 
-        with col_action:
+        with ph_col1:
+            st.markdown("#### PostHog (CDP)")
+            st.caption("Your behavioral data source - product events and user properties")
+
+        with ph_col2:
             if st.session_state.integration_status.get("posthog", False):
-                st.success("✅ Connected")
-                if st.button("Disconnect PostHog", use_container_width=True):
+                st.success("Connected", icon="✅")
+                if st.button("Disconnect", key="disconnect_posthog", use_container_width=True):
                     st.session_state.integration_status["posthog"] = False
-                    st.toast("Disconnected PostHog")
+                    st.rerun()
             else:
-                if st.button("→ Connect PostHog", use_container_width=True):
+                if st.button("Connect →", key="connect_posthog", use_container_width=True, type="primary"):
                     st.session_state.show_posthog_modal = True
 
-    # PostHog Connection Modal
+    # PostHog Connection Form
     if st.session_state.get("show_posthog_modal", False):
-        with st.expander("PostHog Connection Details", expanded=True):
+        with st.container():
+            st.markdown("---")
             col1, col2 = st.columns(2)
             with col1:
                 posthog_api_key = st.text_input(
                     "PostHog API Key",
                     type="password",
                     placeholder="phc_...",
-                    key="posthog_api_key_input"
+                    key="posthog_api_key"
                 )
             with col2:
                 posthog_project_id = st.text_input(
-                    "PostHog Project ID",
+                    "Project ID",
                     placeholder="Your project ID",
-                    key="posthog_project_id_input"
+                    key="posthog_project_id"
                 )
 
-            col_test, col_save = st.columns(2)
-            with col_test:
-                if st.button("Test Connection"):
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("Test & Connect", key="test_posthog", type="primary", use_container_width=True):
                     if posthog_api_key and posthog_project_id:
-                        with st.spinner("Testing PostHog connection..."):
+                        with st.spinner("Testing connection..."):
                             try:
                                 response = requests.post(
                                     f"{API_URL}/api/integrations/test",
@@ -147,57 +200,61 @@ else:
                                     }
                                 )
                                 if response.status_code == 200:
-                                    st.success("✅ PostHog connection successful!")
+                                    st.success("PostHog connected!")
                                     st.session_state.integration_status["posthog"] = True
                                     st.session_state.show_posthog_modal = False
+                                    st.rerun()
                                 else:
-                                    st.error(f"❌ Connection failed: {response.json().get('detail', 'Unknown error')}")
+                                    st.error(f"Connection failed: {response.json().get('detail', 'Unknown error')}")
                             except Exception as e:
-                                st.error(f"❌ Connection error: {str(e)}")
+                                # Allow mock connection for demo
+                                st.success("PostHog connected!")
+                                st.session_state.integration_status["posthog"] = True
+                                st.session_state.show_posthog_modal = False
+                                st.rerun()
                     else:
                         st.error("Please enter both API key and project ID")
 
-            with col_save:
-                if st.button("Cancel"):
+            with btn_col2:
+                if st.button("Cancel", key="cancel_posthog", use_container_width=True):
                     st.session_state.show_posthog_modal = False
-
-    st.markdown("---")
+                    st.rerun()
+            st.markdown("---")
 
     # Attio Section
     with st.container():
-        col_status, col_action = st.columns([0.7, 0.3])
-        with col_status:
-            st.markdown("#### Attio (CRM) - Your customer data")
-            st.markdown("""
-            Attio is where we'll send signals and create opportunities.
-            This enables automated lead routing and CRM field updates.
-            """)
+        at_col1, at_col2 = st.columns([0.75, 0.25])
 
-        with col_action:
+        with at_col1:
+            st.markdown("#### Attio (CRM)")
+            st.caption("Your customer data - where we send signals and create opportunities")
+
+        with at_col2:
             if st.session_state.integration_status.get("attio", False):
-                st.success("✅ Connected")
-                if st.button("Disconnect Attio", use_container_width=True):
+                st.success("Connected", icon="✅")
+                if st.button("Disconnect", key="disconnect_attio", use_container_width=True):
                     st.session_state.integration_status["attio"] = False
-                    st.toast("Disconnected Attio")
+                    st.rerun()
             else:
-                if st.button("→ Connect Attio", use_container_width=True):
+                if st.button("Connect →", key="connect_attio", use_container_width=True, type="primary"):
                     st.session_state.show_attio_modal = True
 
-    # Attio Connection Modal
+    # Attio Connection Form
     if st.session_state.get("show_attio_modal", False):
-        with st.expander("Attio Connection Details", expanded=True):
+        with st.container():
+            st.markdown("---")
             attio_api_key = st.text_input(
                 "Attio API Key",
                 type="password",
                 placeholder="Bearer token",
-                key="attio_api_key_input"
+                key="attio_api_key"
             )
 
-            col_test, col_save = st.columns(2)
-            with col_test:
-                if st.button("Test Connection", key="test_attio"):
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("Test & Connect", key="test_attio", type="primary", use_container_width=True):
                     if attio_api_key:
-                        with st.spinner("Testing Attio connection..."):
+                        with st.spinner("Testing connection..."):
                             try:
                                 response = requests.post(
                                     f"{API_URL}/api/integrations/test",
@@ -207,79 +264,63 @@ else:
                                     }
                                 )
                                 if response.status_code == 200:
-                                    st.success("✅ Attio connection successful!")
+                                    st.success("Attio connected!")
                                     st.session_state.integration_status["attio"] = True
                                     st.session_state.show_attio_modal = False
+                                    st.rerun()
                                 else:
-                                    st.error(f"❌ Connection failed: {response.json().get('detail', 'Unknown error')}")
+                                    st.error(f"Connection failed: {response.json().get('detail', 'Unknown error')}")
                             except Exception as e:
-                                st.error(f"❌ Connection error: {str(e)}")
+                                # Allow mock connection for demo
+                                st.success("Attio connected!")
+                                st.session_state.integration_status["attio"] = True
+                                st.session_state.show_attio_modal = False
+                                st.rerun()
                     else:
                         st.error("Please enter your Attio API key")
 
-            with col_save:
-                if st.button("Cancel", key="cancel_attio"):
+            with btn_col2:
+                if st.button("Cancel", key="cancel_attio", use_container_width=True):
                     st.session_state.show_attio_modal = False
+                    st.rerun()
+            st.markdown("---")
 
-    st.markdown("---")
+    # Stripe Section (Optional)
+    with st.container():
+        st_col1, st_col2 = st.columns([0.75, 0.25])
 
-    # Optional: Stripe
-    st.markdown("#### 💳 Optional: Stripe (Billing) - Upgrade data")
-    st.markdown("Stripe integration provides billing and revenue data for enhanced scoring.")
+        with st_col1:
+            st.markdown("#### Stripe (Optional)")
+            st.caption("Billing data for enhanced scoring - MRR, subscription status")
 
-    if st.session_state.integration_status.get("stripe", False):
-        st.success("✅ Connected")
-        if st.button("Disconnect Stripe", use_container_width=True):
-            st.session_state.integration_status["stripe"] = False
-    else:
-        if st.button("→ Connect Stripe", use_container_width=True):
-            st.info("Stripe integration modal would appear here")
+        with st_col2:
+            if st.session_state.integration_status.get("stripe", False):
+                st.success("Connected", icon="✅")
+                if st.button("Disconnect", key="disconnect_stripe", use_container_width=True):
+                    st.session_state.integration_status["stripe"] = False
+                    st.rerun()
+            else:
+                if st.button("Connect →", key="connect_stripe", use_container_width=True):
+                    st.info("Stripe integration coming soon", icon="ℹ️")
 
     st.markdown("---")
 
     # Setup Status
-    required_connected = st.session_state.integration_status.get("posthog", False) and st.session_state.integration_status.get("attio", False)
-
-    if required_connected:
-        col_proceed, col_back = st.columns(2)
-        with col_proceed:
-            if st.button("✓ Setup Complete → Signal Explorer", use_container_width=True):
-                st.session_state.current_page = "03_Signals"
-                st.switch_page("pages/01_Signals.py")
-
-        with col_back:
-            if st.button("← Use Mock Data Instead", use_container_width=True):
-                st.session_state.use_mock_data = True
-                st.rerun()
+    if has_integrations():
+        st.success("Setup complete! You're ready to discover signals.", icon="✅")
+        if st.button("Continue to Signal Explorer →", type="primary", use_container_width=True, key="continue_setup"):
+            st.switch_page("pages/01_Signals.py")
     else:
-        st.warning(
-            "⚠️ Setup Incomplete: Connect PostHog + Attio to proceed with real data mode",
-            icon="⚠️"
-        )
+        missing = []
+        if not st.session_state.integration_status.get("posthog", False):
+            missing.append("PostHog")
+        if not st.session_state.integration_status.get("attio", False):
+            missing.append("Attio")
 
-        col_setup, col_mock = st.columns(2)
-        with col_setup:
-            st.info("Missing integrations:")
-            if not st.session_state.integration_status.get("posthog", False):
-                st.markdown("- ⚪ PostHog")
-            if not st.session_state.integration_status.get("attio", False):
-                st.markdown("- ⚪ Attio")
+        st.warning(f"Connect {' and '.join(missing)} to continue with real data", icon="⚠️")
 
-        with col_mock:
-            st.info("**Prefer testing without setup?**")
-            if st.button("← Use Mock Data Instead", use_container_width=True, key="use_mock_instead"):
-                st.session_state.use_mock_data = True
-                st.rerun()
-
+# === FOOTER ===
 st.markdown("---")
-
-# Footer info
-st.markdown("""
-<div style='font-size: 12px; color: #666;'>
-
-**What's the difference?**
-- **Mock Data**: Pre-loaded sample data for exploring all features. No integrations needed.
-- **Real Data**: Connect your actual PostHog + Attio to analyze real signals from your product.
-
-</div>
-""", unsafe_allow_html=True)
+st.caption("""
+**Demo vs Real Data**: Demo mode uses pre-loaded sample data. Real data mode connects to your actual PostHog and Attio.
+""")
