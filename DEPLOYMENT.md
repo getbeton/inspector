@@ -73,6 +73,17 @@ Checklist:
 5. Railway deploys production automatically from `main`.
 6. Validate key pages in production (Signals list, Signal detail, Settings).
 
+#### 2.2.1 Post-release: ensure `staging` is “empty” (equals `main`)
+
+Goal: immediately after a production promotion, **`staging` should match `main`**.
+
+Why:
+- Keeps `staging` as a clean base for the next feature branch.
+- If GitHub created a merge commit on `main`, syncing avoids `staging` and `main` drifting.
+
+Run:
+- `./scripts/sync_staging_to_main.sh`
+
 ## 3) Database migrations (backend) – safe default policy
 
 This repo uses Alembic migrations (`backend/alembic/`).
@@ -132,6 +143,9 @@ Railway supports running commands in a service context. Use whichever method you
 To keep production safe:
 - Protect `main`: no direct pushes, require PRs + CI.
 - Protect `staging`: require PRs + CI.
+
+Setup checklist:
+- See `docs/BRANCH_PROTECTIONS.md`
 
 Suggested concrete GitHub settings (Repository → Settings → Branches):
 - Branch protection rule for `main`
