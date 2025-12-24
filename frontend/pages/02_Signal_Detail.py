@@ -344,4 +344,4 @@ with col_btn2:
 
 with col_btn3:
     if st.button("Run Backtest", use_container_width=True):
-        st.switch_page("pages/03_Backtest.py")
+        st.switch_page("pages/03_Historical_Performance.py")

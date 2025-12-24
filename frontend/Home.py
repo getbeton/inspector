@@ -115,7 +115,7 @@ elif st.session_state.use_mock_data:
         st.markdown("**Backtest Lab**")
         st.caption("Create and test custom signals")
         if st.button("Open Backtest →", use_container_width=True, key="open_backtest"):
-            st.switch_page("pages/03_Backtest.py")
+            st.switch_page("pages/03_Historical_Performance.py")
 
     with col3:
         st.markdown("**Playbooks**")

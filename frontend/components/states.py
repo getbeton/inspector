@@ -12,7 +12,7 @@ EMPTY_STATE_CONFIGS = {
         "title": "No signals yet",
         "message": "Signals will appear here once discovered from your data.",
         "cta_label": "Run Discovery",
-        "cta_page": "pages/03_Backtest.py"
+        "cta_page": "pages/03_Historical_Performance.py"
     },
     "no_playbooks": {
         "icon": "📋",
