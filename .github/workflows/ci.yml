@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+  push:
+    branches:
+      - staging
+      - main
+
+jobs:
+  python-ci:
+    name: python-ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (backend + frontend)
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install -r frontend/requirements.txt
+
+      - name: Compile (syntax check)
+        run: |
+          python3 -m compileall -q backend/app backend/tests frontend
+
+      - name: Run tests
+        env:
+          # Ensure integration tests stay skipped unless keys are explicitly provided.
+          POSTHOG_API_KEY: ""
+          POSTHOG_PROJECT_ID: ""
+          STRIPE_API_KEY: ""
+          APOLLO_API_KEY: ""
+        run: |
+          pytest -q backend/tests
+

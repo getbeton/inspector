@@ -43,3 +43,7 @@ project_docs/
 .vscode/
 *.swp
 *.swo
+
+# Local task logs (keep process logs out of git/GitHub)
+.task_logs/
+task_logs/

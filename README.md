@@ -536,6 +536,20 @@ Currently no automated tests. Manual testing workflow:
 
 ---
 
+## 🚢 Deployment (Railway: staging + production)
+
+This repo is deployed to Railway using GitHub integration with two Railway environments:
+- **staging** deploys from the `staging` branch
+- **production** deploys from the `main` branch
+
+Promotion model:
+- Merge feature branches into `staging` (auto-deploys staging)
+- Promote `staging` → `main` via PR (auto-deploys production)
+
+For the full runbook (including backend DB migrations): see `DEPLOYMENT.md`.
+
+---
+
 ## 📝 License
 
 This project is provided as-is for demonstration and internal use.

@@ -76,7 +76,9 @@ class DashboardService:
                 getattr(model, date_field) >= start,
                 getattr(model, date_field) < end
             )
-            if extra_filter:
+            # SQLAlchemy filter expressions cannot be evaluated as booleans.
+            # We only apply the extra filter when it was explicitly provided.
+            if extra_filter is not None:
                 query = query.filter(extra_filter)
             return query.scalar() or 0
 
