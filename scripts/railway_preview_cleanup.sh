@@ -51,9 +51,19 @@ echo "  ENV_NAME=$ENV_NAME"
 
 railway link --project "$RAILWAY_PROJECT_ID" >/dev/null 2>&1 || true
 
+echo "Verifying Railway token..."
+if ! railway whoami >/dev/null 2>&1; then
+  echo "ERROR: Railway token is not authorized for this project (railway whoami failed)." >&2
+  echo "Fix:" >&2
+  echo "  - Ensure GitHub secret RAILWAY_TOKEN is a valid Railway CI/API token with access to this project." >&2
+  exit 1
+fi
+
+# Link to the environment first, then delete the currently-linked environment.
+# This avoids the CLI prompting to select an environment, which breaks CI.
 if railway environment "$ENV_NAME" >/dev/null 2>&1; then
   echo "Deleting environment: $ENV_NAME"
-  railway environment delete "$ENV_NAME" --yes
+  railway environment delete --yes
 else
   echo "Environment does not exist (nothing to delete): $ENV_NAME"
 fi
