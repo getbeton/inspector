@@ -78,8 +78,24 @@ echo "  BRANCH_NAME=$BRANCH_NAME"
 echo "  ENV_NAME=$ENV_NAME"
 echo "  BASE_ENV_NAME=$BASE_ENV_NAME"
 
+echo "Verifying Railway token..."
+if ! railway whoami >/dev/null 2>&1; then
+  echo "ERROR: Railway token is not authorized (railway whoami failed)." >&2
+  echo "Fix:" >&2
+  echo "  - Ensure GitHub secret RAILWAY_TOKEN is a valid Railway CI/API token with access to this project." >&2
+  exit 1
+fi
+
 # Link the Railway project for this repo (CI-safe).
-railway link --project "$RAILWAY_PROJECT_ID" >/dev/null 2>&1 || true
+# IMPORTANT: do NOT swallow errors here; if linking fails, subsequent commands give confusing errors
+# like \"Project Token not found\".
+if ! railway link --project "$RAILWAY_PROJECT_ID" >/dev/null 2>&1; then
+  echo "ERROR: Failed to link Railway project (project id: $RAILWAY_PROJECT_ID)." >&2
+  echo "Fix:" >&2
+  echo "  - Confirm GitHub secret RAILWAY_PROJECT_ID is correct for this Railway project." >&2
+  echo "  - Confirm RAILWAY_TOKEN has access to that project." >&2
+  exit 1
+fi
 
 # Create environment if it doesn't exist.
 # We detect existence by attempting to link to it (non-interactive). If it fails, we create it.
@@ -87,7 +103,13 @@ if railway environment "$ENV_NAME" >/dev/null 2>&1; then
   echo "Environment already exists: $ENV_NAME"
 else
   echo "Creating environment: $ENV_NAME (duplicate from $BASE_ENV_NAME)"
-  railway environment new "$ENV_NAME" --duplicate "$BASE_ENV_NAME"
+  if ! railway environment new "$ENV_NAME" --duplicate "$BASE_ENV_NAME"; then
+    echo "ERROR: Failed to create preview environment: $ENV_NAME" >&2
+    echo "Common causes:" >&2
+    echo "  - RAILWAY_TOKEN can deploy but does not have permission to create/delete environments." >&2
+    echo "  - The project id is wrong or the token cannot access it." >&2
+    exit 1
+  fi
   # Link again after creation.
   railway environment "$ENV_NAME" >/dev/null 2>&1 || true
 fi
