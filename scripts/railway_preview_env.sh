@@ -13,6 +13,7 @@ set -euo pipefail
 # - railway CLI installed
 # - RAILWAY_TOKEN set (Railway CI token)
 # - RAILWAY_PROJECT_ID set
+# - RAILWAY_WORKSPACE_ID set (workspace id or exact workspace name) to keep `railway link` non-interactive in CI
 #
 # Inputs:
 # - BRANCH_NAME: e.g. "feature/deployment-workflow"
@@ -30,6 +31,7 @@ BASE_ENV_NAME="${BASE_ENV_NAME:-staging}"
 FRONTEND_SERVICE_NAME="${FRONTEND_SERVICE_NAME:-frontend}"
 FRONTEND_API_URL="${FRONTEND_API_URL:-http://backend.railway.internal:8000}"
 PRINT_ENV_NAME_ONLY="${PRINT_ENV_NAME_ONLY:-0}"
+RAILWAY_WORKSPACE_ID="${RAILWAY_WORKSPACE_ID:-}"
 
 if [[ -z "$BRANCH_NAME" ]]; then
   echo "BRANCH_NAME is required" >&2
@@ -73,10 +75,23 @@ if [[ -z "${RAILWAY_PROJECT_ID:-}" ]]; then
   exit 2
 fi
 
+if [[ -z "${RAILWAY_WORKSPACE_ID:-}" ]]; then
+  echo "RAILWAY_WORKSPACE_ID is required" >&2
+  echo "Why:" >&2
+  echo "  - Railway CLI may prompt to select a workspace even if --project is provided." >&2
+  echo "  - Interactive prompts break GitHub Actions and prevent preview env creation." >&2
+  exit 2
+fi
+
 echo "Preview env for branch:"
 echo "  BRANCH_NAME=$BRANCH_NAME"
 echo "  ENV_NAME=$ENV_NAME"
 echo "  BASE_ENV_NAME=$BASE_ENV_NAME"
+echo "  RAILWAY_PROJECT_ID=$RAILWAY_PROJECT_ID"
+echo "  RAILWAY_WORKSPACE_ID=$RAILWAY_WORKSPACE_ID"
+
+echo "Railway CLI:"
+railway --version || true
 
 echo "Verifying Railway token..."
 if ! railway whoami >/dev/null 2>&1; then
@@ -89,10 +104,13 @@ fi
 # Link the Railway project for this repo (CI-safe).
 # IMPORTANT: do NOT swallow errors here; if linking fails, subsequent commands give confusing errors
 # like \"Project Token not found\".
-if ! railway link --project "$RAILWAY_PROJECT_ID" >/dev/null 2>&1; then
+#
+# We pass workspace + environment explicitly to avoid any interactive selection prompts.
+if ! railway link --workspace "$RAILWAY_WORKSPACE_ID" --project "$RAILWAY_PROJECT_ID" --environment "$BASE_ENV_NAME" >/dev/null 2>&1; then
   echo "ERROR: Failed to link Railway project (project id: $RAILWAY_PROJECT_ID)." >&2
   echo "Fix:" >&2
   echo "  - Confirm GitHub secret RAILWAY_PROJECT_ID is correct for this Railway project." >&2
+  echo "  - Confirm GitHub secret RAILWAY_WORKSPACE_ID matches the project workspace (id or exact name)." >&2
   echo "  - Confirm RAILWAY_TOKEN has access to that project." >&2
   exit 1
 fi

@@ -56,7 +56,13 @@ Workflows:
 
 Required GitHub secrets:
 - `RAILWAY_TOKEN` (Railway CI token)
+- `RAILWAY_WORKSPACE_ID` (Railway workspace id **or exact workspace name**; required to keep `railway link` non-interactive in CI)
 - `RAILWAY_PROJECT_ID` (Railway project id)
+
+How to find `RAILWAY_WORKSPACE_ID`:
+- Fastest: use the **workspace name** exactly as Railway shows it (this works with `railway link --workspace`).
+- Sanity check locally (should not prompt):
+  - `railway link --workspace "<workspace name>" --project "<project id>" --environment staging`
 
 Naming rule:
 - Branch `feature/my-thing` -> Railway env `pr-feature-my-thing` (sanitized + truncated)
