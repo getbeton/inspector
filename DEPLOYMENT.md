@@ -41,37 +41,30 @@ Local pre-push checks (recommended):
 - `npm run build`
 - `npm test`
 
-### 2.3 Preview environments for feature branches (automatic)
+### 2.3 Preview environments for PRs into `staging` (automatic)
 
-When you push to a branch matching `feature/**`, GitHub Actions will:
-- Create (or re-use) a Railway environment derived from the branch name (duplicated from `staging`)
-- Deploy `backend` + `frontend` into that environment
+When you open (or update) a PR **into `staging`**, GitHub Actions will:
+- Create (or re-use) a Railway preview environment for that PR (duplicated from `staging`)
+- Deploy the PR changes into that environment
+- Print a preview URL in the workflow logs (if Railway provides a domain for the `frontend` service)
 
-When a PR is merged into `staging`, GitHub Actions will:
+When the PR is closed (merged or not), GitHub Actions will:
 - Delete the corresponding Railway preview environment
 
-Workflows:
+Workflow:
 - `.github/workflows/preview_env.yml`
-- `.github/workflows/preview_env_cleanup.yml`
 
 Required GitHub secrets:
-- `RAILWAY_TOKEN` (Railway CI token)
-- `RAILWAY_WORKSPACE_ID` (Railway workspace id **or exact workspace name**; required to keep `railway link` non-interactive in CI)
+- `RAILWAY_TOKEN` (Railway API token used by the GitHub Action)
 - `RAILWAY_PROJECT_ID` (Railway project id)
-
-How to find `RAILWAY_WORKSPACE_ID`:
-- Fastest: use the **workspace name** exactly as Railway shows it (this works with `railway link --workspace`).
-- Sanity check locally (should not prompt):
-  - `railway link --workspace "<workspace name>" --project "<project id>" --environment staging`
 
 How to validate `RAILWAY_TOKEN` is correct (before burning CI cycles):
 - Run locally (this MUST succeed):
-  - `RAILWAY_TOKEN="<paste token>" railway whoami`
+  - `HOME="$(mktemp -d)" RAILWAY_TOKEN="<paste token>" railway whoami`
 - If you see `Unauthorized. Please login`, the token is invalid or has copy/paste issues (common: trailing newline).
-- Use an **account-level API token** (not a project/service token) if you need to create/delete environments via CLI.
 
 Naming rule:
-- Branch `feature/my-thing` -> Railway env `pr-feature-my-thing` (sanitized + truncated)
+- PR #123 -> Railway env `pr-123`
 
 ### 2.2 Release to production (promotion)
 

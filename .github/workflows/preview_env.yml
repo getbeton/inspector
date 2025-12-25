@@ -1,78 +1,97 @@
 name: Preview Env (Railway)
 
+# Vercel-style previews: create/update a Railway preview environment for each PR into `staging`,
+# then delete it when the PR is closed.
+#
+# Guide: https://github.com/marketplace/actions/railway-preview-deploy-action
 on:
-  push:
+  pull_request:
     branches:
-      - "feature/**"
+      - staging
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  # Prevent overlapping deploys for the same PR.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  create-and-deploy:
+  deploy-preview:
     runs-on: ubuntu-latest
-    env:
-      # Required to authenticate Railway CLI in CI.
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      # Required because `railway link` can otherwise prompt interactively to select a workspace.
-      # This MUST be a stable identifier (workspace id or exact workspace name).
-      RAILWAY_WORKSPACE_ID: ${{ secrets.RAILWAY_WORKSPACE_ID }}
-      # Required to link the correct Railway project.
-      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-      # Source environment to duplicate from.
-      BASE_ENV_NAME: staging
-      # Ensure frontend can reach backend over Railway internal networking.
-      FRONTEND_API_URL: http://backend.railway.internal:8000
-      FRONTEND_SERVICE_NAME: frontend
+    if: ${{ github.event.action != 'closed' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Verify required Railway secrets are configured
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           if [ -z "${RAILWAY_TOKEN}" ]; then
             echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
-            exit 1
-          fi
-          if [ -z "${RAILWAY_WORKSPACE_ID}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_WORKSPACE_ID" >&2
-            echo "Why this is required:" >&2
-            echo "  - Railway CLI can prompt to select a workspace even if --project is provided." >&2
-            echo "  - In GitHub Actions, interactive prompts break CI and prevent env creation/deletion." >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
             exit 1
           fi
           if [ -z "${RAILWAY_PROJECT_ID}" ]; then
             echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
             exit 1
           fi
 
-      - name: Install Railway CLI
-        run: |
-          curl -fsSL https://railway.app/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+      - name: Deploy Railway preview environment
+        id: deploy
+        uses: ayungavis/railway-preview-deploy@v1.0.2
+        with:
+          railway_api_token: ${{ secrets.RAILWAY_TOKEN }}
+          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
+          environment_name: staging
+          # Stable, short name: avoids collisions and truncation issues from long branch names.
+          preview_environment_name: pr-${{ github.event.pull_request.number }}
+          # Used by the action to associate the preview env with the PR branch.
+          branch_name: ${{ github.head_ref }}
+          # Set project-level env vars used by frontend in preview env.
+          # Backend will simply ignore unknown vars.
+          environment_variables: '{"API_URL":"http://backend.railway.internal:8000"}'
+          # Optional: help the action produce a URL output (our project uses `frontend` service as UI).
+          api_service_name: frontend
+          cleanup: 'false'
 
-      - name: Compute preview environment name
-        id: envname
+      - name: Print preview URL (if available)
+        if: ${{ steps.deploy.outputs.service_domain != '' }}
+        run: |
+          echo "Preview URL: https://${{ steps.deploy.outputs.service_domain }}"
+
+  cleanup-preview:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action == 'closed' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required Railway secrets are configured
         env:
-          BRANCH_NAME: ${{ github.ref_name }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
-          chmod +x scripts/railway_preview_env.sh
-          ENV_NAME="$(PRINT_ENV_NAME_ONLY=1 BRANCH_NAME="$BRANCH_NAME" ./scripts/railway_preview_env.sh)"
-          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
+          if [ -z "${RAILWAY_TOKEN}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
+            exit 1
+          fi
+          if [ -z "${RAILWAY_PROJECT_ID}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
+            exit 1
+          fi
 
-      - name: Create/ensure preview environment
-        env:
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          chmod +x scripts/railway_preview_env.sh
-          ./scripts/railway_preview_env.sh
-
-      - name: Deploy backend to preview environment
-        run: |
-          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service backend
-
-      - name: Deploy frontend to preview environment
-        run: |
-          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service frontend
+      - name: Cleanup Railway preview environment
+        uses: ayungavis/railway-preview-deploy@v1.0.2
+        with:
+          railway_api_token: ${{ secrets.RAILWAY_TOKEN }}
+          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
+          environment_name: staging
+          preview_environment_name: pr-${{ github.event.pull_request.number }}
+          branch_name: ${{ github.event.pull_request.head.ref }}
+          cleanup: 'true'
 
 
