@@ -3,6 +3,10 @@ from app.auth import get_current_user
 
 app = FastAPI(title="Beton Inspector API")
 
+# Register API routers
+from app.api.endpoints.settings import router as settings_router
+app.include_router(settings_router)
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
