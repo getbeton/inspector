@@ -5,7 +5,11 @@ app = FastAPI(title="Beton Inspector API")
 
 # Register API routers
 from app.api.endpoints.settings import router as settings_router
+from app.api.endpoints.attio import router as attio_router
+from app.api.endpoints.dashboards import router as dashboards_router
 app.include_router(settings_router)
+app.include_router(attio_router, prefix="/api/v1")
+app.include_router(dashboards_router, prefix="/api/v1")
 
 @app.get("/health")
 def health_check():

@@ -385,12 +385,151 @@ async def get_health_status(
 
 
 # ============================================
+# Rate Limit & Cache Status Endpoints
+# ============================================
+
+class RateLimitStatusResponse(BaseModel):
+    """Response for rate limit status."""
+    integration: str
+    limit: int
+    window_seconds: int
+    current_usage: int
+    remaining: int
+    usage_percent: float
+
+
+class CacheStatsResponse(BaseModel):
+    """Response for cache statistics."""
+    total_entries: int
+    active_entries: int
+    expired_entries: int
+    total_hits: int
+    integration: Optional[str] = None
+
+
+@router.get("/rate-limit/{integration}", response_model=RateLimitStatusResponse)
+async def get_rate_limit_status(
+    integration: str,
+    config_manager: ConfigManager = Depends(get_config_manager)
+):
+    """
+    Get rate limit status for an integration.
+
+    - **integration**: Integration name (posthog, attio)
+    """
+    from app.core.rate_limiter import get_rate_limiter
+
+    db = config_manager.db
+    rate_limiter = get_rate_limiter(db, integration)
+    status = rate_limiter.get_status()
+
+    return RateLimitStatusResponse(**status)
+
+
+@router.get("/cache/stats", response_model=CacheStatsResponse)
+async def get_cache_stats(
+    integration: Optional[str] = None,
+    config_manager: ConfigManager = Depends(get_config_manager)
+):
+    """
+    Get cache statistics.
+
+    - **integration**: Optional integration to filter by
+    """
+    from app.core.query_cache import get_query_cache
+
+    db = config_manager.db
+    cache = get_query_cache(db)
+    stats = cache.get_stats(integration)
+
+    return CacheStatsResponse(**stats)
+
+
+@router.post("/cache/cleanup")
+async def cleanup_cache(
+    integration: Optional[str] = None,
+    config_manager: ConfigManager = Depends(get_config_manager)
+):
+    """
+    Cleanup expired cache entries or invalidate all entries for an integration.
+
+    - **integration**: Optional integration to invalidate all entries for
+    """
+    from app.core.query_cache import get_query_cache
+
+    db = config_manager.db
+    cache = get_query_cache(db)
+
+    if integration:
+        deleted = cache.invalidate_integration(integration)
+        return {"status": "success", "message": f"Invalidated {deleted} cache entries for {integration}"}
+    else:
+        deleted = cache.cleanup_expired()
+        return {"status": "success", "message": f"Cleaned up {deleted} expired cache entries"}
+
+
+# ============================================
 # Integration Test Helpers
 # ============================================
 
 async def _test_posthog_connection(api_key: str, config: dict) -> dict:
     """Test PostHog connection."""
     import requests
+
+    # PostHog API Key Types:
+    # - Personal API Key (phx_...) - For querying data via REST API
+    # - Project API Key (phc_...) - For capturing/sending events
+    POSTHOG_KEY_HELP = {
+        "personal_api_key_url": "https://app.posthog.com/settings/user-api-keys",
+        "project_api_key_url": "https://app.posthog.com/project/settings",
+        "docs_url": "https://posthog.com/docs/api"
+    }
+
+    # Validate API key format
+    if not api_key:
+        return {
+            "success": False,
+            "message": "API key is required",
+            "details": {
+                "error": "missing_api_key",
+                "help": "Get your Personal API Key from PostHog",
+                "links": POSTHOG_KEY_HELP
+            }
+        }
+
+    # Check key format
+    key_type = None
+    if api_key.startswith("phx_"):
+        key_type = "personal"
+    elif api_key.startswith("phc_"):
+        key_type = "project"
+    else:
+        return {
+            "success": False,
+            "message": "Invalid PostHog API key format. Key should start with 'phx_' (Personal API Key)",
+            "details": {
+                "error": "invalid_key_format",
+                "provided_prefix": api_key[:4] + "..." if len(api_key) > 4 else "too_short",
+                "expected_format": "phx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "help": "PostHog API keys start with 'phx_' (Personal) or 'phc_' (Project)",
+                "links": POSTHOG_KEY_HELP
+            }
+        }
+
+    # Project API keys (phc_) are for event capture, not API queries
+    if key_type == "project":
+        return {
+            "success": False,
+            "message": "Project API Key (phc_) detected. Please use a Personal API Key (phx_) instead.",
+            "details": {
+                "error": "wrong_key_type",
+                "provided_type": "project_api_key",
+                "required_type": "personal_api_key",
+                "help": "For querying PostHog data, you need a Personal API Key (starts with phx_). "
+                       "Project API Keys (phc_) are only for sending events.",
+                "links": POSTHOG_KEY_HELP
+            }
+        }
 
     project_id = config.get("project_id", app_settings.posthog_project_id)
     host = config.get("host", app_settings.posthog_host)
@@ -399,7 +538,11 @@ async def _test_posthog_connection(api_key: str, config: dict) -> dict:
         return {
             "success": False,
             "message": "Missing project_id in configuration",
-            "details": {"error": "project_id required"}
+            "details": {
+                "error": "project_id_required",
+                "help": "Find your Project ID in PostHog Project Settings",
+                "links": POSTHOG_KEY_HELP
+            }
         }
 
     try:
@@ -418,27 +561,36 @@ async def _test_posthog_connection(api_key: str, config: dict) -> dict:
                 "details": {
                     "email": user_data.get("email"),
                     "organization": user_data.get("organization", {}).get("name"),
-                    "project_id": project_id
+                    "project_id": project_id,
+                    "key_type": "personal_api_key",
+                    "capabilities": ["query_data", "read_events", "read_persons", "manage_project"]
                 }
             }
         elif response.status_code == 401:
             return {
                 "success": False,
-                "message": "Invalid API key or unauthorized",
-                "details": {"status_code": 401}
+                "message": "Invalid API key or unauthorized. Please check your Personal API Key.",
+                "details": {
+                    "status_code": 401,
+                    "help": "Your API key may be expired or revoked. Generate a new one in PostHog.",
+                    "links": POSTHOG_KEY_HELP
+                }
             }
         else:
             return {
                 "success": False,
                 "message": f"PostHog API returned {response.status_code}",
-                "details": {"status_code": response.status_code}
+                "details": {
+                    "status_code": response.status_code,
+                    "links": POSTHOG_KEY_HELP
+                }
             }
 
     except requests.Timeout:
         return {
             "success": False,
             "message": "Connection timed out",
-            "details": {"error": "timeout"}
+            "details": {"error": "timeout", "host": host}
         }
     except Exception as e:
         return {

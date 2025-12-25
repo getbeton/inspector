@@ -28,6 +28,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@db:5432/beton
       ENV: DEV
+      BETON_ENCRYPTION_KEY: IuVGjJYXzjhUcVogiT3eBqVeinM1CMW7F_GXyBazot8=
     ports:
       - "8000:8000"
     depends_on:

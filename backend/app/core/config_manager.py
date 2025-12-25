@@ -128,11 +128,15 @@ class ConfigManager:
             ).first()
 
             if existing:
-                # Update
+                # Update - only reset status if API key changed
+                old_key = self.encryption.decrypt(existing.api_key_encrypted)
+                if old_key != api_key:
+                    # API key changed, reset validation status
+                    existing.status = IntegrationStatus.DISCONNECTED
+                    existing.last_validated_at = None
                 existing.api_key_encrypted = encrypted_key
                 existing.config_json = config_json
                 existing.is_active = is_active
-                existing.status = IntegrationStatus.DISCONNECTED  # Reset status on update
                 existing.updated_at = datetime.utcnow()
                 self.db.commit()
                 self.db.refresh(existing)
