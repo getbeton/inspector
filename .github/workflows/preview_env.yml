@@ -28,11 +28,12 @@ jobs:
 
       - name: Verify required Railway secrets are configured
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # Prefer the marketplace guide's secret name, but keep backward compatibility.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
-          if [ -z "${RAILWAY_TOKEN}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
+          if [ -z "${RAILWAY_API_TOKEN}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_API_TOKEN (or legacy RAILWAY_TOKEN)" >&2
             exit 1
           fi
           if [ -z "${RAILWAY_PROJECT_ID}" ]; then
@@ -40,11 +41,23 @@ jobs:
             exit 1
           fi
 
+      - name: Railway token diagnostics (safe)
+        env:
+          # Never print the token itself; only print metadata to catch copy/paste issues.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "railway_api_token_length=${#RAILWAY_API_TOKEN}"
+          if [[ "$RAILWAY_API_TOKEN" =~ [[:space:]] ]]; then
+            echo "railway_api_token_contains_whitespace=true"
+          else
+            echo "railway_api_token_contains_whitespace=false"
+          fi
+
       - name: Deploy Railway preview environment
         id: deploy
         uses: ayungavis/railway-preview-deploy@v1.0.2
         with:
-          railway_api_token: ${{ secrets.RAILWAY_TOKEN }}
+          railway_api_token: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
           project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
           environment_name: staging
           # Stable, short name: avoids collisions and truncation issues from long branch names.
@@ -72,11 +85,12 @@ jobs:
 
       - name: Verify required Railway secrets are configured
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # Prefer the marketplace guide's secret name, but keep backward compatibility.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
-          if [ -z "${RAILWAY_TOKEN}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
+          if [ -z "${RAILWAY_API_TOKEN}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_API_TOKEN (or legacy RAILWAY_TOKEN)" >&2
             exit 1
           fi
           if [ -z "${RAILWAY_PROJECT_ID}" ]; then
@@ -87,7 +101,7 @@ jobs:
       - name: Cleanup Railway preview environment
         uses: ayungavis/railway-preview-deploy@v1.0.2
         with:
-          railway_api_token: ${{ secrets.RAILWAY_TOKEN }}
+          railway_api_token: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
           project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
           environment_name: staging
           preview_environment_name: pr-${{ github.event.pull_request.number }}

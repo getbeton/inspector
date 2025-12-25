@@ -55,7 +55,8 @@ Workflow:
 - `.github/workflows/preview_env.yml`
 
 Required GitHub secrets:
-- `RAILWAY_TOKEN` (Railway API token used by the GitHub Action)
+- `RAILWAY_API_TOKEN` (Railway API token used by the GitHub Action)
+- `RAILWAY_TOKEN` (legacy fallback; optional if `RAILWAY_API_TOKEN` is set)
 - `RAILWAY_PROJECT_ID` (Railway project id)
 
 How to validate `RAILWAY_TOKEN` is correct (before burning CI cycles):
