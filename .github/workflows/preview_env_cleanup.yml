@@ -1,0 +1,46 @@
+name: Preview Env Cleanup (Railway)
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - staging
+
+jobs:
+  cleanup:
+    # Only delete preview envs when the PR was actually merged into staging.
+    if: ${{ github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required Railway secrets are configured
+        run: |
+          if [ -z "${RAILWAY_TOKEN}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
+            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
+            exit 1
+          fi
+          if [ -z "${RAILWAY_PROJECT_ID}" ]; then
+            echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
+            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
+            exit 1
+          fi
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Delete preview environment for merged branch
+        env:
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+        run: |
+          chmod +x scripts/railway_preview_cleanup.sh scripts/railway_preview_env.sh
+          ./scripts/railway_preview_cleanup.sh
+
+

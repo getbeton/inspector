@@ -41,6 +41,26 @@ Local pre-push checks (recommended):
 - `npm run build`
 - `npm test`
 
+### 2.3 Preview environments for feature branches (automatic)
+
+When you push to a branch matching `feature/**`, GitHub Actions will:
+- Create (or re-use) a Railway environment derived from the branch name (duplicated from `staging`)
+- Deploy `backend` + `frontend` into that environment
+
+When a PR is merged into `staging`, GitHub Actions will:
+- Delete the corresponding Railway preview environment
+
+Workflows:
+- `.github/workflows/preview_env.yml`
+- `.github/workflows/preview_env_cleanup.yml`
+
+Required GitHub secrets:
+- `RAILWAY_TOKEN` (Railway CI token)
+- `RAILWAY_PROJECT_ID` (Railway project id)
+
+Naming rule:
+- Branch `feature/my-thing` -> Railway env `pr-feature-my-thing` (sanitized + truncated)
+
 ### 2.2 Release to production (promotion)
 
 Production release is a **PR from `staging` → `main`**.
@@ -52,6 +72,17 @@ Checklist:
 4. Merge PR.
 5. Railway deploys production automatically from `main`.
 6. Validate key pages in production (Signals list, Signal detail, Settings).
+
+#### 2.2.1 Post-release: ensure `staging` is “empty” (equals `main`)
+
+Goal: immediately after a production promotion, **`staging` should match `main`**.
+
+Why:
+- Keeps `staging` as a clean base for the next feature branch.
+- If GitHub created a merge commit on `main`, syncing avoids `staging` and `main` drifting.
+
+Run:
+- `./scripts/sync_staging_to_main.sh`
 
 ## 3) Database migrations (backend) – safe default policy
 
@@ -112,6 +143,9 @@ Railway supports running commands in a service context. Use whichever method you
 To keep production safe:
 - Protect `main`: no direct pushes, require PRs + CI.
 - Protect `staging`: require PRs + CI.
+
+Setup checklist:
+- See `docs/BRANCH_PROTECTIONS.md`
 
 Suggested concrete GitHub settings (Repository → Settings → Branches):
 - Branch protection rule for `main`

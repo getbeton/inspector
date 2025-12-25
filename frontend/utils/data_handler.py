@@ -290,3 +290,233 @@ def get_mock_signals():
 def get_mock_data_sources():
     """Get mock data sources status."""
     return MOCK_DATA_SOURCES
+
+
+# =============================================================================
+# SETTINGS API METHODS
+# =============================================================================
+
+def get_integrations_list() -> Dict[str, Any]:
+    """
+    Get all configured integrations from the database.
+    Returns integration status for PostHog, Attio, Stripe, Apollo.
+    """
+    if is_mock_mode():
+        return {"integrations": [], "mock": True}
+
+    try:
+        response = requests.get(f"{API_URL}/api/v1/settings/integrations")
+        if response.status_code == 200:
+            return {"integrations": response.json(), "success": True}
+        else:
+            return {"integrations": [], "error": response.text}
+    except Exception as e:
+        return {"integrations": [], "error": str(e)}
+
+
+def get_integration(name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a specific integration configuration.
+
+    Args:
+        name: Integration name (posthog, attio, stripe, apollo)
+
+    Returns:
+        Integration config with masked API key, or None if not found
+    """
+    if is_mock_mode():
+        return MOCK_DATA_SOURCES.get(name)
+
+    try:
+        response = requests.get(f"{API_URL}/api/v1/settings/integrations/{name}")
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        else:
+            st.error(f"Error fetching {name} config: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error fetching {name} config: {str(e)}")
+        return None
+
+
+def save_integration(name: str, api_key: str, config: Optional[Dict] = None, is_active: bool = True) -> Dict[str, Any]:
+    """
+    Save or update an integration configuration.
+
+    Args:
+        name: Integration name (posthog, attio, stripe, apollo)
+        api_key: The API key to encrypt and store
+        config: Additional config (project_id, host, workspace_id, etc.)
+        is_active: Whether the integration is enabled
+
+    Returns:
+        Result dict with success status and message
+    """
+    if is_mock_mode():
+        return {"success": True, "message": "Mock mode - configuration simulated", "mock": True}
+
+    try:
+        payload = {
+            "api_key": api_key,
+            "config": config or {},
+            "is_active": is_active
+        }
+        response = requests.post(
+            f"{API_URL}/api/v1/settings/integrations/{name}",
+            json=payload
+        )
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        else:
+            return {"success": False, "error": response.text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def delete_integration(name: str) -> Dict[str, Any]:
+    """
+    Delete an integration configuration.
+
+    Args:
+        name: Integration name (posthog, attio, stripe, apollo)
+
+    Returns:
+        Result dict with success status
+    """
+    if is_mock_mode():
+        return {"success": True, "message": "Mock mode - deletion simulated", "mock": True}
+
+    try:
+        response = requests.delete(f"{API_URL}/api/v1/settings/integrations/{name}")
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        elif response.status_code == 404:
+            return {"success": False, "error": f"Integration '{name}' not found"}
+        else:
+            return {"success": False, "error": response.text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def test_integration_connection(name: str, api_key: Optional[str] = None, config: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Test connection to an integration.
+
+    Args:
+        name: Integration name (posthog, attio, stripe, apollo)
+        api_key: Optional API key to test (uses stored if not provided)
+        config: Optional config to test (uses stored if not provided)
+
+    Returns:
+        Test result with success status and message
+    """
+    if is_mock_mode():
+        # Simulate successful test for mock mode
+        import time
+        time.sleep(0.5)  # Simulate network delay
+        return {
+            "success": True,
+            "message": f"Mock mode - {name} connection simulated",
+            "details": {"mock": True},
+            "mock": True
+        }
+
+    try:
+        payload = {}
+        if api_key:
+            payload["api_key"] = api_key
+        if config:
+            payload["config"] = config
+
+        response = requests.post(
+            f"{API_URL}/api/v1/settings/integrations/{name}/test",
+            json=payload if payload else None
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"success": False, "message": response.text}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+def get_system_settings() -> Dict[str, Any]:
+    """
+    Get system settings (query budget, cache TTL, etc.).
+
+    Returns:
+        System settings dict
+    """
+    if is_mock_mode():
+        return {
+            "query_budget_limit": 2000,
+            "cache_ttl_seconds": 3600,
+            "attio_batch_size": 100,
+            "max_concurrent_requests": 5,
+            "mock": True
+        }
+
+    try:
+        response = requests.get(f"{API_URL}/api/v1/settings/system")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": response.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def update_system_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update system settings.
+
+    Args:
+        settings: Dict with settings to update (query_budget_limit, cache_ttl_seconds, etc.)
+
+    Returns:
+        Updated settings dict
+    """
+    if is_mock_mode():
+        return {"success": True, "message": "Mock mode - settings simulated", "mock": True}
+
+    try:
+        response = requests.put(
+            f"{API_URL}/api/v1/settings/system",
+            json=settings
+        )
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        else:
+            return {"success": False, "error": response.text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_health_status() -> Dict[str, Any]:
+    """
+    Get health status of all integrations.
+
+    Returns:
+        Health status with overall status and per-integration details
+    """
+    if is_mock_mode():
+        return {
+            "overall_status": "healthy",
+            "integrations": {
+                "posthog": {"status": "healthy", "connection_status": "connected", "is_active": True},
+                "attio": {"status": "healthy", "connection_status": "connected", "is_active": True},
+            },
+            "last_checked": "2025-01-15T10:00:00Z",
+            "mock": True
+        }
+
+    try:
+        response = requests.get(f"{API_URL}/api/v1/settings/health")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"overall_status": "unknown", "error": response.text}
+    except Exception as e:
+        return {"overall_status": "unknown", "error": str(e)}

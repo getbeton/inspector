@@ -5,9 +5,13 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.models import Base
+# Import all models to ensure SQLAlchemy mappers are configured
+from app.models import Account, Signal, SyncState  # noqa: F401
+from app.heuristics.models import MetricSnapshot, HeuristicScore, AccountCluster  # noqa: F401
 
-# Test database URL (use in-memory SQLite for testing)
-TEST_DATABASE_URL = "sqlite:///./test.db"
+# Test database URL (in-memory SQLite for testing).
+# Important: using ":memory:" avoids creating a real `test.db` file in the repo.
+TEST_DATABASE_URL = "sqlite:///:memory:"
 
 
 @pytest.fixture(scope="function")
