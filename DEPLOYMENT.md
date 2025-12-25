@@ -64,6 +64,12 @@ How to find `RAILWAY_WORKSPACE_ID`:
 - Sanity check locally (should not prompt):
   - `railway link --workspace "<workspace name>" --project "<project id>" --environment staging`
 
+How to validate `RAILWAY_TOKEN` is correct (before burning CI cycles):
+- Run locally (this MUST succeed):
+  - `RAILWAY_TOKEN="<paste token>" railway whoami`
+- If you see `Unauthorized. Please login`, the token is invalid or has copy/paste issues (common: trailing newline).
+- Use an **account-level API token** (not a project/service token) if you need to create/delete environments via CLI.
+
 Naming rule:
 - Branch `feature/my-thing` -> Railway env `pr-feature-my-thing` (sanitized + truncated)
 

@@ -40,6 +40,28 @@ if [[ -z "${RAILWAY_WORKSPACE_ID:-}" ]]; then
   exit 2
 fi
 
+print_token_diagnostics() {
+  # IMPORTANT: Never print the token itself. Only print metadata that helps debug copy/paste issues.
+  local token="${RAILWAY_TOKEN:-}"
+  echo "Railway token diagnostics (safe):"
+  echo "  token_length=${#token}"
+  if [[ "$token" =~ [[:space:]] ]]; then
+    echo "  token_contains_whitespace=true"
+  else
+    echo "  token_contains_whitespace=false"
+  fi
+  if [[ "$token" == *$'\n'* ]]; then
+    echo "  token_contains_newline=true"
+  else
+    echo "  token_contains_newline=false"
+  fi
+  if [[ "$token" == *$'\r'* ]]; then
+    echo "  token_contains_carriage_return=true"
+  else
+    echo "  token_contains_carriage_return=false"
+  fi
+}
+
 sanitize_env_name() {
   local raw="$1"
   local s
@@ -77,12 +99,17 @@ if ! railway link --workspace "$RAILWAY_WORKSPACE_ID" --project "$RAILWAY_PROJEC
 fi
 
 echo "Verifying Railway token..."
-if ! railway whoami >/dev/null 2>&1; then
+WHOAMI_OUTPUT=""
+if ! WHOAMI_OUTPUT="$(railway whoami --json 2>&1)"; then
   echo "ERROR: Railway token is not authorized for this project (railway whoami failed)." >&2
+  echo "Railway whoami output:" >&2
+  echo "$WHOAMI_OUTPUT" >&2
+  print_token_diagnostics >&2
   echo "Fix:" >&2
   echo "  - Ensure GitHub secret RAILWAY_TOKEN is a valid Railway CI/API token with access to this project." >&2
   exit 1
 fi
+echo "Railway token OK (whoami succeeded)."
 
 # Delete by explicit name to avoid relying on "currently linked env" state.
 if railway environment "$ENV_NAME" >/dev/null 2>&1; then

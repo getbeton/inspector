@@ -83,6 +83,28 @@ if [[ -z "${RAILWAY_WORKSPACE_ID:-}" ]]; then
   exit 2
 fi
 
+print_token_diagnostics() {
+  # IMPORTANT: Never print the token itself. Only print metadata that helps debug copy/paste issues.
+  local token="${RAILWAY_TOKEN:-}"
+  echo "Railway token diagnostics (safe):"
+  echo "  token_length=${#token}"
+  if [[ "$token" =~ [[:space:]] ]]; then
+    echo "  token_contains_whitespace=true"
+  else
+    echo "  token_contains_whitespace=false"
+  fi
+  if [[ "$token" == *$'\n'* ]]; then
+    echo "  token_contains_newline=true"
+  else
+    echo "  token_contains_newline=false"
+  fi
+  if [[ "$token" == *$'\r'* ]]; then
+    echo "  token_contains_carriage_return=true"
+  else
+    echo "  token_contains_carriage_return=false"
+  fi
+}
+
 echo "Preview env for branch:"
 echo "  BRANCH_NAME=$BRANCH_NAME"
 echo "  ENV_NAME=$ENV_NAME"
@@ -94,12 +116,23 @@ echo "Railway CLI:"
 railway --version || true
 
 echo "Verifying Railway token..."
-if ! railway whoami >/dev/null 2>&1; then
+# We intentionally capture stderr so CI logs contain the real Railway CLI error message.
+# This is usually enough to distinguish:
+# - invalid token
+# - revoked/expired token
+# - copy/paste token with whitespace/newlines
+# - token type that isn't accepted by the CLI auth endpoint
+WHOAMI_OUTPUT=""
+if ! WHOAMI_OUTPUT="$(railway whoami --json 2>&1)"; then
   echo "ERROR: Railway token is not authorized (railway whoami failed)." >&2
+  echo "Railway whoami output:" >&2
+  echo "$WHOAMI_OUTPUT" >&2
+  print_token_diagnostics >&2
   echo "Fix:" >&2
   echo "  - Ensure GitHub secret RAILWAY_TOKEN is a valid Railway CI/API token with access to this project." >&2
   exit 1
 fi
+echo "Railway token OK (whoami succeeded)."
 
 # Link the Railway project for this repo (CI-safe).
 # IMPORTANT: do NOT swallow errors here; if linking fails, subsequent commands give confusing errors
