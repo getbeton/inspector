@@ -14,6 +14,9 @@ stripe
 pyyaml==6.0.1
 httpx
 
+# Security & Encryption
+cryptography
+
 # Testing
 pytest
 pytest-asyncio
