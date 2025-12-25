@@ -381,3 +381,115 @@ class UserSignalPreference(Base):
     __table_args__ = (
         Index('ix_user_signal_pref_user_signal', 'user_id', 'signal_type', unique=True),
     )
+
+
+# ============================================
+# Authentication & Multi-Tenancy Models (Epic 1)
+# ============================================
+
+class Workspace(Base):
+    """
+    Represents a customer organization/tenant.
+    Each workspace is completely isolated from others via RLS.
+    """
+    __tablename__ = "workspaces"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))  # UUID
+    name = Column(String(255), nullable=False)  # e.g., "Acme Corp"
+    slug = Column(String(100), nullable=False, unique=True)  # e.g., "acme-corp"
+
+    # Billing (populated by Epic 4)
+    stripe_customer_id = Column(String(255), unique=True, nullable=True)
+    stripe_subscription_id = Column(String(255), nullable=True)
+    subscription_status = Column(String(50), default="active")  # active, past_due, canceled
+    billing_cycle_start = Column(DateTime, nullable=True)
+    next_billing_date = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
+
+
+class WorkspaceMember(Base):
+    """
+    Links users to workspaces with role-based access.
+    Enables team collaboration and future multi-workspace support.
+    """
+    __tablename__ = "workspace_members"
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(String(36), primary_key=True)  # Supabase auth.users.id (not a local foreign key)
+    role = Column(String(50), default="member")  # owner, admin, member
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    workspace = relationship("Workspace", back_populates="members")
+
+
+class VaultSecret(Base):
+    """
+    Stores encrypted integration credentials using Supabase Vault.
+    Secret column is auto-encrypted by Vault extension.
+    """
+    __tablename__ = "vault_secrets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))  # UUID
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)  # e.g., "posthog_api_key"
+    secret = Column(Text, nullable=False)  # Encrypted by Vault
+    secret_metadata = Column(JSON, default=dict)  # {project_id, project_name} - not encrypted
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('ix_vault_secrets_workspace_name', 'workspace_id', 'name', unique=True),
+    )
+
+
+class TrackedIdentity(Base):
+    """
+    Tracks PostHog persons for billing.
+    Updated daily by sync job, never deleted (soft delete via is_active).
+    """
+    __tablename__ = "tracked_identities"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))  # UUID
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id = Column(String(255), nullable=False)  # PostHog person ID
+    email = Column(String(255), nullable=True)  # PostHog person email if captured
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('ix_tracked_identities_workspace_person', 'workspace_id', 'person_id', unique=True),
+        Index('ix_tracked_identities_workspace_active', 'workspace_id', 'is_active'),
+    )
+
+
+class APIKey(Base):
+    """
+    Stores API keys for authentication (replacing JWT).
+    Keys are hashed with bcrypt - only hash is stored in database.
+    One key per workspace/user.
+    Keys expire after 90 days.
+    """
+    __tablename__ = "api_keys"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))  # UUID
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(255), nullable=False)  # Supabase auth user ID
+    key_hash = Column(String(255), nullable=False, unique=True)  # bcrypt hash of actual key
+    name = Column(String(100), nullable=False, default="Default Key")  # Display name
+    last_used_at = Column(DateTime, nullable=True)  # Track usage
+    expires_at = Column(DateTime, nullable=False)  # Expires 90 days after creation
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index('ix_api_keys_workspace_id', 'workspace_id'),
+        Index('ix_api_keys_created_at', 'created_at'),
+        # Unique constraint: one key per workspace
+        # (removed - allowing key_hash to be the unique identifier)
+    )

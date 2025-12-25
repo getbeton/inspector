@@ -27,8 +27,12 @@ services:
       - ./backend:/app
     environment:
       DATABASE_URL: postgresql://postgres:password@db:5432/beton
-      ENV: DEV
       BETON_ENCRYPTION_KEY: IuVGjJYXzjhUcVogiT3eBqVeinM1CMW7F_GXyBazot8=
+      ENV: ${ENV:-DEV}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     ports:
       - "8000:8000"
     depends_on:
@@ -45,6 +49,9 @@ services:
       - ./frontend:/app
     environment:
       API_URL: http://backend:8000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8501}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     ports:
       - "8501:8501"
     depends_on:

@@ -1,5 +1,20 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from app.auth import get_current_user
+from sqlalchemy.orm import Session
+from app.config import settings
+from app.data_manager import DataManager
+from app.models import Base, Workspace, WorkspaceMember
+from sqlalchemy import create_engine
+from typing import Dict, Optional
+import logging
+import uuid
+import re
+
+from app.integrations.posthog import PostHogClient
+from app.integrations.stripe import StripeClient
+from app.integrations.apollo import ApolloClient
+from app.services.sync import SyncService
 
 app = FastAPI(title="Beton Inspector API")
 
@@ -19,20 +34,387 @@ def health_check():
 def read_users_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
-from sqlalchemy.orm import Session
-from app.config import settings
-from app.data_manager import DataManager
-from app.models import Base
-from sqlalchemy import create_engine
-from typing import Dict, Optional
-import logging
-
-from app.integrations.posthog import PostHogClient
-from app.integrations.stripe import StripeClient
-from app.integrations.apollo import ApolloClient
-from app.services.sync import SyncService
 
 logger = logging.getLogger(__name__)
+
+# ============================================
+# Authentication & Workspace Endpoints (Epic 2)
+# ============================================
+
+def _generate_workspace_slug(name: str) -> str:
+    """Generate URL-friendly slug from workspace name."""
+    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    return slug[:100]  # Max 100 characters
+
+
+def _ensure_unique_slug(db: Session, base_slug: str) -> str:
+    """Ensure slug is unique by appending counter if needed."""
+    slug = base_slug
+    counter = 1
+    while db.query(Workspace).filter(Workspace.slug == slug).first():
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+    return slug
+
+
+@app.get("/api/user/workspace")
+def get_or_create_workspace(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(lambda: Session(bind=engine))
+):
+    """
+    Get authenticated user's workspace or create one if first-time user.
+
+    Epic 2: Auth Backend
+    Returns workspace details and isNew flag for onboarding.
+
+    Args:
+        current_user: Authenticated user claims from JWT
+
+    Returns:
+        {
+            "workspace": {
+                "id": "uuid",
+                "name": "Workspace Name",
+                "slug": "workspace-slug",
+                "created_at": "ISO timestamp"
+            },
+            "isNew": boolean
+        }
+
+    Raises:
+        HTTPException 401: Unauthenticated
+        HTTPException 500: Database error
+    """
+    try:
+        user_id = current_user.get("sub")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID not found in token"
+            )
+
+        # Query for existing workspace membership
+        membership = db.query(WorkspaceMember).filter(
+            WorkspaceMember.user_id == user_id
+        ).first()
+
+        if membership:
+            # User already has a workspace
+            workspace = db.query(Workspace).filter(
+                Workspace.id == membership.workspace_id
+            ).first()
+
+            if not workspace:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Workspace not found for membership"
+                )
+
+            return {
+                "workspace": {
+                    "id": workspace.id,
+                    "name": workspace.name,
+                    "slug": workspace.slug,
+                    "created_at": workspace.created_at.isoformat()
+                },
+                "isNew": False
+            }
+
+        # First-time user: Create workspace
+        email = current_user.get("email", "user@example.com")
+        domain = email.split("@")[-1] if "@" in email else "domain.com"
+
+        # Generate workspace name from domain
+        if domain in ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"]:
+            # Generic email domain - use user's first name
+            first_name = email.split("@")[0].split(".")[0].capitalize()
+            workspace_name = f"{first_name}'s Workspace"
+        else:
+            # Corporate domain - use domain name
+            workspace_name = domain.replace(".com", "").replace(".", " ").title()
+
+        workspace_id = str(uuid.uuid4())
+        base_slug = _generate_workspace_slug(workspace_name)
+        slug = _ensure_unique_slug(db, base_slug)
+
+        # Create workspace and membership atomically
+        workspace = Workspace(
+            id=workspace_id,
+            name=workspace_name,
+            slug=slug,
+            subscription_status="active"  # Default to active, will require payment in Epic 5
+        )
+        db.add(workspace)
+
+        membership = WorkspaceMember(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role="owner"  # First user is workspace owner
+        )
+        db.add(membership)
+
+        db.commit()
+
+        return {
+            "workspace": {
+                "id": workspace.id,
+                "name": workspace.name,
+                "slug": workspace.slug,
+                "created_at": workspace.created_at.isoformat()
+            },
+            "isNew": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error creating workspace: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create workspace"
+        )
+
+
+@app.get("/api/user/profile")
+def get_user_profile(current_user: dict = Depends(get_current_user)):
+    """
+    Get current authenticated user's profile from OAuth provider.
+
+    Epic 2: Auth Backend
+    Returns user information extracted from JWT claims.
+
+    Returns:
+        {
+            "id": "user-id",
+            "email": "user@example.com",
+            "name": "User Name"
+        }
+
+    Raises:
+        HTTPException 401: Unauthenticated
+    """
+    return {
+        "id": current_user.get("sub"),
+        "email": current_user.get("email"),
+        "name": current_user.get("name"),
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(current_user: dict = Depends(get_current_user)):
+    """
+    Server-side logout cleanup (optional).
+
+    Epic 2: Auth Backend
+    Logs logout event. Token invalidation is handled by Supabase.
+
+    Returns:
+        {"message": "Logged out successfully"}
+    """
+    user_id = current_user.get("sub")
+    logger.info(f"User {user_id} logged out")
+    return {"message": "Logged out successfully"}
+
+
+# ============================================
+# API Key Management Endpoints (Simplified Auth)
+# ============================================
+
+@app.post("/api/auth/generate-key")
+def generate_api_key_endpoint(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(lambda: Session(bind=engine))
+):
+    """
+    Generate a new API key for the current user.
+
+    Simplified Auth: Replace JWT with simple API key auth.
+    Returns the unhashed key (only shown once).
+
+    The key has format: beton_<32-char-hex-string>
+    Expires after 90 days.
+
+    Returns:
+        {
+            "api_key": "beton_abc123...",
+            "expires_at": "ISO timestamp",
+            "message": "Save this key - it will only be shown once!"
+        }
+
+    Raises:
+        HTTPException 401: Unauthenticated
+        HTTPException 500: Database error
+    """
+    try:
+        from app.auth import generate_api_key
+        from datetime import datetime, timedelta
+        from app.models import APIKey
+
+        user_id = current_user.get("sub")
+        workspace_id = current_user.get("workspace_id")
+
+        if not user_id or not workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID or workspace ID not found"
+            )
+
+        # Generate new key
+        unhashed_key, key_hash = generate_api_key()
+
+        # Set expiration to 90 days from now
+        expires_at = datetime.utcnow() + timedelta(days=90)
+
+        # Store hashed key in database
+        api_key = APIKey(
+            id=str(uuid.uuid4()),
+            workspace_id=workspace_id,
+            user_id=user_id,
+            key_hash=key_hash,
+            name="Default API Key",
+            expires_at=expires_at
+        )
+        db.add(api_key)
+        db.commit()
+
+        return {
+            "api_key": unhashed_key,
+            "expires_at": expires_at.isoformat(),
+            "message": "Save this key - it will only be shown once!"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error generating API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate API key"
+        )
+
+
+@app.get("/api/auth/keys")
+def list_api_keys(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(lambda: Session(bind=engine))
+):
+    """
+    List all API keys for the current user.
+
+    Returns list of keys (without unhashed values).
+
+    Returns:
+        {
+            "keys": [
+                {
+                    "id": "uuid",
+                    "name": "Default API Key",
+                    "created_at": "ISO timestamp",
+                    "expires_at": "ISO timestamp",
+                    "last_used_at": "ISO timestamp or null"
+                }
+            ]
+        }
+
+    Raises:
+        HTTPException 401: Unauthenticated
+    """
+    try:
+        from app.models import APIKey
+
+        workspace_id = current_user.get("workspace_id")
+
+        if not workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Workspace ID not found"
+            )
+
+        # Get all keys for this workspace
+        keys = db.query(APIKey).filter(
+            APIKey.workspace_id == workspace_id
+        ).all()
+
+        return {
+            "keys": [
+                {
+                    "id": key.id,
+                    "name": key.name,
+                    "created_at": key.created_at.isoformat(),
+                    "expires_at": key.expires_at.isoformat(),
+                    "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None
+                }
+                for key in keys
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error listing API keys: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list API keys"
+        )
+
+
+@app.delete("/api/auth/keys/{key_id}")
+def revoke_api_key(
+    key_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(lambda: Session(bind=engine))
+):
+    """
+    Revoke (delete) an API key.
+
+    Returns:
+        {"message": "API key revoked successfully"}
+
+    Raises:
+        HTTPException 401: Unauthenticated
+        HTTPException 404: Key not found
+    """
+    try:
+        from app.models import APIKey
+
+        workspace_id = current_user.get("workspace_id")
+
+        if not workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Workspace ID not found"
+            )
+
+        # Find and delete key (must belong to current workspace)
+        key = db.query(APIKey).filter(
+            APIKey.id == key_id,
+            APIKey.workspace_id == workspace_id
+        ).first()
+
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="API key not found"
+            )
+
+        db.delete(key)
+        db.commit()
+
+        return {"message": "API key revoked successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error revoking API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to revoke API key"
+        )
 
 # Dependency to get DB session
 # In a real app we'd use a proper dependency injection for DB
