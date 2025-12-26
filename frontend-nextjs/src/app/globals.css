@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Light mode colors - colorblind-friendly palette */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 6%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 6%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 6%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 200 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Colorblind-safe primary (blue) */
+    --primary: 201 100% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Colorblind-safe secondary (teal) */
+    --secondary: 168 98% 33%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Colorblind-safe destructive (orange instead of red) */
+    --destructive: 33 100% 44%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 201 100% 35%;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Dark mode colors */
+      --background: 0 0% 6%;
+      --foreground: 0 0% 96%;
+
+      --card: 0 0% 10%;
+      --card-foreground: 0 0% 96%;
+
+      --popover: 0 0% 10%;
+      --popover-foreground: 0 0% 96%;
+
+      --muted: 0 0% 20%;
+      --muted-foreground: 0 0% 60%;
+
+      --accent: 200 100% 60%;
+      --accent-foreground: 0 0% 6%;
+
+      --primary: 201 100% 45%;
+      --primary-foreground: 0 0% 6%;
+
+      --secondary: 168 98% 43%;
+      --secondary-foreground: 0 0% 6%;
+
+      --destructive: 33 100% 54%;
+      --destructive-foreground: 0 0% 6%;
+
+      --border: 0 0% 20%;
+      --input: 0 0% 20%;
+      --ring: 201 100% 45%;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+      "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
