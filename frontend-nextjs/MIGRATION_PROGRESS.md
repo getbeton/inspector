@@ -1,6 +1,6 @@
 # Next.js Migration Progress
 
-**Status**: 5/13 commits complete - Dashboard layout done
+**Status**: 6/13 commits complete - Home page done
 
 ## Completed Commits
 
@@ -9,11 +9,11 @@
 ✅ **Commit 3**: Supabase OAuth authentication system
 ✅ **Commit 4**: API client + React Query + Zustand data layer
 ✅ **Commit 5**: Dashboard layout and navigation
+✅ **Commit 6**: Home/Setup page with integrations
 
-## Remaining Commits (8)
+## Remaining Commits (7)
 
-**Phase 2: Core Pages & Features (Commits 6-11)**
-- [ ] Commit 6: Home/Setup page with integrations
+**Phase 2: Core Pages & Features (Commits 7-11)**
 - [ ] Commit 7: Signals page (main feature)
 - [ ] Commit 8: Signal Detail page with analytics
 - [ ] Commit 9: Charts & visualizations (Tremor/Recharts)
@@ -41,8 +41,8 @@ Each commit is atomic and focused on a single feature/component set.
 
 ## Next Steps
 
-1. Implement Home/Setup page with integrations (Commit 6)
-2. Build Signals page with data tables (Commit 7)
-3. Add Signal Detail page with analytics (Commit 8)
+1. Build Signals page with data tables (Commit 7)
+2. Add Signal Detail page with analytics (Commit 8)
+3. Add charts with Tremor/Recharts (Commit 9)
 4. Continue with remaining pages iteratively
 5. Create PR to staging for review
