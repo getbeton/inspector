@@ -12,9 +12,10 @@ interface HeaderProps {
     workspace_name?: string
   }
   className?: string
+  onMenuClick?: () => void
 }
 
-export function Header({ user, className }: HeaderProps) {
+export function Header({ user, className, onMenuClick }: HeaderProps) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -43,7 +44,10 @@ export function Header({ user, className }: HeaderProps) {
       {/* Left side - Page title or breadcrumb */}
       <div className="flex items-center gap-4">
         {/* Mobile menu button - hidden on desktop */}
-        <button className="lg:hidden p-2 -ml-2 text-muted-foreground hover:text-foreground">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 -ml-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
+        >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>

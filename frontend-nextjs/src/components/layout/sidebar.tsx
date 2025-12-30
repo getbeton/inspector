@@ -70,21 +70,36 @@ const navItems: NavItem[] = [
 
 interface SidebarProps {
   className?: string
+  onClose?: () => void
 }
 
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ className, onClose }: SidebarProps) {
   const pathname = usePathname()
+
+  const handleNavClick = () => {
+    // Close sidebar on mobile when navigating
+    if (onClose) onClose()
+  }
 
   return (
     <aside className={cn('w-64 bg-card border-r border-border flex flex-col', className)}>
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-border">
-        <Link href="/" className="flex items-center gap-2">
+      <div className="h-16 flex items-center justify-between px-6 border-b border-border">
+        <Link href="/" className="flex items-center gap-2" onClick={handleNavClick}>
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">B</span>
           </div>
           <span className="font-semibold text-lg">Beton</span>
         </Link>
+        {/* Close button - visible only on mobile */}
+        <button
+          onClick={onClose}
+          className="lg:hidden p-2 -mr-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -97,6 +112,7 @@ export function Sidebar({ className }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={handleNavClick}
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
                 isActive
@@ -115,6 +131,7 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="px-3 py-4 border-t border-border">
         <Link
           href="/signals/new"
+          onClick={handleNavClick}
           className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
