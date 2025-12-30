@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15
@@ -29,6 +27,7 @@ services:
       DATABASE_URL: postgresql://postgres:password@db:5432/beton
       BETON_ENCRYPTION_KEY: IuVGjJYXzjhUcVogiT3eBqVeinM1CMW7F_GXyBazot8=
       ENV: ${ENV:-DEV}
+      FRONTEND_URL: http://localhost:3000
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
@@ -38,6 +37,27 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - beton-net
+
+  frontend:
+    build:
+      context: ./frontend-nextjs
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend-nextjs:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      API_URL: http://backend:8000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
     networks:
       - beton-net
 

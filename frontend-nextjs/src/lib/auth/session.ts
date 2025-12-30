@@ -1,25 +1,17 @@
-'use server'
-
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { SESSION_COOKIE_NAME, type SessionUser } from './constants'
 
-export const SESSION_COOKIE_NAME = 'beton_session'
-
-export interface SessionUser {
-  sub: string
-  email: string
-  name: string
-  workspace_id?: string
-  workspace_name?: string
-  role?: string
-}
+// Re-export for convenience
+export { SESSION_COOKIE_NAME, type SessionUser } from './constants'
 
 /**
  * Get the current session from cookie
  * Validates session with backend
  */
 export async function getSession(): Promise<SessionUser | null> {
-  const sessionCookie = cookies().get(SESSION_COOKIE_NAME)
+  const cookieStore = await cookies()
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)
 
   if (!sessionCookie) {
     return null

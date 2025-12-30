@@ -21,20 +21,23 @@ class OAuthHandler:
 
     def extract_token_from_fragment(self) -> Optional[str]:
         """
-        Extract JWT token from URL fragment after OAuth callback.
+        Extract JWT token from sessionStorage after OAuth callback.
 
         Returns:
             JWT token if found, None otherwise
         """
-        # Streamlit doesn't expose URL fragments, so we use JavaScript
-        # The token is stored in sessionStorage by the oauth.py script
+        # Read token from sessionStorage using Streamlit component
         token_getter_script = """
         <script>
-        // Extract token from sessionStorage
-        const token = sessionStorage.getItem('supabase_token');
+        // Get token from sessionStorage
+        const token = sessionStorage.getItem('oauth_token');
         if (token) {
-            // Pass to Streamlit via data attribute
-            window.parent.document.body.setAttribute('data-oauth-token', token);
+            // Create a hidden input to pass token to Streamlit
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.id = 'oauth-token-input';
+            input.value = token;
+            document.body.appendChild(input);
         }
         </script>
         """

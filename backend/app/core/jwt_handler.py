@@ -2,7 +2,7 @@
 JWT token validation for Supabase OAuth integration.
 
 Handles Supabase JWT tokens with proper claim validation:
-- Signature verification using SUPABASE_JWT_SECRET
+- Signature verification using JWKS (ES256) or JWT secret (HS256)
 - Audience claim validation (must be "authenticated")
 - Issuer validation (must match Supabase project URL)
 - Expiration checking
@@ -13,38 +13,63 @@ from datetime import datetime
 from fastapi import HTTPException, status
 from app.config import settings
 import os
+import logging
+import jwt
+from jwt import InvalidTokenError, ExpiredSignatureError, DecodeError, PyJWKClient
+import time
 
-# Try python-jose first (Supabase standard), fall back to PyJWT
-try:
-    from jose import jwt, JWTError
-    JOSE_AVAILABLE = True
-except ImportError:
-    JOSE_AVAILABLE = False
-    import jwt as pyjwt
-    from jwt import InvalidTokenError as JWTError
+logger = logging.getLogger(__name__)
 
 
 class JWTHandler:
     """
     Handles Supabase JWT token validation and claim extraction.
+    Supports both HS256 (JWT secret) and ES256 (JWKS) algorithms.
     """
 
     def __init__(self):
         """Initialize JWT handler with configuration."""
         self.jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
         self.supabase_url = os.getenv("SUPABASE_URL")
-        self.algorithm = "HS256"
+        self._jwks_client = None
+        self._jwks_cache_time = 0
+        self._jwks_cache_ttl = 3600  # Cache JWKS for 1 hour
+
+    def _get_jwks_client(self) -> PyJWKClient:
+        """Get or create JWKS client for ES256 validation."""
+        current_time = time.time()
+        if self._jwks_client is None or (current_time - self._jwks_cache_time) > self._jwks_cache_ttl:
+            if not self.supabase_url:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="SUPABASE_URL not configured for JWKS validation",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            jwks_url = f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+            logger.info(f"Fetching JWKS from: {jwks_url}")
+            self._jwks_client = PyJWKClient(jwks_url)
+            self._jwks_cache_time = current_time
+        return self._jwks_client
+
+    def _get_token_algorithm(self, token: str) -> str:
+        """Extract algorithm from JWT header without validation."""
+        try:
+            header = jwt.get_unverified_header(token)
+            return header.get("alg", "HS256")
+        except Exception:
+            return "HS256"
 
     def validate_and_extract_claims(self, token: str) -> dict:
         """
         Validate JWT token and extract user claims.
 
         Performs:
-        1. Signature verification with SUPABASE_JWT_SECRET
-        2. Audience claim validation (must be "authenticated")
-        3. Issuer validation (must match Supabase project URL)
-        4. Expiration check
-        5. Required claims check
+        1. Detect algorithm from token header (ES256 or HS256)
+        2. Signature verification (JWKS for ES256, JWT secret for HS256)
+        3. Audience claim validation (must be "authenticated")
+        4. Issuer validation (must match Supabase project URL)
+        5. Expiration check
+        6. Required claims check
 
         Args:
             token: JWT token from Authorization header
@@ -55,31 +80,34 @@ class JWTHandler:
         Raises:
             HTTPException 401: Invalid, expired, or missing required claims
         """
-        if not self.jwt_secret:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="JWT validation not configured",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        # Detect algorithm from token
+        algorithm = self._get_token_algorithm(token)
+        logger.info(f"JWT algorithm detected: {algorithm}")
 
         try:
-            # Decode JWT with signature verification
-            if JOSE_AVAILABLE:
-                # Using python-jose (Supabase standard)
+            if algorithm == "ES256":
+                # Use JWKS for ES256 tokens
+                jwks_client = self._get_jwks_client()
+                signing_key = jwks_client.get_signing_key_from_jwt(token)
                 payload = jwt.decode(
                     token,
-                    self.jwt_secret,
-                    algorithms=[self.algorithm],
-                    # NOTE: Don't specify audience here to avoid validation error
-                    # We'll validate it manually to provide better error messages
+                    signing_key.key,
+                    algorithms=["ES256"],
                     options={"verify_aud": False}
                 )
             else:
-                # Using PyJWT
-                payload = pyjwt.decode(
+                # Use JWT secret for HS256 tokens
+                if not self.jwt_secret:
+                    logger.error("JWT validation not configured - SUPABASE_JWT_SECRET not set")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="JWT validation not configured",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                payload = jwt.decode(
                     token,
                     self.jwt_secret,
-                    algorithms=[self.algorithm],
+                    algorithms=["HS256"],
                     options={"verify_aud": False}
                 )
 
@@ -103,17 +131,6 @@ class JWTHandler:
                         headers={"WWW-Authenticate": "Bearer"},
                     )
 
-            # Validate expiration
-            exp = payload.get("exp")
-            if exp:
-                exp_datetime = datetime.utcfromtimestamp(exp)
-                if datetime.utcnow() > exp_datetime:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Token has expired",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-
             # Extract required claims
             user_id = payload.get("sub")
             if not user_id:
@@ -128,9 +145,9 @@ class JWTHandler:
                 "sub": user_id,  # Supabase user ID
                 "email": payload.get("email"),
                 "email_verified": payload.get("email_verified", False),
-                "name": payload.get("user_metadata", {}).get("name"),
-                "picture": payload.get("user_metadata", {}).get("picture"),
-                "provider": payload.get("app_metadata", {}).get("provider"),
+                "name": payload.get("user_metadata", {}).get("name") if payload.get("user_metadata") else None,
+                "picture": payload.get("user_metadata", {}).get("picture") if payload.get("user_metadata") else None,
+                "provider": payload.get("app_metadata", {}).get("provider") if payload.get("app_metadata") else None,
                 "aud": aud,
                 "iss": payload.get("iss"),
                 "iat": payload.get("iat"),
@@ -140,15 +157,28 @@ class JWTHandler:
         except HTTPException:
             # Re-raise our custom exceptions
             raise
-        except JWTError as e:
-            # Handle JWT library errors
+        except ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except DecodeError as e:
+            logger.error(f"JWT decode error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid token format: {str(e)}",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except InvalidTokenError as e:
+            logger.error(f"JWT validation error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid token: {str(e)}",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         except Exception as e:
-            # Catch any other errors
+            logger.exception(f"Unexpected JWT error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Token validation failed: {str(e)}",

@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { signInWithGoogle } from '@/lib/auth/supabase'
 import { useState } from 'react'
-import Link from 'next/link'
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleGoogleSignIn = async () => {
@@ -25,6 +25,30 @@ export default function LoginPage() {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDemoMode = async () => {
+    try {
+      setIsDemoLoading(true)
+      setError(null)
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/auth/demo`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        window.location.href = data.redirect || '/'
+      } else {
+        setError('Failed to start demo mode')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsDemoLoading(false)
     }
   }
 
@@ -54,7 +78,7 @@ export default function LoginPage() {
 
           <Button
             onClick={handleGoogleSignIn}
-            disabled={isLoading}
+            disabled={isLoading || isDemoLoading}
             className="w-full"
             size="lg"
           >
@@ -72,15 +96,15 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Link href="/">
-            <Button
-              variant="outline"
-              className="w-full"
-              size="lg"
-            >
-              Demo Mode
-            </Button>
-          </Link>
+          <Button
+            onClick={handleDemoMode}
+            disabled={isLoading || isDemoLoading}
+            variant="outline"
+            className="w-full"
+            size="lg"
+          >
+            {isDemoLoading ? 'Starting demo...' : 'Demo Mode'}
+          </Button>
         </CardContent>
       </Card>
 

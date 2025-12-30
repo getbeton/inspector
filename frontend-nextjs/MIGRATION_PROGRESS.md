@@ -1,6 +1,6 @@
 # Next.js Migration Progress
 
-**Status**: 6/13 commits complete - Home page done
+**Status**: 7/13 commits complete - Signals page done
 
 ## Completed Commits
 
@@ -10,11 +10,11 @@
 ✅ **Commit 4**: API client + React Query + Zustand data layer
 ✅ **Commit 5**: Dashboard layout and navigation
 ✅ **Commit 6**: Home/Setup page with integrations
+✅ **Commit 7**: Signals page with data table, filters, and mock data
 
-## Remaining Commits (7)
+## Remaining Commits (6)
 
-**Phase 2: Core Pages & Features (Commits 7-11)**
-- [ ] Commit 7: Signals page (main feature)
+**Phase 2: Core Pages & Features (Commits 8-11)**
 - [ ] Commit 8: Signal Detail page with analytics
 - [ ] Commit 9: Charts & visualizations (Tremor/Recharts)
 - [ ] Commit 10: Playbooks automation page
@@ -41,8 +41,8 @@ Each commit is atomic and focused on a single feature/component set.
 
 ## Next Steps
 
-1. Build Signals page with data tables (Commit 7)
-2. Add Signal Detail page with analytics (Commit 8)
-3. Add charts with Tremor/Recharts (Commit 9)
+1. Add Signal Detail page with analytics (Commit 8)
+2. Add charts with Tremor/Recharts (Commit 9)
+3. Build Playbooks automation page (Commit 10)
 4. Continue with remaining pages iteratively
 5. Create PR to staging for review

@@ -16,36 +16,38 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8501")
 
 def inject_token_extraction_script():
     """
-    Inject JavaScript to extract JWT token from URL fragment after OAuth callback.
+    Inject JavaScript to extract JWT token from URL fragment and redirect to backend.
 
     Supabase redirects with token in URL fragment: #access_token=eyJ...
-    This script extracts it and passes it to Streamlit via query params.
+    This script extracts it and redirects to backend /api/oauth/callback endpoint,
+    which validates token, creates workspace, and sets session cookie.
     """
-    token_extraction_script = """
+    token_extraction_script = f"""
     <script>
     // Extract token from URL fragment after Supabase OAuth callback
-    (function() {
+    (function() {{
         const hash = window.location.hash;
         const fragment = hash.substring(1);
+        const apiUrl = '{API_URL}';
 
-        if (fragment) {
+        if (fragment && fragment.includes('access_token')) {{
             // Parse fragment: access_token=eyJ...&token_type=bearer&type=recovery
             const params = new URLSearchParams(fragment);
             const access_token = params.get('access_token');
             const token_type = params.get('token_type');
 
-            if (access_token && token_type === 'bearer') {
-                // Store token in sessionStorage
-                sessionStorage.setItem('supabase_token', access_token);
-
-                // Clear URL fragment for security
-                window.history.replaceState({}, document.title, window.location.pathname);
-
-                // Rerun Streamlit to process token
-                window.location.href = window.location.pathname + '?oauth_callback=true';
-            }
-        }
-    })();
+            if (access_token && token_type === 'bearer') {{
+                // Redirect to backend OAuth callback endpoint
+                // Backend will:
+                // 1. Validate the JWT token
+                // 2. Create workspace for first-time users
+                // 3. Set HTTP-only session cookie
+                // 4. Redirect back to home
+                const callbackUrl = apiUrl + '/api/oauth/callback?token=' + encodeURIComponent(access_token);
+                window.location = callbackUrl;
+            }}
+        }}
+    }})();
     </script>
     """
     st.components.v1.html(token_extraction_script, height=0)
@@ -53,28 +55,21 @@ def inject_token_extraction_script():
 
 def handle_oauth_callback():
     """
-    Handle OAuth callback after Supabase redirects with token.
+    Handle OAuth callback after Supabase redirects with token in query params.
 
-    Extracts JWT token from sessionStorage and authenticates user.
+    The JavaScript in inject_token_extraction_script() extracts the token from
+    the URL fragment (#access_token=...) and redirects to include it in the
+    query params (?oauth_token=...) so Streamlit can access it.
     """
-    # Check if we're in OAuth callback mode
-    if st.query_params.get("oauth_callback") != "true":
-        return None
+    # Check if token is in query params (placed there by JavaScript)
+    token = st.query_params.get("oauth_token")
 
-    # Try to get token from sessionStorage via JavaScript
-    token_check_script = """
-    <script>
-    const token = sessionStorage.getItem('supabase_token');
-    if (token) {
-        // We have the token, pass it back via Streamlit
-        window.opener.postMessage({type: 'oauth_token', token: token}, '*');
-    }
-    </script>
-    """
-    st.components.v1.html(token_check_script, height=0)
+    if token:
+        # Token found! Store in session state for OAuthHandler to access
+        st.session_state.oauth_token = token
+        return token
 
-    # For now, we'll handle this via the HTML iframe approach
-    # The token will be extracted client-side and we'll process it
+    return None
 
 
 def render_google_oauth_button():
@@ -86,16 +81,22 @@ def render_google_oauth_button():
     st.markdown("## Sign in with Google")
 
     try:
+        # Inject token extraction script (runs on every page load)
+        inject_token_extraction_script()
+
+        # Check for OAuth callback and extract token if present
+        token = handle_oauth_callback()
+
+        if token:
+            # Token was found in URL - OAuth callback handler will process it
+            st.info("Processing your authentication...")
+            st.stop()
+
+        # Build OAuth redirect URL
         supabase = get_supabase_client()
         oauth_url = supabase.get_oauth_redirect_url("google")
 
-        # Inject token extraction script
-        inject_token_extraction_script()
-
-        # Check for OAuth callback
-        handle_oauth_callback()
-
-        # Create button that redirects to OAuth URL
+        # Create Google sign-in button
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             st.markdown(f"""

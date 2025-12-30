@@ -65,6 +65,55 @@ def is_authenticated() -> bool:
     return get_auth_token() is not None
 
 
+def check_session_with_backend() -> Optional[Dict]:
+    """
+    Check if user has a valid session on the backend (via session cookie).
+
+    Makes a request to /api/auth/me which will authenticate via the session cookie.
+    This is called when user lands on the app after OAuth redirect.
+
+    Returns:
+        User data if session is valid, None otherwise
+    """
+    try:
+        response = requests.get(
+            f"{API_URL}/api/auth/me",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            user_data = response.json()
+            # Extract workspace info if available
+            workspace_name = user_data.get("workspace_name", "Workspace")
+            workspace_id = user_data.get("workspace_id")
+
+            user_info = {
+                "sub": user_data.get("sub"),
+                "email": user_data.get("email"),
+                "name": user_data.get("name"),
+                "email_verified": user_data.get("email_verified", False),
+                "provider": user_data.get("provider")
+            }
+
+            workspace_info = {
+                "id": workspace_id,
+                "name": workspace_name,
+                "slug": workspace_name.lower().replace(" ", "-")
+            }
+
+            # Store in session
+            set_user(user_info)
+            set_workspace(workspace_info)
+            set_auth_token("session_authenticated")  # Marker token
+
+            return user_info
+
+        return None
+
+    except requests.RequestException:
+        return None
+
+
 def render_login_page():
     """
     Render the login page with OAuth buttons.

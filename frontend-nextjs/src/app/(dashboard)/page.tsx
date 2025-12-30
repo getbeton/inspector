@@ -65,13 +65,12 @@ export default function DashboardHomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                asChild
+              <Link
+                href="/signals"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 w-full"
               >
-                <Link href="/signals">Try Demo</Link>
-              </Button>
+                Try Demo
+              </Link>
             </CardContent>
           </Card>
         </div>
@@ -209,9 +208,12 @@ export default function DashboardHomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" asChild>
-                <Link href="/signals">View Signals</Link>
-              </Button>
+              <Link
+                href="/signals"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
+              >
+                View Signals
+              </Link>
             </CardContent>
           </Card>
 
@@ -228,9 +230,12 @@ export default function DashboardHomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full" asChild>
-                <Link href="/backtest">Open Backtest</Link>
-              </Button>
+              <Link
+                href="/backtest"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 w-full"
+              >
+                Open Backtest
+              </Link>
             </CardContent>
           </Card>
 
@@ -247,9 +252,12 @@ export default function DashboardHomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full" asChild>
-                <Link href="/playbooks">View Playbooks</Link>
-              </Button>
+              <Link
+                href="/playbooks"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 w-full"
+              >
+                View Playbooks
+              </Link>
             </CardContent>
           </Card>
         </div>
@@ -432,9 +440,12 @@ export default function DashboardHomePage() {
                   <p className="text-sm text-emerald-600/80 dark:text-emerald-400/80">You&apos;re ready to discover signals</p>
                 </div>
               </div>
-              <Button asChild>
-                <Link href="/signals">Continue to Signals</Link>
-              </Button>
+              <Link
+                href="/signals"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                Continue to Signals
+              </Link>
             </div>
           </CardContent>
         </Card>

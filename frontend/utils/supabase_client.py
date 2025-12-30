@@ -34,14 +34,15 @@ class SupabaseClient:
         Returns:
             URL to redirect user to for authentication
         """
+        # URL encode the redirect_to parameter properly
+        from urllib.parse import quote
         redirect_uri = f"{self.frontend_url}?oauth_callback=true"
 
+        # Supabase OAuth flow - redirect_to is URL encoded
         return (
             f"{self.supabase_url}/auth/v1/authorize?"
             f"provider={provider}&"
-            f"client_id={self.supabase_anon_key}&"
-            f"redirect_to={redirect_uri}&"
-            f"response_type=code"
+            f"redirect_to={quote(redirect_uri, safe='')}"
         )
 
     def get_token_from_url_fragment(self) -> Optional[str]:

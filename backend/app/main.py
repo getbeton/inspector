@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from app.auth import get_current_user
 from sqlalchemy.orm import Session
 from app.config import settings
@@ -8,6 +8,7 @@ from app.models import Base, Workspace, WorkspaceMember
 from sqlalchemy import create_engine
 from typing import Dict, Optional
 import logging
+import os
 import uuid
 import re
 
@@ -32,7 +33,54 @@ def health_check():
 
 @app.get("/api/me")
 def read_users_me(current_user: dict = Depends(get_current_user)):
+    """Get current authenticated user (works with both session cookies and JWT tokens)."""
     return current_user
+
+
+@app.get("/api/auth/me")
+def get_auth_user(current_user: dict = Depends(get_current_user)):
+    """
+    Get current authenticated user for frontend session check.
+
+    Works with session cookies set by OAuth callback.
+    Returns 401 if not authenticated.
+    """
+    return current_user
+
+
+@app.post("/api/auth/demo")
+def demo_login():
+    """
+    Create a demo session for testing without real authentication.
+    Returns redirect with session cookie set.
+    """
+    from app.core.session_manager import create_session, SESSION_COOKIE_NAME, SESSION_MAX_AGE
+
+    # Create demo session
+    session_token = create_session(
+        user_id="demo-user-id",
+        email="demo@beton.app",
+        name="Demo User",
+        workspace_id="demo-workspace-id",
+        workspace_name="Demo Workspace"
+    )
+
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+    response = JSONResponse(content={"success": True, "redirect": frontend_url})
+
+    # Set session cookie
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        path="/"
+    )
+
+    return response
 
 
 logger = logging.getLogger(__name__)
@@ -175,6 +223,151 @@ def get_or_create_workspace(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create workspace"
+        )
+
+
+@app.get("/api/oauth/callback")
+def oauth_callback_handler(token: Optional[str] = None, db: Session = Depends(lambda: Session(bind=engine))):
+    """
+    Handle OAuth callback from Supabase.
+
+    Accepts JWT token as query parameter, validates it, creates workspace if needed,
+    creates session, and returns redirect to app with session cookie.
+
+    Args:
+        token: JWT token from Supabase OAuth
+
+    Returns:
+        HTML page that redirects to home with session cookie set
+    """
+    if not token:
+        # Supabase sends token in URL fragment (#access_token=...) which browsers don't send to server
+        # Return HTML page that extracts fragment and resubmits as query param
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Authenticating...</title></head>
+        <body>
+            <p>Completing authentication...</p>
+            <script>
+                const hash = window.location.hash.substring(1);
+                const params = new URLSearchParams(hash);
+                const accessToken = params.get('access_token');
+                if (accessToken) {
+                    window.location.href = '/api/oauth/callback?token=' + encodeURIComponent(accessToken);
+                } else {
+                    document.body.innerHTML = '<p>Authentication failed: No token received</p>';
+                }
+            </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+
+    try:
+        # Validate token with JWT handler
+        from app.core.jwt_handler import get_jwt_handler
+        from app.core.session_manager import create_session, SESSION_COOKIE_NAME, SESSION_MAX_AGE
+
+        jwt_handler = get_jwt_handler()
+        claims = jwt_handler.validate_and_extract_claims(token)
+
+        # Token is valid! Now create workspace for first-time user
+        user_id = claims.get("sub")
+        email = claims.get("email", "user@example.com")
+        name = claims.get("name")
+
+        # Check if user already has a workspace
+        membership = db.query(WorkspaceMember).filter(
+            WorkspaceMember.user_id == user_id
+        ).first()
+
+        if not membership:
+            # First-time user: Create workspace
+            domain = email.split("@")[-1] if "@" in email else "domain.com"
+            if domain in ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"]:
+                first_name = email.split("@")[0].split(".")[0].capitalize()
+                workspace_name = f"{first_name}'s Workspace"
+            else:
+                workspace_name = domain.replace(".com", "").replace(".", " ").title()
+
+            workspace_id = str(uuid.uuid4())
+            base_slug = _generate_workspace_slug(workspace_name)
+            slug = _ensure_unique_slug(db, base_slug)
+
+            workspace = Workspace(
+                id=workspace_id,
+                name=workspace_name,
+                slug=slug,
+                subscription_status="active"
+            )
+            db.add(workspace)
+
+            membership = WorkspaceMember(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                role="owner"
+            )
+            db.add(membership)
+            db.commit()
+        else:
+            workspace_id = membership.workspace_id
+            workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+            workspace_name = workspace.name if workspace else "Workspace"
+
+        # Create session token
+        session_token = create_session(
+            user_id=user_id,
+            email=email,
+            name=name,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name
+        )
+
+        # Return HTML that redirects to frontend
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+        html_response = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authenticating...</title>
+        </head>
+        <body>
+            <p>Authenticating...</p>
+            <script>
+                // Redirect to frontend home page
+                window.location = '{frontend_url}';
+            </script>
+        </body>
+        </html>
+        """
+
+        response = HTMLResponse(content=html_response, status_code=200)
+
+        # Set HTTP-only secure cookie
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=session_token,
+            max_age=SESSION_MAX_AGE,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            path="/"
+        )
+
+        return response
+
+    except HTTPException as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"detail": e.detail}
+        )
+    except Exception as e:
+        logger.exception(f"OAuth callback error: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Token validation failed"}
         )
 
 

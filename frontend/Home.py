@@ -41,6 +41,12 @@ apply_global_styles()
 # Initialize authentication session state
 init_auth_session()
 
+# Check if user has a valid session with backend (via OAuth session cookie)
+if not is_authenticated() and "backend_session_checked" not in st.session_state:
+    from components.auth import check_session_with_backend
+    check_session_with_backend()
+    st.session_state.backend_session_checked = True
+
 # Initialize session state
 if "use_mock_data" not in st.session_state:
     st.session_state.use_mock_data = True

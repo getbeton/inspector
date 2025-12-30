@@ -16,9 +16,9 @@ httpx
 
 # Security & Encryption
 cryptography
-python-jose[cryptography]
 PyJWT
 bcrypt
+itsdangerous
 
 # Testing
 pytest
