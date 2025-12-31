@@ -67,25 +67,36 @@ docker-compose exec backend alembic downgrade -1
 │                    Next.js Frontend                 │
 │                  (Port 3000)                        │
 │  - App Router with route groups                    │
-│  - Server/Client component hybrid                  │
-│  - Supabase OAuth (HTTP-only cookies)             │
+│  - API Proxy: /api/* → Backend (same-domain cookies)│
+│  - Supabase OAuth (HTTP-only cookies)              │
 └─────────────────┬───────────────────────────────────┘
-                  │ HTTP + Cookies
+                  │ Proxied via Next.js rewrites
 ┌─────────────────▼───────────────────────────────────┐
 │                 FastAPI Backend                     │
-│                  (Port 8000)                        │
-│  - Session-based auth (HTTP-only cookies)          │
-│  - JWT validation with Supabase                    │
+│                  (Port 8080 on Railway)             │
+│  - Session-based auth (HTTP-only, Secure cookies)  │
+│  - JWT validation with Supabase JWKS               │
 │  - PostHog, Stripe, Apollo integrations            │
 └─────────────────┬───────────────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────────────┐
-│              PostgreSQL Database                    │
-│                  (Port 5432)                        │
+│              PostgreSQL (Supabase)                  │
+│  - Connection Pooler for IPv4 compatibility        │
 │  - Alembic migrations                              │
 │  - Multi-tenant with workspaces                    │
 └─────────────────────────────────────────────────────┘
 ```
+
+### API Proxy (Critical for Auth)
+Next.js proxies all `/api/*` requests to the backend. This is **required** for session cookies to work (same-domain).
+
+**Config**: `frontend-nextjs/next.config.ts` → `rewrites()`
+- Client requests go to `https://inspector.getbeton.ai/api/*`
+- Next.js forwards to `http://backend.railway.internal:8080/api/*`
+- Session cookies stay on frontend domain
+
+**Railway ENV**:
+- `API_URL=http://backend.railway.internal:8080` (frontend service)
 
 ### Key Backend Modules
 
@@ -243,6 +254,8 @@ BRANCH_NAME=feature/my-feature bash scripts/railway_preview_env.sh
 ### Security
 - **Never commit secrets** - Use `.env` (gitignored)
 - **HTTP-only cookies** - Session tokens not accessible to JS
+- **Secure cookies** - `Secure=true` in production (HTTPS only)
+- **Signed sessions** - `itsdangerous` TimestampSigner prevents tampering
 - **CORS** - Backend validates origin in production
 - **Encrypted credentials** - Integration API keys encrypted in DB
 
@@ -304,8 +317,11 @@ npm run build
 ```
 
 ### OAuth callback fails
-**Problem**: Supabase redirect URL mismatch or missing JWT secret.
-**Solution**: Check `SUPABASE_*` env vars and Supabase dashboard settings.
+**Problem**: Supabase redirect URL mismatch or cookie domain issues.
+**Solution**:
+1. Check Supabase Dashboard → Authentication → URL Configuration has `https://inspector.getbeton.ai/api/oauth/callback`
+2. Verify `API_URL=http://backend.railway.internal:8080` on frontend service
+3. Ensure OAuth redirects go through frontend proxy (not directly to backend)
 
 ### Railway preview environment not deploying
 **Problem**: Branch name too long or contains invalid characters.
