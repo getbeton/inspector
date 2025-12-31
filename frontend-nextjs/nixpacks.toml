@@ -8,7 +8,14 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["NODE_ENV=production npm run build"]
+
+[phases.postBuild]
+# Copy static files to standalone directory for proper serving
+cmds = [
+  "cp -r public .next/standalone/public || true",
+  "cp -r .next/static .next/standalone/.next/static || true"
+]
 
 [start]
 cmd = "node .next/standalone/server.js"
@@ -16,3 +23,5 @@ cmd = "node .next/standalone/server.js"
 [variables]
 NODE_ENV = "production"
 NEXT_TELEMETRY_DISABLED = "1"
+PORT = "3000"
+HOSTNAME = "0.0.0.0"

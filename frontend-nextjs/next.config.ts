@@ -1,8 +1,8 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  // Use standalone output only in production
-  ...(process.env.NODE_ENV === "production" && { output: "standalone" }),
+  // Always use standalone output for production builds (Railway/Docker)
+  output: "standalone",
 
   // Disable image optimization for Docker
   images: {
