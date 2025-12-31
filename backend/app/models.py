@@ -493,3 +493,47 @@ class APIKey(Base):
         # Unique constraint: one key per workspace
         # (removed - allowing key_hash to be the unique identifier)
     )
+
+
+# ============================================
+# PostHog Integration Configuration (Epic 6)
+# ============================================
+
+class PosthogWorkspaceConfig(Base):
+    """
+    Stores PostHog workspace configuration for each tenant.
+    One config per workspace (unique constraint).
+    API key is stored encrypted via Vault.
+    """
+    __tablename__ = "posthog_workspace_config"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))  # UUID
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    # PostHog credentials (API key encrypted via VaultSecret, referenced by workspace_id + name)
+    posthog_api_key = Column(Text, nullable=False)  # Encrypted via Vault
+    posthog_workspace_name = Column(String(255), nullable=True)  # PostHog organization/workspace name
+    posthog_project_id = Column(String(255), nullable=False)  # PostHog project ID
+
+    # Validation state
+    is_validated = Column(Boolean, default=False)  # Has the API key been validated?
+    validated_at = Column(DateTime, nullable=True)  # When was it last validated?
+    validation_error = Column(Text, nullable=True)  # Last validation error message
+
+    # Sync state
+    last_sync = Column(DateTime, nullable=True)  # Last successful sync timestamp
+
+    # Status
+    is_active = Column(Boolean, default=True)  # Is this config active?
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    workspace = relationship("Workspace", backref="posthog_config")
+
+    __table_args__ = (
+        Index('ix_posthog_workspace_config_workspace_id', 'workspace_id'),
+        Index('ix_posthog_workspace_config_is_validated', 'is_validated'),
+    )
