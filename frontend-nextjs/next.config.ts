@@ -12,6 +12,18 @@ const nextConfig: NextConfig = {
   // Enable Turbopack (Next.js 16 default)
   turbopack: {},
 
+  // Proxy API requests to backend (keeps cookies on same domain)
+  async rewrites() {
+    const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    return [
+      {
+        // Proxy all /api/* requests to backend (except Next.js internal routes)
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+    ]
+  },
+
   // Enable hot reload in Docker containers (webpack fallback)
   webpack: (config, { dev }) => {
     if (dev) {

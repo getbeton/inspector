@@ -26,15 +26,19 @@ export const supabase = typeof window !== 'undefined'
 
 /**
  * Trigger Google OAuth sign-in
- * Redirects to Supabase OAuth endpoint, which then redirects to backend callback
+ * Redirects to Supabase OAuth endpoint, which then redirects to our callback
  */
 export async function signInWithGoogle() {
+  // Use frontend origin for redirect - Next.js proxies /api/* to backend
+  // This keeps cookies on the same domain (frontend) solving cross-domain issues
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      // Redirect to backend OAuth callback endpoint
-      // Backend handles JWT validation, workspace creation, and session cookie
-      redirectTo: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/oauth/callback`
+      // Redirect through frontend proxy (Next.js rewrites /api/* to backend)
+      // This ensures session cookie is set on frontend domain
+      redirectTo: `${origin}/api/oauth/callback`
     }
   })
 
@@ -46,8 +50,8 @@ export async function signInWithGoogle() {
  * Clears session cookie via backend
  */
 export async function signOut() {
-  // Call backend logout endpoint to clear session cookie
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, {
+  // Call logout endpoint through proxy (relative URL = same domain = cookies work)
+  const response = await fetch('/api/auth/logout', {
     method: 'POST',
     credentials: 'include'
   })

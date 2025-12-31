@@ -16,7 +16,9 @@ class APIClient {
   private baseURL: string
 
   constructor() {
-    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    // Use relative URLs - Next.js proxies /api/* to backend
+    // This keeps requests on same domain so cookies work properly
+    this.baseURL = ''
   }
 
   /**
@@ -28,15 +30,15 @@ class APIClient {
   async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { method = 'GET', body, useMockData = false, headers = {}, cache = 'no-store' } = options
 
-    const url = new URL(endpoint, this.baseURL)
-
-    // Add mock_mode parameter if needed
+    // Build URL - use relative URLs to go through Next.js proxy
+    let url = endpoint
     if (useMockData) {
-      url.searchParams.set('mock_mode', 'true')
+      const separator = endpoint.includes('?') ? '&' : '?'
+      url = `${endpoint}${separator}mock_mode=true`
     }
 
     try {
-      const response = await fetch(url.toString(), {
+      const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
