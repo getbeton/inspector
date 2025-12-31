@@ -69,13 +69,13 @@ def demo_login():
 
     response = JSONResponse(content={"success": True, "redirect": frontend_url})
 
-    # Set session cookie
+    # Set session cookie (secure=True in production for HTTPS)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
         max_age=SESSION_MAX_AGE,
         httponly=True,
-        secure=False,
+        secure=settings.env.upper() != "DEV",
         samesite="lax",
         path="/"
     )
@@ -345,13 +345,13 @@ def oauth_callback_handler(token: Optional[str] = None, db: Session = Depends(la
 
         response = HTMLResponse(content=html_response, status_code=200)
 
-        # Set HTTP-only secure cookie
+        # Set HTTP-only secure cookie (secure=True in production for HTTPS)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=session_token,
             max_age=SESSION_MAX_AGE,
             httponly=True,
-            secure=False,  # Set to True in production with HTTPS
+            secure=settings.env.upper() != "DEV",
             samesite="lax",
             path="/"
         )
