@@ -17,7 +17,8 @@ Repository → Settings → Branches → Branch protection rules → Add rule
 - ✅ Require a pull request before merging
   - (Recommended) ✅ Require approvals: 1
 - ✅ Require status checks to pass before merging
-  - Add required check: **CI / python-ci** (from `.github/workflows/ci.yml`)
+  - Add required check: **CI / nextjs-ci** (from `.github/workflows/ci.yml`)
+  - Add required check: **CI (Python Legacy) / python-ci** (from `.github/workflows/ci-python-legacy.yml`) - temporary
 - ✅ Require conversation resolution before merging (recommended)
 - ✅ Require signed commits (optional)
 - ✅ Do not allow bypassing the above settings (recommended)
@@ -32,11 +33,28 @@ Same screen → Add rule
 - ✅ Require a pull request before merging
   - (Recommended) ✅ Require approvals: 1
 - ✅ Require status checks to pass before merging
-  - Add required check: **CI / python-ci**
+  - Add required check: **CI / nextjs-ci**
+  - Add required check: **CI (Python Legacy) / python-ci** - temporary
 - ✅ Require conversation resolution before merging (recommended)
 - ✅ Do not allow bypassing the above settings (recommended)
 - ✅ Restrict who can push to matching branches (recommended)
   - Only allow maintainers / release managers
+
+### Required Status Checks Summary
+
+| Workflow | Job Name | Purpose | Status |
+|----------|----------|---------|--------|
+| `ci.yml` | `nextjs-ci` | Next.js build, lint, type-check, tests | Permanent |
+| `ci-python-legacy.yml` | `python-ci` | Python syntax, pytest | Temporary |
+
+**When Python backend is fully migrated to Next.js API routes:**
+- Remove `python-ci` from required checks
+- Delete `.github/workflows/ci-python-legacy.yml`
+
+### Migration Workflow (Not Required for Merge)
+
+The `Deploy Migrations / run-migrations` job runs automatically when migration files change.
+This job is NOT a required status check - it runs post-merge to apply database changes.
 
 ## Why this matters (concrete consequence)
 

@@ -191,15 +191,14 @@ feature/my-feature  →  [PR]  →  staging  →  [PR]  →  main
 7. Merge to `main` (auto-deploys production)
 
 ### Database Migration Policy
-**Always run migrations in staging first, then production.**
-```bash
-# After staging deploy:
-railway environment staging
-railway run --service backend alembic upgrade head
+**Migrations run automatically** when you merge PRs containing migration files.
 
-# After production promote:
-railway environment production
-railway run --service backend alembic upgrade head
+Workflow: `.github/workflows/deploy-migrations.yml`
+
+Manual fallback (if automation fails):
+```bash
+railway environment staging  # or production
+railway run --service backend -- alembic upgrade head
 ```
 
 ### Railway Scripts
@@ -211,6 +210,39 @@ BRANCH_NAME=feature/my-feature bash scripts/railway_preview_env.sh
 ./scripts/test_api.sh pr-my-feature backend
 ./scripts/test_api.sh pr-my-feature frontend
 ```
+
+## CI/CD Compliance
+
+### Mandatory Practices
+
+1. **Follow DEPLOYMENT.md** - Source of truth for deployment procedures
+2. **Never push directly to staging/main** - All changes must go through PRs
+3. **Wait for CI to pass** - Both `nextjs-ci` and `python-ci` must be green before merging
+4. **Update docs when changing CI/CD** - Keep DEPLOYMENT.md current
+
+### Documentation Sync
+
+When changing infrastructure, update these files:
+- `DEPLOYMENT.md` - Procedures and runbooks
+- `docs/BRANCH_PROTECTIONS.md` - GitHub settings
+- `CLAUDE.md` - Developer guidance (this file)
+- `.github/workflows/*.yml` - CI/CD automation
+
+### Current CI Pipeline
+
+| Workflow | Job | Trigger | Purpose |
+|----------|-----|---------|---------|
+| `ci.yml` | `nextjs-ci` | PR/Push to staging/main | Build, lint, type-check, test |
+| `ci-python-legacy.yml` | `python-ci` | Python file changes only | Syntax, pytest (temporary) |
+| `deploy-migrations.yml` | `run-migrations` | Migration files pushed | Alembic upgrade |
+
+### Branch Protection Requirements
+
+Both `staging` and `main` require:
+- Pull request before merging
+- Status checks: `nextjs-ci`, `python-ci`
+- No bypassing settings
+- See `docs/BRANCH_PROTECTIONS.md` for full setup
 
 ## Common Development Patterns
 

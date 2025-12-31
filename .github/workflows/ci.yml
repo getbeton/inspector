@@ -2,45 +2,39 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - staging
-      - main
+    branches: [staging, main]
   push:
-    branches:
-      - staging
-      - main
+    branches: [staging, main]
 
 jobs:
-  python-ci:
-    name: python-ci
+  nextjs-ci:
+    name: nextjs-ci
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-nextjs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
-          cache: "pip"
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend-nextjs/package-lock.json
 
-      - name: Install dependencies (backend + frontend)
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-          pip install -r frontend/requirements.txt
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Compile (syntax check)
-        run: |
-          python3 -m compileall -q backend/app backend/tests frontend
+      - name: TypeScript type check
+        run: npx tsc --noEmit
 
-      - name: Run tests
-        env:
-          # Ensure integration tests stay skipped unless keys are explicitly provided.
-          POSTHOG_API_KEY: ""
-          POSTHOG_PROJECT_ID: ""
-          STRIPE_API_KEY: ""
-          APOLLO_API_KEY: ""
-        run: |
-          pytest -q backend/tests
+      - name: Lint
+        run: npm run lint
 
+      - name: Run unit tests
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build

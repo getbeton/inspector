@@ -1,0 +1,69 @@
+name: Deploy Migrations
+
+on:
+  push:
+    branches: [staging, main]
+    paths:
+      - "backend/alembic/versions/**"
+
+jobs:
+  run-migrations:
+    name: run-migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "railway_env=production" >> $GITHUB_OUTPUT
+            echo "env_name=production" >> $GITHUB_OUTPUT
+          else
+            echo "railway_env=staging" >> $GITHUB_OUTPUT
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for Railway deployment
+        run: |
+          echo "Waiting 2 minutes for Railway deployment to complete..."
+          sleep 120
+
+      - name: Link Railway project
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+
+      - name: Switch to target environment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway environment ${{ steps.env.outputs.railway_env }}
+
+      - name: Check current migration status
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "Current migration status on ${{ steps.env.outputs.env_name }}:"
+          railway run --service backend -- alembic current || true
+
+      - name: Run migrations
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "Running migrations on ${{ steps.env.outputs.env_name }}..."
+          railway run --service backend -- alembic upgrade head
+
+      - name: Verify migrations
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "Migration status after upgrade:"
+          railway run --service backend -- alembic current
