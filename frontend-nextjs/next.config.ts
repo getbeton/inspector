@@ -15,13 +15,16 @@ const nextConfig: NextConfig = {
   // Proxy API requests to backend (keeps cookies on same domain)
   async rewrites() {
     const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    return [
-      {
-        // Proxy all /api/* requests to backend (except Next.js internal routes)
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ]
+    return {
+      // Use afterFiles so Next.js API routes are checked first
+      afterFiles: [
+        {
+          // Proxy /api/* to backend, but Next.js routes (/api/session, /api/health) take precedence
+          source: '/api/:path*',
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+    }
   },
 
   // Enable hot reload in Docker containers (webpack fallback)
