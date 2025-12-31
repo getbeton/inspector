@@ -11,6 +11,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend-nextjs/src/lib/
 lib64/
 parts/
 sdist/
@@ -53,3 +54,4 @@ test.db
 
 # Local-only Claude config (should never be committed)
 .claude/settings.local.json
+.mcp.json

@@ -22,6 +22,3 @@ else
 fi
 
 exec "$PY" "$@"
-
-
-

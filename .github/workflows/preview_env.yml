@@ -1,67 +1,38 @@
-name: Preview Env (Railway)
+name: Preview Env (Railway) - DISABLED
+
+# DISABLED: Railway token handling needs fixes before re-enabling
+# See: https://github.com/getbeton/inspector/issues
+# Workaround: Use manual local deployment with scripts/railway_preview_env.sh
+#
+# To deploy a preview environment manually, use:
+#   BRANCH_NAME=<branch> BASE_ENV_NAME=staging ./scripts/railway_preview_env.sh
+
+# Trigger disabled - uncomment 'on' section to re-enable
+# on:
+#   push:
+#     branches:
+#       - "feature/**"
 
 on:
-  push:
-    branches:
-      - "feature/**"
+  workflow_dispatch:
 
 jobs:
-  create-and-deploy:
+  disabled:
     runs-on: ubuntu-latest
-    env:
-      # Required to authenticate Railway CLI in CI.
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      # Required to link the correct Railway project.
-      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-      # Source environment to duplicate from.
-      BASE_ENV_NAME: staging
-      # Ensure frontend can reach backend over Railway internal networking.
-      FRONTEND_API_URL: http://backend.railway.internal:8000
-      FRONTEND_SERVICE_NAME: frontend
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Verify required Railway secrets are configured
+      - name: Preview environments temporarily disabled
         run: |
-          if [ -z "${RAILWAY_TOKEN}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
-            exit 1
-          fi
-          if [ -z "${RAILWAY_PROJECT_ID}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
-            exit 1
-          fi
-
-      - name: Install Railway CLI
-        run: |
-          curl -fsSL https://railway.app/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
-
-      - name: Compute preview environment name
-        id: envname
-        env:
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          chmod +x scripts/railway_preview_env.sh
-          ENV_NAME="$(PRINT_ENV_NAME_ONLY=1 BRANCH_NAME="$BRANCH_NAME" ./scripts/railway_preview_env.sh)"
-          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Create/ensure preview environment
-        env:
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          chmod +x scripts/railway_preview_env.sh
-          ./scripts/railway_preview_env.sh
-
-      - name: Deploy backend to preview environment
-        run: |
-          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service backend
-
-      - name: Deploy frontend to preview environment
-        run: |
-          railway up --ci --environment "${{ steps.envname.outputs.env_name }}" --service frontend
-
-
+          echo "ℹ️  Preview environment automation is temporarily disabled."
+          echo ""
+          echo "Railway GitHub Actions integration has issues that need to be fixed."
+          echo "See: https://github.com/getbeton/inspector/issues"
+          echo ""
+          echo "Workaround: Deploy preview environments manually using the local script"
+          echo ""
+          echo "Usage:"
+          echo "  BRANCH_NAME=feature/my-branch BASE_ENV_NAME=staging ./scripts/railway_preview_env.sh"
+          echo ""
+          echo "Requirements:"
+          echo "  - Railway CLI installed: https://railway.app/install"
+          echo "  - Local authentication: railway login"
+          echo "  - Or CI tokens: set RAILWAY_TOKEN and RAILWAY_PROJECT_ID"

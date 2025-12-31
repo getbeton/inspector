@@ -1,6 +1,9 @@
 """
 Beton Inspector - Home / Setup Page
-Clean landing with two paths: Demo mode vs Real data setup
+Authentication and workspace management.
+
+Epic 3: Login UI
+Main entry point that handles authentication flow.
 """
 
 import streamlit as st
@@ -10,8 +13,8 @@ import time
 
 # Page config - emoji only in page_icon, NOT in title
 st.set_page_config(
-    page_title="Setup | Beton Inspector",
-    page_icon="⚙️",
+    page_title="Beton Inspector",
+    page_icon="🔐",
     layout="wide"
 )
 
@@ -20,13 +23,29 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from utils.ui_components import apply_compact_button_styles, apply_global_styles
 from components.states import render_empty_state
-
+from components.auth import (
+    init_auth_session,
+    is_authenticated,
+    render_login_page,
+    check_authentication_required,
+    render_authenticated_sidebar,
+    render_logout_button
+)
 # API URL
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # Apply styles
 apply_compact_button_styles()
 apply_global_styles()
+
+# Initialize authentication session state
+init_auth_session()
+
+# Check if user has a valid session with backend (via OAuth session cookie)
+if not is_authenticated() and "backend_session_checked" not in st.session_state:
+    from components.auth import check_session_with_backend
+    check_session_with_backend()
+    st.session_state.backend_session_checked = True
 
 # Initialize session state
 if "use_mock_data" not in st.session_state:
@@ -40,6 +59,16 @@ if "integration_status" not in st.session_state:
     }
 
 
+# Epic 3: Authentication Gate
+# Show login page if not authenticated
+if not is_authenticated():
+    render_login_page()
+    st.stop()
+
+# If we reach here, user is authenticated
+render_authenticated_sidebar()
+
+
 def has_integrations():
     """Check if required integrations are connected."""
     return (
@@ -47,6 +76,17 @@ def has_integrations():
         st.session_state.integration_status.get("attio", False)
     )
 
+
+# === OAUTH CALLBACK HANDLER ===
+# Check if we're returning from Supabase OAuth
+from utils.oauth_handler import OAuthHandler
+
+oauth_handler = OAuthHandler(API_URL, os.getenv("FRONTEND_URL", "http://localhost:8501"))
+
+# Try to handle OAuth callback
+if oauth_handler.handle_callback():
+    # Authentication successful, redirect to home
+    st.rerun()
 
 # === HEADER ===
 st.title("Beton Inspector")

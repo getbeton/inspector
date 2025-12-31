@@ -1,6 +1,6 @@
 # GitHub branch protections (required)
 
-This repo’s safety model depends on GitHub branch protections so that:
+This repo's safety model depends on GitHub branch protections so that:
 - `staging` always deploys to Railway staging via GitHub integration
 - `main` always deploys to Railway production via GitHub integration
 - Nobody can accidentally push directly to `staging`/`main` and bypass review/CI
@@ -52,7 +52,5 @@ With protections enabled:
 
 ## Optional: CODEOWNERS (nice-to-have)
 
-If you add a `.github/CODEOWNERS` file and enable “require review from Code Owners”
+If you add a `.github/CODEOWNERS` file and enable "require review from Code Owners"
 in the branch protection rule, GitHub will require the right people to approve changes.
-
-

@@ -1,46 +1,31 @@
-name: Preview Env Cleanup (Railway)
+name: Preview Env Cleanup (Railway) - DISABLED
+
+# DISABLED: Railway token handling needs fixes before re-enabling
+# See: https://github.com/getbeton/inspector/issues
+# Manual cleanup instructions: https://railway.app/docs/reference/cli
+
+# Trigger disabled - uncomment 'on' section to re-enable
+# on:
+#   pull_request:
+#     types: [closed]
+#     branches:
+#       - staging
 
 on:
-  pull_request:
-    types: [closed]
-    branches:
-      - staging
+  workflow_dispatch:
 
 jobs:
-  cleanup:
-    # Only delete preview envs when the PR was actually merged into staging.
-    if: ${{ github.event.pull_request.merged == true }}
+  disabled:
     runs-on: ubuntu-latest
-    env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Verify required Railway secrets are configured
+      - name: Preview environment cleanup temporarily disabled
         run: |
-          if [ -z "${RAILWAY_TOKEN}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_TOKEN" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
-            exit 1
-          fi
-          if [ -z "${RAILWAY_PROJECT_ID}" ]; then
-            echo "Missing GitHub Actions secret: RAILWAY_PROJECT_ID" >&2
-            echo "Set it in: GitHub → Repo → Settings → Secrets and variables → Actions" >&2
-            exit 1
-          fi
-
-      - name: Install Railway CLI
-        run: |
-          curl -fsSL https://railway.app/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
-
-      - name: Delete preview environment for merged branch
-        env:
-          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
-        run: |
-          chmod +x scripts/railway_preview_cleanup.sh scripts/railway_preview_env.sh
-          ./scripts/railway_preview_cleanup.sh
-
-
+          echo "ℹ️  Preview environment cleanup is temporarily disabled."
+          echo ""
+          echo "Railway GitHub Actions integration has issues that need to be fixed."
+          echo ""
+          echo "Manual cleanup:"
+          echo "  railway environment delete <env-name>"
+          echo ""
+          echo "To list all environments:"
+          echo "  railway environment list"

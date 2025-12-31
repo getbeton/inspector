@@ -1,0 +1,24 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies for hot reload
+RUN apk add --no-cache libc6-compat
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install all dependencies (including devDependencies)
+RUN npm install
+
+# Copy source files (will be overwritten by volume mount)
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=development
+ENV WATCHPACK_POLLING=true
+
+EXPOSE 3000
+
+# Run dev server with hot reload
+CMD ["npm", "run", "dev"]

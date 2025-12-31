@@ -9,6 +9,3 @@ set -euo pipefail
 ./scripts/python.sh -m pip install -r frontend/requirements.txt
 
 echo "Dependency install complete."
-
-
-

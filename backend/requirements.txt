@@ -16,6 +16,9 @@ httpx
 
 # Security & Encryption
 cryptography
+PyJWT
+bcrypt
+itsdangerous
 
 # Testing
 pytest

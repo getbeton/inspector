@@ -27,22 +27,20 @@ cat > "$file" <<EOF
 Date: ${ts}
 
 ## Goal
-- 
+-
 
 ## Notes
-- 
+-
 
 ## Decisions
-- 
+-
 
 ## Commands run
 \`\`\`
 \`\`\`
 
 ## Outcome
-- 
+-
 EOF
 
 echo "Created: $file"
-
-
