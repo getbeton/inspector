@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
-import os
 
 
 class Settings(BaseSettings):
@@ -11,8 +10,8 @@ class Settings(BaseSettings):
     Database config can also come from Supabase.
     """
 
-    # Database
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/beton")
+    # Database - loaded from DATABASE_URL env var by pydantic-settings
+    database_url: str = "postgresql://postgres:password@localhost:5432/beton"
 
     # Environment
     env: str = "DEV"

@@ -611,6 +611,9 @@ def revoke_api_key(
 
 # Dependency to get DB session
 # In a real app we'd use a proper dependency injection for DB
+# Log database connection info (mask password)
+_db_url_masked = settings.database_url.replace(settings.database_url.split(':')[2].split('@')[0], '***') if '@' in settings.database_url else settings.database_url
+logger.info(f"Connecting to database: {_db_url_masked}")
 engine = create_engine(settings.database_url)
 def get_db():
     db = Session(bind=engine)
