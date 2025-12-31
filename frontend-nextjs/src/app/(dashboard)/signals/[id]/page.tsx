@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { TrendChart, ConversionChart } from '@/components/charts'
 import { MOCK_SIGNALS } from '@/lib/data/mock-signals'
 import { cn } from '@/lib/utils/cn'
 
@@ -184,6 +185,9 @@ export default function SignalDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg">Conversion Comparison</CardTitle>
+          <CardDescription>
+            Conversion rate comparison between users with and without this signal
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ConversionChart
@@ -191,6 +195,7 @@ export default function SignalDetailPage() {
             conversionWithout={signal.conversion_without}
             sampleWith={signal.sample_with}
             sampleWithout={signal.sample_without}
+            height={140}
           />
 
           {/* Toggle for detailed breakdown */}
@@ -251,7 +256,10 @@ export default function SignalDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Historical Accuracy</CardTitle>
+            <div>
+              <CardTitle className="text-lg">Historical Accuracy</CardTitle>
+              <CardDescription>Signal performance over the last 6 months</CardDescription>
+            </div>
             <button
               onClick={() => setShowTrend(!showTrend)}
               className="text-sm text-muted-foreground hover:text-foreground"
@@ -262,12 +270,32 @@ export default function SignalDetailPage() {
         </CardHeader>
         {showTrend && (
           <CardContent>
-            <TrendChart data={signal.accuracy_trend} />
-            <p className="mt-3 text-sm text-muted-foreground">
-              Current: <span className="font-medium text-foreground">{(signal.accuracy_trend[signal.accuracy_trend.length - 1] * 100).toFixed(0)}%</span>
-              {' | '}
-              6-month avg: <span className="font-medium text-foreground">{(signal.accuracy_trend.reduce((a, b) => a + b, 0) / signal.accuracy_trend.length * 100).toFixed(0)}%</span>
-            </p>
+            <TrendChart
+              data={signal.accuracy_trend}
+              height={220}
+              showAverage={true}
+            />
+            <div className="mt-4 flex items-center justify-between text-sm border-t border-border pt-3">
+              <div>
+                <span className="text-muted-foreground">Current:</span>
+                <span className="ml-1 font-bold text-foreground">{(signal.accuracy_trend[signal.accuracy_trend.length - 1] * 100).toFixed(0)}%</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">6-month avg:</span>
+                <span className="ml-1 font-bold text-foreground">{(signal.accuracy_trend.reduce((a, b) => a + b, 0) / signal.accuracy_trend.length * 100).toFixed(0)}%</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Trend:</span>
+                <span className={cn(
+                  "ml-1 font-bold",
+                  signal.accuracy_trend[signal.accuracy_trend.length - 1] >= signal.accuracy_trend[0]
+                    ? "text-success"
+                    : "text-destructive"
+                )}>
+                  {signal.accuracy_trend[signal.accuracy_trend.length - 1] >= signal.accuracy_trend[0] ? '↑ Improving' : '↓ Declining'}
+                </span>
+              </div>
+            </div>
           </CardContent>
         )}
       </Card>
@@ -346,152 +374,6 @@ function MetricCard({ label, value, delta, deltaPositive, help }: {
         )}
       </CardContent>
     </Card>
-  )
-}
-
-// Conversion Chart Component
-function ConversionChart({ conversionWith, conversionWithout, sampleWith, sampleWithout }: {
-  conversionWith: number
-  conversionWithout: number
-  sampleWith: number
-  sampleWithout: number
-}) {
-  const maxConversion = Math.max(conversionWith, conversionWithout)
-  const withWidth = (conversionWith / maxConversion) * 100
-  const withoutWidth = (conversionWithout / maxConversion) * 100
-
-  return (
-    <div className="space-y-4">
-      {/* With Signal */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium">With Signal</span>
-          <span className="text-sm text-muted-foreground">({sampleWith.toLocaleString()} users)</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-8 bg-muted rounded-md overflow-hidden">
-            <div
-              className="h-full bg-success transition-all duration-500"
-              style={{ width: `${withWidth}%` }}
-            />
-          </div>
-          <span className="text-lg font-bold w-16 text-right">{(conversionWith * 100).toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* Without Signal */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium">Without Signal</span>
-          <span className="text-sm text-muted-foreground">({sampleWithout.toLocaleString()} users)</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-8 bg-muted rounded-md overflow-hidden">
-            <div
-              className="h-full bg-muted-foreground/30 transition-all duration-500"
-              style={{ width: `${withoutWidth}%` }}
-            />
-          </div>
-          <span className="text-lg font-bold w-16 text-right">{(conversionWithout * 100).toFixed(1)}%</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Trend Chart Component (simple SVG line chart)
-function TrendChart({ data }: { data: number[] }) {
-  const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].slice(-data.length)
-  const min = Math.min(...data) - 0.05
-  const max = Math.max(...data) + 0.05
-  const range = max - min
-
-  const width = 600
-  const height = 200
-  const padding = { top: 20, right: 20, bottom: 30, left: 40 }
-  const chartWidth = width - padding.left - padding.right
-  const chartHeight = height - padding.top - padding.bottom
-
-  const points = data.map((value, i) => ({
-    x: padding.left + (i / (data.length - 1)) * chartWidth,
-    y: padding.top + (1 - (value - min) / range) * chartHeight,
-    value
-  }))
-
-  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48">
-      {/* Grid lines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
-        <line
-          key={i}
-          x1={padding.left}
-          y1={padding.top + t * chartHeight}
-          x2={width - padding.right}
-          y2={padding.top + t * chartHeight}
-          className="stroke-border"
-          strokeDasharray="4 4"
-        />
-      ))}
-
-      {/* Y-axis labels */}
-      {[max, (max + min) / 2, min].map((v, i) => (
-        <text
-          key={i}
-          x={padding.left - 8}
-          y={padding.top + (i / 2) * chartHeight}
-          className="fill-muted-foreground text-xs"
-          textAnchor="end"
-          dominantBaseline="middle"
-        >
-          {(v * 100).toFixed(0)}%
-        </text>
-      ))}
-
-      {/* X-axis labels */}
-      {months.map((month, i) => (
-        <text
-          key={month}
-          x={points[i]?.x || 0}
-          y={height - 8}
-          className="fill-muted-foreground text-xs"
-          textAnchor="middle"
-        >
-          {month}
-        </text>
-      ))}
-
-      {/* Line */}
-      <path
-        d={pathD}
-        fill="none"
-        className="stroke-primary"
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {/* Data points */}
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle
-            cx={p.x}
-            cy={p.y}
-            r={6}
-            className="fill-primary"
-          />
-          <text
-            x={p.x}
-            y={p.y - 12}
-            className="fill-foreground text-xs font-medium"
-            textAnchor="middle"
-          >
-            {(p.value * 100).toFixed(0)}%
-          </text>
-        </g>
-      ))}
-    </svg>
   )
 }
 

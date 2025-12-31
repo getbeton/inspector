@@ -1,6 +1,6 @@
 # Next.js Migration Progress
 
-**Status**: 8/13 commits complete - Signal Detail page done
+**Status**: 9/13 commits complete - Charts & visualizations done
 
 ## Completed Commits
 
@@ -12,11 +12,11 @@
 ✅ **Commit 6**: Home/Setup page with integrations
 ✅ **Commit 7**: Signals page with data table, filters, and mock data
 ✅ **Commit 8**: Signal Detail page with metrics, charts, and analytics
+✅ **Commit 9**: Charts & visualizations with Recharts library
 
-## Remaining Commits (5)
+## Remaining Commits (4)
 
-**Phase 2: Core Pages & Features (Commits 9-11)**
-- [ ] Commit 9: Charts & visualizations (Tremor/Recharts)
+**Phase 2: Core Pages & Features (Commits 10-11)**
 - [ ] Commit 10: Playbooks automation page
 - [ ] Commit 11: Remaining pages (Add Signal, Settings, Identities, Backtest)
 
@@ -41,8 +41,8 @@ Each commit is atomic and focused on a single feature/component set.
 
 ## Next Steps
 
-1. Add charts with Tremor/Recharts (Commit 9)
-2. Build Playbooks automation page (Commit 10)
-3. Complete remaining pages (Add Signal, Settings, Identities, Backtest)
-4. Docker configuration and deployment
+1. Build Playbooks automation page (Commit 10)
+2. Complete remaining pages (Add Signal, Settings, Identities, Backtest) (Commit 11)
+3. Docker configuration and deployment (Commit 12)
+4. Testing infrastructure (Commit 13)
 5. Create PR to staging for review

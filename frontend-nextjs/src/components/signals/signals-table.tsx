@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { MiniSparkline } from '@/components/charts'
 import { cn } from '@/lib/utils/cn'
 import type { SignalData } from '@/lib/data/mock-signals'
 
@@ -153,7 +154,7 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                     )}>
                       {signal.lift.toFixed(1)}x
                     </span>
-                    <MiniSparkline data={signal.trend_data} />
+                    <MiniSparkline data={signal.trend_data} width={40} height={16} />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {formatPercent(signal.confidence)} conf
@@ -197,33 +198,5 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
         </span>
       </div>
     </div>
-  )
-}
-
-// Mini sparkline component
-function MiniSparkline({ data }: { data: number[] }) {
-  if (!data || data.length === 0) return null
-
-  const min = Math.min(...data)
-  const max = Math.max(...data)
-  const range = max - min || 1
-
-  const width = 40
-  const height = 16
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width
-    const y = height - ((v - min) / range) * height
-    return `${x},${y}`
-  }).join(' ')
-
-  return (
-    <svg width={width} height={height} className="text-muted-foreground">
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        points={points}
-      />
-    </svg>
   )
 }
