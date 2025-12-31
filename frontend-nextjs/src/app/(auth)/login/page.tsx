@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { signInWithGoogle } from '@/lib/auth/supabase'
 import { useState } from 'react'
 
 export default function LoginPage() {
@@ -15,6 +14,8 @@ export default function LoginPage() {
       setIsLoading(true)
       setError(null)
 
+      // Dynamic import to avoid build-time evaluation of Supabase client
+      const { signInWithGoogle } = await import('@/lib/auth/supabase')
       const { error: authError } = await signInWithGoogle()
 
       if (authError) {
