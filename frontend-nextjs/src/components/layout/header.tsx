@@ -23,16 +23,25 @@ export function Header({ user, className, onMenuClick }: HeaderProps) {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, {
+      // Call the Next.js logout API route (relative URL)
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
       })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Redirect to login page
+        window.location.href = data.redirect || '/login'
+      } else {
+        // Fallback: redirect anyway
+        window.location.href = '/login'
+      }
     } catch (e) {
-      // Ignore errors
+      console.error('Logout error:', e)
+      // Fallback: redirect to login
+      window.location.href = '/login'
     }
-    // Clear cookie and redirect
-    document.cookie = 'beton_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    router.push('/login')
   }
 
   const initials = user.name
