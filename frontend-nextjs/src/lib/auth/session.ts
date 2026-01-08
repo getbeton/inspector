@@ -1,40 +1,54 @@
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { SESSION_COOKIE_NAME, type SessionUser } from './constants'
+import { type SessionUser } from './constants'
+import { createClient } from '@/lib/supabase/server'
 
 // Re-export for convenience
 export { SESSION_COOKIE_NAME, type SessionUser } from './constants'
 
+// Type for workspace membership query result
+type WorkspaceMembership = {
+  workspace_id: string
+  role: string
+  workspaces: { id: string; name: string; slug: string } | null
+}
+
 /**
- * Get the current session from cookie
- * Validates session with backend
+ * Get the current session using Supabase Auth
+ * Returns user info with workspace context
  */
 export async function getSession(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)
-
-  if (!sessionCookie) {
-    return null
-  }
-
   try {
-    const response = await fetch(
-      `${process.env.API_URL || 'http://localhost:8000'}/api/auth/me`,
-      {
-        headers: {
-          Cookie: `${SESSION_COOKIE_NAME}=${sessionCookie.value}`
-        }
-      }
-    )
+    const supabase = await createClient()
 
-    if (!response.ok) {
+    // Get authenticated user from Supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
       return null
     }
 
-    const user = await response.json()
-    return user
+    // Get workspace membership
+    const { data: rawMembership } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, role, workspaces(id, name, slug)')
+      .eq('user_id', user.id)
+      .single()
+
+    const membership = rawMembership as WorkspaceMembership | null
+
+    // Build session user object
+    const sessionUser: SessionUser = {
+      sub: user.id,
+      email: user.email || '',
+      name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+      workspace_id: membership?.workspace_id,
+      workspace_name: membership?.workspaces?.name,
+      role: membership?.role
+    }
+
+    return sessionUser
   } catch (error) {
-    console.error('Failed to validate session:', error)
+    console.error('Failed to get session:', error)
     return null
   }
 }

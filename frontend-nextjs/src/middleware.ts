@@ -1,53 +1,88 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-
-const SESSION_COOKIE_NAME = 'beton_session'
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/api/health']
+const publicRoutes = ['/login', '/auth/callback', '/api/health']
 
 // Routes that require authentication
 const protectedRoutes = ['/signals', '/playbooks', '/settings', '/identities', '/backtest']
 
-export function middleware(request: NextRequest) {
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)
+export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
+  // Skip middleware entirely for auth callback - let the route handler manage the full PKCE flow
+  // This is critical: the callback needs to exchange the code BEFORE any other auth operations
+  if (pathname === '/auth/callback') {
+    return NextResponse.next()
+  }
+
+  // Create a response that we can modify
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers
+    }
+  })
+
+  // Create Supabase client with cookie handling
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        }
+      }
+    }
+  )
+
+  // Refresh session if expired - important for Server Components
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+
   // Check if route is protected
-  const isProtected = protectedRoutes.some(route => pathname.startsWith(route))
+  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route))
 
   // Check if route is public
-  const isPublic = publicRoutes.some(route => pathname.startsWith(route))
+  const isPublic = publicRoutes.some((route) => pathname.startsWith(route))
 
   // Home page requires authentication
   const isHome = pathname === '/'
 
-  if (isProtected || isHome) {
-    if (!sessionCookie) {
-      // Redirect to login if no session
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
+  // Redirect to login if accessing protected route without auth
+  if ((isProtected || isHome) && !user) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (isPublic && pathname !== '/api/health') {
-    if (sessionCookie) {
-      // Already logged in, redirect to home
-      // (optional - you might want to allow access to login even when authenticated)
-    }
+  // Redirect to home if accessing login while authenticated
+  if (pathname === '/login' && user) {
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public folder
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)'
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
   ]
 }

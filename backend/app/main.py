@@ -23,9 +23,11 @@ app = FastAPI(title="Beton Inspector API")
 from app.api.endpoints.settings import router as settings_router
 from app.api.endpoints.attio import router as attio_router
 from app.api.endpoints.dashboards import router as dashboards_router
+from app.api.endpoints.posthog import router as posthog_router
 app.include_router(settings_router)
 app.include_router(attio_router, prefix="/api/v1")
 app.include_router(dashboards_router, prefix="/api/v1")
+app.include_router(posthog_router)  # PostHog workspace validation (Epic 6)
 
 @app.get("/health")
 def health_check():
