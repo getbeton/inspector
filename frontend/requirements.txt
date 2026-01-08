@@ -1,6 +1,0 @@
-streamlit
-requests
-pandas
-altair
-plotly
-streamlit-aggrid

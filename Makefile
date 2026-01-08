@@ -1,5 +1,8 @@
-.PHONY: up down build shell migrate logs test py-build py-test npm-build setup
+.PHONY: up down build logs dev test lint typecheck setup
 
+# -----------------------------------------------------------------------------
+# Docker Compose (local development)
+# -----------------------------------------------------------------------------
 up:
 	docker-compose up -d
 
@@ -12,29 +15,29 @@ build:
 logs:
 	docker-compose logs -f
 
-shell:
-	docker-compose exec backend /bin/bash
-
-migrate:
-	docker-compose exec backend alembic upgrade head
+# -----------------------------------------------------------------------------
+# Next.js Development
+# -----------------------------------------------------------------------------
+dev:
+	cd frontend-nextjs && npm run dev
 
 test:
-	docker-compose exec backend pytest
+	cd frontend-nextjs && npm test
+
+lint:
+	cd frontend-nextjs && npm run lint
+
+typecheck:
+	cd frontend-nextjs && npx tsc --noEmit
 
 # -----------------------------------------------------------------------------
-# Local (non-Docker) checks
+# Build (CI/CD compatible)
 # -----------------------------------------------------------------------------
-# These targets are useful for CI and for developers who don't want to run Docker
-# just to catch syntax errors / run fast unit tests.
-py-build:
-	./scripts/python.sh -m compileall -q backend/app backend/tests frontend
+ci-build:
+	cd frontend-nextjs && npm ci && npm run build
 
-py-test:
-	./scripts/python.sh -m pytest -q backend/tests
-
-npm-build:
-	npm run build
-
+# -----------------------------------------------------------------------------
+# Setup
+# -----------------------------------------------------------------------------
 setup:
-	chmod +x ./scripts/python.sh ./scripts/setup.sh
-	./scripts/setup.sh
+	cd frontend-nextjs && npm install

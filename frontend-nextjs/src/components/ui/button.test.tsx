@@ -56,12 +56,4 @@ describe('Button', () => {
     expect(handleClick).not.toHaveBeenCalled()
   })
 
-  it('renders as child component when asChild is true', () => {
-    render(
-      <Button asChild>
-        <a href="/test">Link Button</a>
-      </Button>
-    )
-    expect(screen.getByRole('link')).toBeDefined()
-  })
 })

@@ -1,33 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-!frontend-nextjs/src/lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
+
+# Environment
 .env
-.venv
+.env.local
+.env.*.local
 venv/
-ENV/
-env/
 
 # Docker
 .docker/
@@ -45,13 +29,25 @@ project_docs/
 *.swp
 *.swo
 
-# Local task logs (keep process logs out of git/GitHub)
+# Local task logs
 .task_logs/
 task_logs/
 
-# Local sqlite test DB (should never be committed)
+# Local test DB
 test.db
 
-# Local-only Claude config (should never be committed)
+# Local-only Claude config
 .claude/settings.local.json
 .mcp.json
+
+# Vercel
+.vercel
+
+# Coverage
+coverage/
+.coverage
+htmlcov/
+
+# Misc
+*.log
+npm-debug.log*
