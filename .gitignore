@@ -11,6 +11,7 @@ dist/
 .env
 .env.local
 .env.*.local
+venv/
 
 # Docker
 .docker/
