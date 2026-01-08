@@ -10,6 +10,12 @@ const protectedRoutes = ['/signals', '/playbooks', '/settings', '/identities', '
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
+  // Skip middleware entirely for auth callback - let the route handler manage the full PKCE flow
+  // This is critical: the callback needs to exchange the code BEFORE any other auth operations
+  if (pathname === '/auth/callback') {
+    return NextResponse.next()
+  }
+
   // Create a response that we can modify
   let response = NextResponse.next({
     request: {

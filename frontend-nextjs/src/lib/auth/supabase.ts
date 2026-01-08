@@ -1,8 +1,9 @@
 'use client'
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-// Lazy-initialized Supabase client (avoids build-time errors when env vars aren't available)
+// Lazy-initialized Supabase browser client (uses cookies for PKCE, not localStorage)
 let _supabase: SupabaseClient | null = null
 
 export function getSupabase(): SupabaseClient {
@@ -14,7 +15,9 @@ export function getSupabase(): SupabaseClient {
       throw new Error('Supabase environment variables are not configured')
     }
 
-    _supabase = createClient(supabaseUrl, supabaseAnonKey)
+    // Use createBrowserClient from @supabase/ssr - this stores PKCE verifier in cookies
+    // so the server-side callback handler can access it
+    _supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
   }
   return _supabase
 }
@@ -29,16 +32,14 @@ export const supabase = typeof window !== 'undefined'
  * Redirects to Supabase OAuth endpoint, which then redirects to our callback
  */
 export async function signInWithGoogle() {
-  // Use frontend origin for redirect - Next.js proxies /api/* to backend
-  // This keeps cookies on the same domain (frontend) solving cross-domain issues
+  // Use frontend origin for redirect to Next.js auth callback handler
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      // Redirect through frontend proxy (Next.js rewrites /api/* to backend)
-      // This ensures session cookie is set on frontend domain
-      redirectTo: `${origin}/api/oauth/callback`
+      // Redirect to Next.js auth callback handler (handles session + workspace creation)
+      redirectTo: `${origin}/auth/callback`
     }
   })
 

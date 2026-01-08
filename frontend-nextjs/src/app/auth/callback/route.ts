@@ -10,16 +10,38 @@ import type { WorkspaceInsert, WorkspaceMemberInsert } from '@/lib/supabase/type
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const error_param = requestUrl.searchParams.get('error')
+  const error_description = requestUrl.searchParams.get('error_description')
   const origin = requestUrl.origin
   const next = requestUrl.searchParams.get('next') ?? '/'
+
+  // Log incoming request for debugging
+  console.log('[Auth Callback] Received request:', {
+    hasCode: !!code,
+    error: error_param,
+    error_description,
+    url: request.url
+  })
+
+  // Handle OAuth errors from Supabase
+  if (error_param) {
+    console.error('[Auth Callback] OAuth error:', error_param, error_description)
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error_description || error_param)}`)
+  }
 
   if (code) {
     const supabase = await createClient()
 
     // Exchange code for session
+    console.log('[Auth Callback] Exchanging code for session...')
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
+    if (error) {
+      console.error('[Auth Callback] Code exchange failed:', error.message, error)
+    }
+
     if (!error && data.user) {
+      console.log('[Auth Callback] Session created for user:', data.user.id)
       // Check if user has a workspace
       const { data: existingMember } = await supabase
         .from('workspace_members')
