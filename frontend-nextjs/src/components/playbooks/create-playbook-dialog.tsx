@@ -93,7 +93,7 @@ export function CreatePlaybookDialog({ isOpen, onClose, onCreate }: CreatePlaybo
   }
 
   // Estimate leads per month based on selected signals
-  const estimatedLeads = Math.max(10, Math.round(50 - selectedSignals.length * 12 + Math.random() * 20))
+  const estimatedLeads = Math.max(10, Math.round(50 - selectedSignals.length * 12))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
