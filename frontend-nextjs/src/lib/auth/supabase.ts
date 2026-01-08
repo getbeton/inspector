@@ -48,10 +48,10 @@ export async function signInWithGoogle() {
 
 /**
  * Sign out the current user
- * Clears session cookie via backend
+ * Clears Supabase session via API and redirects to login
  */
 export async function signOut() {
-  // Call logout endpoint through proxy (relative URL = same domain = cookies work)
+  // Call logout endpoint
   const response = await fetch('/api/auth/logout', {
     method: 'POST',
     credentials: 'include'
@@ -59,6 +59,13 @@ export async function signOut() {
 
   if (!response.ok) {
     throw new Error('Failed to sign out')
+  }
+
+  const data = await response.json()
+
+  // Redirect to login page
+  if (typeof window !== 'undefined') {
+    window.location.href = data.redirect || '/login'
   }
 
   return true
