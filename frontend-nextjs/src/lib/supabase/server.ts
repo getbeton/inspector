@@ -21,7 +21,7 @@ export async function createClient() {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) =>
             cookieStore.set(name, value, options)
@@ -72,6 +72,11 @@ export async function getSession() {
   return session
 }
 
+type WorkspaceMemberWithWorkspace = {
+  workspace_id: string
+  workspaces: { id: string; name: string; slug: string } | null
+}
+
 /**
  * Get user's workspace ID
  * Fetches from workspace_members table based on user ID
@@ -84,11 +89,13 @@ export async function getUserWorkspace() {
     return null
   }
 
-  const { data, error } = await supabase
+  const { data: rawData, error } = await supabase
     .from('workspace_members')
     .select('workspace_id, workspaces(id, name, slug)')
     .eq('user_id', user.id)
     .single()
+
+  const data = rawData as WorkspaceMemberWithWorkspace | null
 
   if (error || !data) {
     return null

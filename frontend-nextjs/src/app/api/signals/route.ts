@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import type { SignalInsert } from '@/lib/supabase/types'
 
 /**
  * GET /api/signals
@@ -29,13 +31,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -52,7 +50,7 @@ export async function GET(request: NextRequest) {
           health_score
         )
       `, { count: 'exact' })
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .order('timestamp', { ascending: false })
 
     // Apply filters
@@ -116,13 +114,9 @@ export async function POST(request: Request) {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -141,7 +135,7 @@ export async function POST(request: Request) {
       .from('accounts')
       .select('id')
       .eq('id', account_id)
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .single()
 
     if (!account) {
@@ -149,16 +143,18 @@ export async function POST(request: Request) {
     }
 
     // Create signal
+    const signalData: SignalInsert = {
+      workspace_id: membership.workspaceId,
+      account_id,
+      type,
+      value: value || null,
+      details: details || {},
+      source: source || 'manual'
+    }
+
     const { data: signal, error } = await supabase
       .from('signals')
-      .insert({
-        workspace_id: memberData.workspace_id,
-        account_id,
-        type,
-        value: value || null,
-        details: details || {},
-        source: source || 'manual'
-      })
+      .insert(signalData as never)
       .select()
       .single()
 

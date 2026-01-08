@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
+import type { IntegrationConfig, Json } from '@/lib/supabase/types'
+
+type IntegrationRow = Pick<IntegrationConfig, 'id' | 'integration_name' | 'status' | 'last_validated_at' | 'is_active' | 'config_json' | 'created_at' | 'updated_at'>
 
 /**
  * GET /api/integrations
@@ -18,18 +22,14 @@ export async function GET() {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
     // Get all integration configs
-    const { data: integrations, error } = await supabase
+    const { data, error } = await supabase
       .from('integration_configs')
       .select(`
         id,
@@ -41,7 +41,9 @@ export async function GET() {
         created_at,
         updated_at
       `)
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
+
+    const integrations = data as IntegrationRow[] | null
 
     if (error) {
       console.error('Error fetching integrations:', error)
@@ -63,7 +65,7 @@ export async function GET() {
         config: config
           ? {
               // Only include non-sensitive config
-              ...config.config_json,
+              ...(config.config_json as Record<string, Json>),
               has_api_key: true
             }
           : null

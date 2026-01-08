@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 
 /**
@@ -22,13 +23,9 @@ export async function DELETE(
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -37,7 +34,7 @@ export async function DELETE(
       .from('api_keys')
       .delete()
       .eq('id', id)
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .eq('user_id', user.id)
 
     if (error) {

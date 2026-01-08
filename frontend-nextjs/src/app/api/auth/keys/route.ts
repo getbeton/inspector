@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
+import type { ApiKey, ApiKeyInsert } from '@/lib/supabase/types'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
@@ -23,23 +25,21 @@ export async function GET() {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
     // Get API keys (excluding hash for security)
-    const { data: keys, error } = await supabase
+    const { data, error } = await supabase
       .from('api_keys')
       .select('id, name, last_used_at, expires_at, created_at')
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
+
+    const keys = data as Pick<ApiKey, 'id' | 'name' | 'last_used_at' | 'expires_at' | 'created_at'>[] | null
 
     if (error) {
       console.error('Error fetching API keys:', error)
@@ -70,13 +70,9 @@ export async function POST(request: Request) {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -95,20 +91,25 @@ export async function POST(request: Request) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + API_KEY_EXPIRY_DAYS)
 
+    // Build insert payload
+    const insertPayload: ApiKeyInsert = {
+      workspace_id: membership.workspaceId,
+      user_id: user.id,
+      key_hash: keyHash,
+      name,
+      expires_at: expiresAt.toISOString()
+    }
+
     // Store in database
-    const { data: newKey, error } = await supabase
+    const { data, error } = await supabase
       .from('api_keys')
-      .insert({
-        workspace_id: memberData.workspace_id,
-        user_id: user.id,
-        key_hash: keyHash,
-        name,
-        expires_at: expiresAt.toISOString()
-      })
+      .insert(insertPayload as never)
       .select('id, name, expires_at, created_at')
       .single()
 
-    if (error) {
+    const newKey = data as Pick<ApiKey, 'id' | 'name' | 'expires_at' | 'created_at'> | null
+
+    if (error || !newKey) {
       console.error('Error creating API key:', error)
       return NextResponse.json({ error: 'Failed to create key' }, { status: 500 })
     }

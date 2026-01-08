@@ -56,6 +56,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       workspace_members: {
         Row: {
@@ -76,6 +77,15 @@ export interface Database {
           role?: string
           joined_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_members_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
       accounts: {
         Row: {
@@ -120,6 +130,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'accounts_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
       account_users: {
         Row: {
@@ -152,6 +171,22 @@ export interface Database {
           title?: string | null
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'account_users_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'account_users_account_id_fkey'
+            columns: ['account_id']
+            isOneToOne: false
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          }
+        ]
       }
       signals: {
         Row: {
@@ -187,6 +222,22 @@ export interface Database {
           source?: string | null
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'signals_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'signals_account_id_fkey'
+            columns: ['account_id']
+            isOneToOne: false
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          }
+        ]
       }
       opportunities: {
         Row: {
@@ -219,6 +270,22 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'opportunities_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'opportunities_account_id_fkey'
+            columns: ['account_id']
+            isOneToOne: false
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          }
+        ]
       }
       heuristic_scores: {
         Row: {
@@ -254,6 +321,22 @@ export interface Database {
           valid_until?: string | null
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'heuristic_scores_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'heuristic_scores_account_id_fkey'
+            columns: ['account_id']
+            isOneToOne: false
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          }
+        ]
       }
       integration_configs: {
         Row: {
@@ -292,6 +375,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'integration_configs_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
       posthog_workspace_config: {
         Row: {
@@ -336,6 +428,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'posthog_workspace_config_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
       api_keys: {
         Row: {
@@ -368,6 +469,15 @@ export interface Database {
           expires_at?: string
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'api_keys_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
       signal_aggregates: {
         Row: {
@@ -442,6 +552,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'signal_aggregates_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
       }
     }
     Views: {
@@ -544,13 +663,27 @@ export interface Database {
 export type Workspace = Database['public']['Tables']['workspaces']['Row']
 export type WorkspaceInsert = Database['public']['Tables']['workspaces']['Insert']
 export type WorkspaceMember = Database['public']['Tables']['workspace_members']['Row']
+export type WorkspaceMemberInsert = Database['public']['Tables']['workspace_members']['Insert']
 export type Account = Database['public']['Tables']['accounts']['Row']
 export type AccountInsert = Database['public']['Tables']['accounts']['Insert']
+export type AccountUpdate = Database['public']['Tables']['accounts']['Update']
 export type Signal = Database['public']['Tables']['signals']['Row']
 export type SignalInsert = Database['public']['Tables']['signals']['Insert']
 export type Opportunity = Database['public']['Tables']['opportunities']['Row']
 export type HeuristicScore = Database['public']['Tables']['heuristic_scores']['Row']
+export type HeuristicScoreInsert = Database['public']['Tables']['heuristic_scores']['Insert']
 export type IntegrationConfig = Database['public']['Tables']['integration_configs']['Row']
+export type IntegrationConfigInsert = Database['public']['Tables']['integration_configs']['Insert']
+export type IntegrationConfigUpdate = Database['public']['Tables']['integration_configs']['Update']
 export type PosthogWorkspaceConfig = Database['public']['Tables']['posthog_workspace_config']['Row']
 export type ApiKey = Database['public']['Tables']['api_keys']['Row']
+export type ApiKeyInsert = Database['public']['Tables']['api_keys']['Insert']
 export type SignalAggregate = Database['public']['Tables']['signal_aggregates']['Row']
+
+// Function return types
+export type HealthScoreResult = Database['public']['Functions']['calculate_health_score']['Returns'][0]
+export type ExpansionScoreResult = Database['public']['Functions']['calculate_expansion_score']['Returns'][0]
+export type ChurnRiskResult = Database['public']['Functions']['calculate_churn_risk_score']['Returns'][0]
+export type DashboardMetricsResult = Database['public']['Functions']['get_dashboard_metrics']['Returns'][0]
+export type SignalTypesSummaryResult = Database['public']['Functions']['get_signal_types_summary']['Returns'][0]
+export type ConcreteGradeResult = Database['public']['Functions']['get_concrete_grade']['Returns'][0]

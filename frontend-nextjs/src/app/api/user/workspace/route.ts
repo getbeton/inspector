@@ -1,5 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import type { Workspace, WorkspaceInsert, WorkspaceMemberInsert } from '@/lib/supabase/types'
+
+type WorkspaceMemberWithWorkspace = {
+  workspace_id: string
+  role: string
+  workspaces: Workspace | null
+}
 
 /**
  * GET /api/user/workspace
@@ -18,7 +25,7 @@ export async function GET() {
     }
 
     // Try to get existing workspace
-    const { data: memberData, error: memberError } = await supabase
+    const { data: memberDataRaw } = await supabase
       .from('workspace_members')
       .select(`
         workspace_id,
@@ -35,6 +42,8 @@ export async function GET() {
       .eq('user_id', user.id)
       .single()
 
+    const memberData = memberDataRaw as WorkspaceMemberWithWorkspace | null
+
     if (memberData?.workspaces) {
       return NextResponse.json({
         workspace: memberData.workspaces,
@@ -47,14 +56,18 @@ export async function GET() {
     const slug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-')
     const name = user.user_metadata?.full_name || email.split('@')[0]
 
-    const { data: newWorkspace, error: createError } = await supabase
+    const workspaceData: WorkspaceInsert = {
+      name: `${name}'s Workspace`,
+      slug: `${slug}-${Date.now()}`
+    }
+
+    const { data: newWorkspaceRaw, error: createError } = await supabase
       .from('workspaces')
-      .insert({
-        name: `${name}'s Workspace`,
-        slug: `${slug}-${Date.now()}`
-      })
+      .insert(workspaceData as never)
       .select()
       .single()
+
+    const newWorkspace = newWorkspaceRaw as Workspace | null
 
     if (createError || !newWorkspace) {
       console.error('Error creating workspace:', createError)
@@ -65,13 +78,15 @@ export async function GET() {
     }
 
     // Add user as owner
+    const memberInsertData: WorkspaceMemberInsert = {
+      workspace_id: newWorkspace.id,
+      user_id: user.id,
+      role: 'owner'
+    }
+
     const { error: memberCreateError } = await supabase
       .from('workspace_members')
-      .insert({
-        workspace_id: newWorkspace.id,
-        user_id: user.id,
-        role: 'owner'
-      })
+      .insert(memberInsertData as never)
 
     if (memberCreateError) {
       console.error('Error adding workspace member:', memberCreateError)

@@ -37,6 +37,20 @@ npm test         # Run pytest with wrapper script
 make setup       # Creates venv and installs dependencies
 ```
 
+### ⚠️ MANDATORY: Local Build Test Before Commit
+
+**ALWAYS run the local build before creating any commit.** This catches TypeScript errors, import issues, and other problems that CI would catch later.
+
+```bash
+# For Next.js frontend changes
+cd frontend-nextjs && npm run build
+
+# For Python backend changes
+make py-build
+```
+
+This is a **blocking requirement** - do not commit code that fails the local build. The CI pipeline will reject PRs with build failures, so catching them early saves time and review cycles.
+
 ### Database Migrations
 ```bash
 # Create new migration

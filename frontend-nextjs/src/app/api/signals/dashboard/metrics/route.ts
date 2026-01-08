@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import type { Account, Signal, DashboardMetricsResult, SignalTypesSummaryResult } from '@/lib/supabase/types'
 
 /**
  * GET /api/signals/dashboard/metrics
@@ -21,13 +23,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -35,25 +33,29 @@ export async function GET(request: NextRequest) {
     const { data: dashboardMetrics, error: metricsError } = await supabase.rpc(
       'get_dashboard_metrics',
       {
-        p_workspace_id: memberData.workspace_id,
+        p_workspace_id: membership.workspaceId,
         p_lookback_days: lookbackDays
-      }
+      } as never
     )
 
     if (metricsError) {
       console.error('Error fetching dashboard metrics:', metricsError)
       // Fall back to manual query if function doesn't exist
-      return await getFallbackMetrics(supabase, memberData.workspace_id, lookbackDays)
+      return await getFallbackMetrics(supabase, membership.workspaceId, lookbackDays)
     }
 
+    const metrics = dashboardMetrics as DashboardMetricsResult[] | null
+
     // Get signal types summary
-    const { data: signalSummary } = await supabase.rpc('get_signal_types_summary', {
-      p_workspace_id: memberData.workspace_id,
+    const { data: signalSummaryData } = await supabase.rpc('get_signal_types_summary', {
+      p_workspace_id: membership.workspaceId,
       p_lookback_days: lookbackDays
-    })
+    } as never)
+
+    const signalSummary = signalSummaryData as SignalTypesSummaryResult[] | null
 
     return NextResponse.json({
-      metrics: dashboardMetrics?.[0] || {},
+      metrics: metrics?.[0] || {},
       signal_types: signalSummary || []
     })
   } catch (error) {
@@ -74,10 +76,12 @@ async function getFallbackMetrics(
   lookbackDate.setDate(lookbackDate.getDate() - lookbackDays)
 
   // Get account stats
-  const { data: accounts } = await supabase
+  const { data: accountsData } = await supabase
     .from('accounts')
     .select('id, status, health_score, arr')
     .eq('workspace_id', workspaceId)
+
+  const accounts = accountsData as Pick<Account, 'id' | 'status' | 'health_score' | 'arr'>[] | null
 
   // Get signal stats
   const { count: totalSignals } = await supabase
@@ -92,11 +96,13 @@ async function getFallbackMetrics(
     .gte('timestamp', lookbackDate.toISOString())
 
   // Get signal type breakdown
-  const { data: signalTypes } = await supabase
+  const { data: signalTypesData } = await supabase
     .from('signals')
     .select('type')
     .eq('workspace_id', workspaceId)
     .gte('timestamp', lookbackDate.toISOString())
+
+  const signalTypes = signalTypesData as Pick<Signal, 'type'>[] | null
 
   // Aggregate signal types
   const typeCounts: Record<string, number> = {}
@@ -116,7 +122,9 @@ async function getFallbackMetrics(
   const totalAccounts = accounts?.length || 0
   const activeAccounts = accounts?.filter((a) => a.status === 'active').length || 0
   const avgHealthScore =
-    accounts?.reduce((sum, a) => sum + (a.health_score || 0), 0) / totalAccounts || 0
+    totalAccounts > 0
+      ? (accounts?.reduce((sum, a) => sum + (a.health_score || 0), 0) || 0) / totalAccounts
+      : 0
   const totalArr = accounts?.reduce((sum, a) => sum + (a.arr || 0), 0) || 0
 
   return NextResponse.json({

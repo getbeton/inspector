@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
+import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/supabase/types'
 
 const SUPPORTED_INTEGRATIONS = ['posthog', 'stripe', 'attio', 'apollo']
 
@@ -28,23 +30,21 @@ export async function GET(
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
     // Get integration config
-    const { data: config, error } = await supabase
+    const { data, error } = await supabase
       .from('integration_configs')
       .select('*')
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .eq('integration_name', name)
       .single()
+
+    const config = data as IntegrationConfig | null
 
     if (error || !config) {
       return NextResponse.json({
@@ -66,7 +66,7 @@ export async function GET(
       is_active: config.is_active,
       last_validated_at: config.last_validated_at,
       config: {
-        ...config.config_json,
+        ...(config.config_json as Record<string, Json>),
         api_key: maskedKey
       }
     })
@@ -101,13 +101,9 @@ export async function POST(
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -119,20 +115,22 @@ export async function POST(
     }
 
     // Check if config exists
-    const { data: existing } = await supabase
+    const { data: existingData } = await supabase
       .from('integration_configs')
       .select('id')
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .eq('integration_name', name)
       .single()
 
-    // Upsert configuration
-    const configData = {
-      workspace_id: memberData.workspace_id,
+    const existing = existingData as { id: string } | null
+
+    // Build configuration payload
+    const configData: IntegrationConfigInsert = {
+      workspace_id: membership.workspaceId,
       integration_name: name,
       api_key_encrypted: api_key, // Note: In production, encrypt before storing
       config_json: configJson,
-      status: 'validating' as const,
+      status: 'validating',
       is_active: true
     }
 
@@ -140,14 +138,14 @@ export async function POST(
     if (existing) {
       result = await supabase
         .from('integration_configs')
-        .update(configData)
+        .update(configData as never)
         .eq('id', existing.id)
         .select()
         .single()
     } else {
       result = await supabase
         .from('integration_configs')
-        .insert(configData)
+        .insert(configData as never)
         .select()
         .single()
     }
@@ -194,13 +192,9 @@ export async function DELETE(
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
@@ -208,7 +202,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('integration_configs')
       .delete()
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .eq('integration_name', name)
 
     if (error) {

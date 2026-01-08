@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import type { Signal, Account, HeuristicScore } from '@/lib/supabase/types'
+
+type SignalWithAccount = Signal & { accounts: Pick<Account, 'id' | 'name' | 'domain' | 'arr' | 'plan' | 'status' | 'health_score' | 'fit_score' | 'last_activity_at'> | null }
 
 /**
  * GET /api/signals/[id]
@@ -22,7 +25,7 @@ export async function GET(
     }
 
     // Get signal with related account data
-    const { data: signal, error } = await supabase
+    const { data, error } = await supabase
       .from('signals')
       .select(`
         *,
@@ -41,6 +44,8 @@ export async function GET(
       .eq('id', id)
       .single()
 
+    const signal = data as SignalWithAccount | null
+
     if (error || !signal) {
       return NextResponse.json({ error: 'Signal not found' }, { status: 404 })
     }
@@ -49,7 +54,7 @@ export async function GET(
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const { data: relatedSignals } = await supabase
+    const { data: relatedData } = await supabase
       .from('signals')
       .select('id, type, value, timestamp, source')
       .eq('account_id', signal.account_id)
@@ -58,13 +63,17 @@ export async function GET(
       .order('timestamp', { ascending: false })
       .limit(10)
 
+    const relatedSignals = relatedData as Pick<Signal, 'id' | 'type' | 'value' | 'timestamp' | 'source'>[] | null
+
     // Get account's current heuristic scores
-    const { data: scores } = await supabase
+    const { data: scoresData } = await supabase
       .from('heuristic_scores')
       .select('score_type, score_value, calculated_at')
       .eq('account_id', signal.account_id)
       .order('calculated_at', { ascending: false })
       .limit(3)
+
+    const scores = scoresData as Pick<HeuristicScore, 'score_type' | 'score_value' | 'calculated_at'>[] | null
 
     return NextResponse.json({
       signal,

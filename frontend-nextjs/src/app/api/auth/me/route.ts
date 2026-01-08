@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 
 /**
@@ -22,28 +23,22 @@ export async function GET() {
       )
     }
 
-    // Get user's workspace
-    const { data: memberData, error: memberError } = await supabase
-      .from('workspace_members')
-      .select(`
-        workspace_id,
-        role,
-        workspaces (
-          id,
-          name,
-          slug,
-          subscription_status
-        )
-      `)
-      .eq('user_id', user.id)
-      .single()
+    // Get user's workspace using helper
+    const membership = await getWorkspaceMembership()
 
-    if (memberError || !memberData) {
+    if (!membership) {
       return NextResponse.json(
         { error: 'No workspace found' },
         { status: 404 }
       )
     }
+
+    // Get workspace details
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('id, name, slug, subscription_status')
+      .eq('id', membership.workspaceId)
+      .single()
 
     return NextResponse.json({
       user: {
@@ -52,8 +47,8 @@ export async function GET() {
         name: user.user_metadata?.full_name || user.email?.split('@')[0],
         avatar_url: user.user_metadata?.avatar_url
       },
-      workspace: memberData.workspaces,
-      role: memberData.role
+      workspace,
+      role: membership.role
     })
   } catch (error) {
     console.error('Error in /api/auth/me:', error)

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import type { WorkspaceInsert, WorkspaceMemberInsert } from '@/lib/supabase/types'
 
 /**
  * OAuth callback handler
@@ -34,22 +35,25 @@ export async function GET(request: NextRequest) {
         const name = data.user.user_metadata?.full_name || email.split('@')[0]
 
         // Create workspace
+        const workspaceData: WorkspaceInsert = {
+          name: `${name}'s Workspace`,
+          slug: `${slug}-${Date.now()}`
+        }
+
         const { data: workspace, error: workspaceError } = await supabase
           .from('workspaces')
-          .insert({
-            name: `${name}'s Workspace`,
-            slug: `${slug}-${Date.now()}`
-          })
+          .insert(workspaceData as never)
           .select()
           .single()
 
         if (!workspaceError && workspace) {
           // Add user as workspace owner
-          await supabase.from('workspace_members').insert({
-            workspace_id: workspace.id,
+          const memberData: WorkspaceMemberInsert = {
+            workspace_id: (workspace as { id: string }).id,
             user_id: data.user.id,
             role: 'owner'
-          })
+          }
+          await supabase.from('workspace_members').insert(memberData as never)
         }
       }
 

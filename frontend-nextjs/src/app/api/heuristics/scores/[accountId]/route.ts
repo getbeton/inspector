@@ -1,5 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
+import type {
+  Account,
+  HeuristicScore,
+  HealthScoreResult,
+  ExpansionScoreResult,
+  ChurnRiskResult,
+  ConcreteGradeResult
+} from '@/lib/supabase/types'
 
 /**
  * GET /api/heuristics/scores/[accountId]
@@ -22,58 +31,64 @@ export async function GET(
     }
 
     // Get user's workspace
-    const { data: memberData } = await supabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('user_id', user.id)
-      .single()
+    const membership = await getWorkspaceMembership()
 
-    if (!memberData) {
+    if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
     // Verify account belongs to workspace
-    const { data: account } = await supabase
+    const { data: accountData } = await supabase
       .from('accounts')
       .select('id, name, domain, health_score, fit_score')
       .eq('id', accountId)
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .single()
+
+    const account = accountData as Pick<Account, 'id' | 'name' | 'domain' | 'health_score' | 'fit_score'> | null
 
     if (!account) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
     // Get latest scores from heuristic_scores table
-    const { data: storedScores } = await supabase
+    const { data: storedScoresData } = await supabase
       .from('heuristic_scores')
       .select('score_type, score_value, component_scores, calculated_at')
       .eq('account_id', accountId)
-      .eq('workspace_id', memberData.workspace_id)
+      .eq('workspace_id', membership.workspaceId)
       .order('calculated_at', { ascending: false })
       .limit(3)
+
+    const storedScores = storedScoresData as Pick<HeuristicScore, 'score_type' | 'score_value' | 'component_scores' | 'calculated_at'>[] | null
 
     // Calculate fresh scores using database functions
     const [healthResult, expansionResult, churnResult] = await Promise.all([
       supabase.rpc('calculate_health_score', {
         p_account_id: accountId,
-        p_workspace_id: memberData.workspace_id
-      }),
+        p_workspace_id: membership.workspaceId
+      } as never),
       supabase.rpc('calculate_expansion_score', {
         p_account_id: accountId,
-        p_workspace_id: memberData.workspace_id
-      }),
+        p_workspace_id: membership.workspaceId
+      } as never),
       supabase.rpc('calculate_churn_risk_score', {
         p_account_id: accountId,
-        p_workspace_id: memberData.workspace_id
-      })
+        p_workspace_id: membership.workspaceId
+      } as never)
     ])
 
+    const healthData = healthResult.data as HealthScoreResult[] | null
+    const expansionData = expansionResult.data as ExpansionScoreResult[] | null
+    const churnData = churnResult.data as ChurnRiskResult[] | null
+
     // Get concrete grade for health score
-    const healthScore = healthResult.data?.[0]?.score || account.health_score || 0
-    const { data: gradeResult } = await supabase.rpc('get_concrete_grade', {
+    const healthScore = healthData?.[0]?.score || account.health_score || 0
+    const { data: gradeData } = await supabase.rpc('get_concrete_grade', {
       p_score: healthScore
-    })
+    } as never)
+
+    const gradeResult = gradeData as ConcreteGradeResult[] | null
 
     return NextResponse.json({
       account: {
@@ -85,16 +100,16 @@ export async function GET(
       scores: {
         health: {
           score: healthScore,
-          component_scores: healthResult.data?.[0]?.component_scores || {},
-          signal_count: healthResult.data?.[0]?.signal_count || 0
+          component_scores: healthData?.[0]?.component_scores || {},
+          signal_count: (healthData?.[0] as HealthScoreResult & { signal_count?: number })?.signal_count || 0
         },
         expansion: {
-          score: expansionResult.data?.[0]?.score || 0,
-          signals: expansionResult.data?.[0]?.expansion_signals || []
+          score: expansionData?.[0]?.score || 0,
+          signals: expansionData?.[0]?.expansion_signals || []
         },
         churn_risk: {
-          score: churnResult.data?.[0]?.score || 0,
-          signals: churnResult.data?.[0]?.risk_signals || []
+          score: churnData?.[0]?.score || 0,
+          signals: churnData?.[0]?.risk_signals || []
         }
       },
       concrete_grade: gradeResult?.[0] || {
