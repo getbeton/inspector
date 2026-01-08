@@ -5,6 +5,7 @@
  * - PostHog: Product analytics and event tracking
  * - Stripe: Payment processing and subscription management
  * - Apollo: Contact enrichment and company data
+ * - Attio: CRM synchronization
  */
 
 // Import clients first for factory function
@@ -23,6 +24,30 @@ export { StripeClient, createStripeClient, type StripeClientConfig } from './str
 
 // Apollo
 export { ApolloClient, createApolloClient, type ApolloClientConfig, type ApolloSearchResult } from './apollo/client'
+
+// Attio (explicit exports to avoid naming conflicts with ./types)
+export {
+  AttioError,
+  AttioAuthError,
+  AttioRateLimitError,
+  AttioNotFoundError,
+  AttioValidationError,
+  type AttioObject,
+  type AttioAttribute,
+  type AttioRecord as AttioRecordData,
+  type AttioUpsertResult,
+  type AttioConnectionResult,
+  type AttioHealthResult,
+  validateConnection as validateAttioConnection,
+  discoverObjects as discoverAttioObjects,
+  getObjectAttributes as getAttioObjectAttributes,
+  createAttribute as createAttioAttribute,
+  upsertRecord as upsertAttioRecord,
+  getRecord as getAttioRecord,
+  searchRecords as searchAttioRecords,
+  healthCheck as attioHealthCheck,
+  testConnection as testAttioConnection,
+} from './attio'
 
 /**
  * Integration factory - creates the appropriate client based on integration name
