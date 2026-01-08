@@ -6,147 +6,117 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Local Development
 ```bash
-# Start all services with Docker Compose
+# Start local PostgreSQL (optional, for local dev)
 docker-compose up -d
 
-# View logs
+# Start Next.js dev server
+cd frontend-nextjs && npm run dev
+
+# View Docker logs
 docker-compose logs -f
 
 # Stop services
 docker-compose down
-
-# Run backend shell
-docker-compose exec backend /bin/bash
-
-# Run database migrations
-docker-compose exec backend alembic upgrade head
 ```
 
 ### Testing & Building
 ```bash
-# Run full test suite (in Docker)
+# Run tests
 make test
 
-# Syntax check + unit tests (local, no Docker)
-make py-build    # Compile all Python files
-make py-test     # Run pytest
-npm run build    # Compile Python with wrapper script
-npm test         # Run pytest with wrapper script
+# Type checking
+make typecheck
+
+# Linting
+make lint
+
+# Full build (CI-compatible)
+make ci-build
 
 # Setup local environment
-make setup       # Creates venv and installs dependencies
+make setup
 ```
 
-### ⚠️ MANDATORY: Local Build Test Before Commit
+### MANDATORY: Local Build Test Before Commit
 
 **ALWAYS run the local build before creating any commit.** This catches TypeScript errors, import issues, and other problems that CI would catch later.
 
 ```bash
-# For Next.js frontend changes
 cd frontend-nextjs && npm run build
-
-# For Python backend changes
-make py-build
 ```
 
 This is a **blocking requirement** - do not commit code that fails the local build. The CI pipeline will reject PRs with build failures, so catching them early saves time and review cycles.
 
-### Database Migrations
-```bash
-# Create new migration
-docker-compose exec backend alembic revision --autogenerate -m "description"
-
-# Apply migrations
-docker-compose exec backend alembic upgrade head
-
-# Check current migration status
-docker-compose exec backend alembic current
-
-# Rollback one migration (use with caution)
-docker-compose exec backend alembic downgrade -1
-```
-
 ## Architecture Overview
 
 ### Tech Stack
-- **Backend**: FastAPI (Python) - REST API with OAuth, session management, integrations
-- **Frontend (Legacy)**: Streamlit (Python) - at `/frontend`, being deprecated
-- **Frontend (New)**: Next.js 14 (TypeScript) - at `/frontend-nextjs`, in active migration
-- **Database**: PostgreSQL - user data, workspaces, API keys, signals, accounts
-- **Deployment**: Railway - staging and production environments
+- **Frontend**: Next.js 14 (TypeScript) - Full-stack with API routes
+- **Database**: PostgreSQL via Supabase - user data, workspaces, API keys, signals, accounts
+- **Authentication**: Supabase Auth (OAuth with PKCE)
+- **Deployment**: Vercel (production) + Railway (staging)
+- **Background Jobs**: Vercel Cron
 
 ### Service Architecture
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Next.js Frontend                 │
-│                  (Port 3000)                        │
-│  - App Router with route groups                    │
-│  - API Proxy: /api/* → Backend (same-domain cookies)│
-│  - Supabase OAuth (HTTP-only cookies)              │
-└─────────────────┬───────────────────────────────────┘
-                  │ Proxied via Next.js rewrites
-┌─────────────────▼───────────────────────────────────┐
-│                 FastAPI Backend                     │
-│                  (Port 8080 on Railway)             │
-│  - Session-based auth (HTTP-only, Secure cookies)  │
-│  - JWT validation with Supabase JWKS               │
-│  - PostHog, Stripe, Apollo integrations            │
+│              Next.js Application                    │
+│                  (Vercel)                           │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              App Router                       │   │
+│  │  - (auth)/ - Login, OAuth callback           │   │
+│  │  - (dashboard)/ - Protected app pages        │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              API Routes                       │   │
+│  │  - /api/signals/* - Signal CRUD              │   │
+│  │  - /api/integrations/* - External services   │   │
+│  │  - /api/cron/* - Scheduled jobs              │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              Business Logic                   │   │
+│  │  - lib/heuristics/ - Signal detection        │   │
+│  │  - lib/integrations/ - API clients           │   │
+│  └─────────────────────────────────────────────┘   │
 └─────────────────┬───────────────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────────────┐
 │              PostgreSQL (Supabase)                  │
-│  - Connection Pooler for IPv4 compatibility        │
-│  - Alembic migrations                              │
+│  - Row Level Security (RLS)                        │
+│  - Supabase migrations                             │
 │  - Multi-tenant with workspaces                    │
 └─────────────────────────────────────────────────────┘
 ```
 
-### API Proxy (Critical for Auth)
-Next.js proxies all `/api/*` requests to the backend. This is **required** for session cookies to work (same-domain).
+### Key Modules
 
-**Config**: `frontend-nextjs/next.config.ts` → `rewrites()`
-- Client requests go to `https://inspector.getbeton.ai/api/*`
-- Next.js forwards to `http://backend.railway.internal:8080/api/*`
-- Session cookies stay on frontend domain
-
-**Railway ENV**:
-- `API_URL=http://backend.railway.internal:8080` (frontend service)
-
-### Key Backend Modules
-
-#### Authentication (`backend/app/auth.py`, `backend/app/core/`)
-- **Session Management**: HTTP-only cookies, server-side session storage
-- **JWT Handler**: Validates Supabase OAuth tokens
-- **API Keys**: Optional API key auth (format: `beton_<32-char-hex>`)
+#### Authentication (Supabase Auth)
+- **OAuth Flow**: PKCE-based OAuth via Supabase
+- **Session Management**: Supabase handles session cookies
 - **Workspace Context**: Every user belongs to a workspace (multi-tenant)
 
-#### Database Models (`backend/app/models.py`)
-- `Workspace` - Multi-tenant container (has slug, subscription status)
-- `WorkspaceMember` - Links users to workspaces with roles
-- `APIKey` - API key auth for programmatic access
-- `Account`, `Contact`, `Signal` - Core business entities
-- `Integration` - PostHog, Stripe, Apollo settings (encrypted credentials)
+#### Database (Supabase)
+Tables managed via Supabase migrations:
+- `workspaces` - Multi-tenant container (has slug, subscription status)
+- `workspace_members` - Links users to workspaces with roles
+- `api_keys` - API key auth for programmatic access
+- `accounts`, `contacts`, `signals` - Core business entities
+- `integrations` - PostHog, Stripe, Apollo settings
 
-#### Integrations (`backend/app/integrations/`)
-- **PostHog** (`posthog.py`): Analytics events, persons, accounts
-- **Stripe** (`stripe.py`): Customer data, subscription status
-- **Apollo** (`apollo.py`): Company enrichment data
-- **Attio** (`attio.py` endpoint): CRM sync destination
+#### Integrations (`lib/integrations/`)
+- **PostHog** (`posthog/`): Analytics events, persons, accounts
+- **Stripe** (`stripe/`): Customer data, subscription status
+- **Apollo** (`apollo/`): Company enrichment data
+- **Attio** (`attio/`): CRM sync destination
 
-#### Heuristics & Scoring (`backend/app/heuristics/`)
-- **Signal Detection**: 20+ product usage signals (trial intent, power users, etc.)
-- **Scoring Engine**: Health, expansion, churn risk scores (0-100)
-- **Concrete Grades**: M100, M75, M50, M25, M10 (construction-themed grades)
-- **Fit Scoring**: ICP match calculation based on firmographics
-- **ML Clustering**: K-Means clustering (placeholder, Phase 2 upgrade planned)
+#### Heuristics & Scoring (`lib/heuristics/`)
+- **Signal Detection** (`signals/`): 20+ product usage signal detectors
+- **Scoring Engine** (`engine.ts`): Health, expansion, churn risk scores (0-100)
+- **Concrete Grades** (`concrete-grades.ts`): M100, M75, M50, M25, M10
 
-### Frontend Architecture (Next.js Migration)
-
-The repo is **migrating from Streamlit to Next.js**. Both frontends coexist:
-- **Streamlit** (`/frontend`) - Legacy, port 8501, being deprecated
-- **Next.js** (`/frontend-nextjs`) - New frontend, port 3000, active development
-
-#### Next.js Structure
+### Project Structure
 ```
 frontend-nextjs/src/
 ├── app/
@@ -159,103 +129,81 @@ frontend-nextjs/src/
 │   │   ├── settings/        # Integrations & config
 │   │   └── identities/      # User/account list
 │   ├── api/                 # API route handlers
+│   │   ├── cron/            # Vercel Cron endpoints
+│   │   ├── signals/         # Signal CRUD
+│   │   └── integrations/    # Integration management
 │   └── layout.tsx           # Root layout
 ├── components/
-│   ├── ui/                  # coss ui component library
+│   ├── ui/                  # Shadcn/Radix component library
 │   ├── signals/             # Signal-specific components
 │   └── layout/              # Layout components
 └── lib/
-    ├── api/                 # API client (React Query)
+    ├── heuristics/          # Signal detection & scoring
+    │   ├── signals/         # 20 signal detectors
+    │   ├── engine.ts        # Scoring engine
+    │   └── concrete-grades.ts
+    ├── integrations/        # External service clients
+    │   ├── posthog/
+    │   ├── stripe/
+    │   ├── apollo/
+    │   └── attio/
+    ├── supabase/            # Supabase client & helpers
     ├── stores/              # Zustand state management
     └── utils/               # Helpers
 ```
 
-#### Key Migration Decisions
-1. **Route Groups**: `(auth)` and `(dashboard)` for layout separation
-2. **Component Strategy**: Copy-paste from coss ui (Radix + Tailwind)
-3. **Data Fetching**: React Query for server state, Zustand for client state
-4. **Authentication**: Reuse backend session cookies (no changes to auth flow)
-5. **Colorblind Palette**: Preserved from Streamlit for accessibility
-
-#### Migration Status
-See `frontend-nextjs/MIGRATION_PROGRESS.md` for current status (8/13 commits complete).
-
 ## Deployment Workflow
 
-### Railway Environments
-- **staging** - Deploys from `staging` branch
-- **production** - Deploys from `main` branch
-- **Preview environments** - Auto-created for `feature/**` branches
+### Environments
+- **Production**: Vercel (deploys from `main` branch)
+- **Staging**: Railway or Vercel Preview (deploys from `staging` branch)
+- **Preview**: Auto-created for PRs
 
 ### Branch Strategy
 ```
 feature/my-feature  →  [PR]  →  staging  →  [PR]  →  main
       │                          │                   │
       │                          │                   │
-   Preview Env                Staging           Production
+   Preview                    Staging           Production
 ```
 
-### Deployment Steps (See DEPLOYMENT.md)
+### Deployment Steps
 1. Create feature branch from `staging`
-2. Push to GitHub (auto-creates Railway preview environment)
+2. Push to GitHub (auto-creates preview environment)
 3. PR to `staging` (requires CI pass)
 4. Merge to `staging` (auto-deploys staging)
 5. Test staging thoroughly
 6. PR from `staging` to `main` (requires CI pass)
 7. Merge to `main` (auto-deploys production)
 
-### Database Migration Policy
-**Always run migrations in staging first, then production.**
-```bash
-# After staging deploy:
-railway environment staging
-railway run --service backend alembic upgrade head
-
-# After production promote:
-railway environment production
-railway run --service backend alembic upgrade head
-```
-
-### Railway Scripts
-```bash
-# Create/update preview environment
-BRANCH_NAME=feature/my-feature bash scripts/railway_preview_env.sh
-
-# Test preview services
-./scripts/test_api.sh pr-my-feature backend
-./scripts/test_api.sh pr-my-feature frontend
-```
+### Database Migrations
+Database schema is managed via Supabase:
+1. Make changes in Supabase Dashboard (staging project)
+2. Test thoroughly
+3. Apply same changes to production Supabase project
+4. Or use Supabase CLI for migration files
 
 ## Common Development Patterns
 
-### Adding a New API Endpoint
-1. Create route in `backend/app/api/endpoints/<module>.py`
-2. Register router in `backend/app/main.py`
-3. Add Pydantic models in `backend/app/models.py` if needed
-4. Add tests in `backend/tests/`
-5. Update API client in `frontend-nextjs/src/lib/api/`
-
-### Adding a New Database Model
-1. Define model in `backend/app/models.py`
-2. Create migration: `docker-compose exec backend alembic revision --autogenerate -m "add model"`
-3. Review generated migration in `backend/alembic/versions/`
-4. Apply locally: `docker-compose exec backend alembic upgrade head`
-5. Commit both model and migration files
+### Adding a New API Route
+1. Create route in `app/api/<module>/route.ts`
+2. Use Supabase server client for DB access
+3. Add proper error handling and authentication checks
+4. Update types if needed
 
 ### Adding a New Integration
-1. Create client in `backend/app/integrations/<service>.py`
-2. Add settings in `backend/app/config.py`
-3. Add Integration model entry in database
-4. Add sync logic in `backend/app/services/sync.py`
-5. Add UI in Next.js settings page
+1. Create client in `lib/integrations/<service>/client.ts`
+2. Export from `lib/integrations/index.ts`
+3. Add connection validation
+4. Add UI in settings page
 
-### Adding a New Signal Type
-1. Define signal in `backend/app/heuristics/signal_definitions.py`
-2. Add detection logic in `backend/app/heuristics/signal_processor.py`
-3. Update scoring weights in `backend/app/heuristics/scoring_engine.py`
-4. Add tests in `backend/tests/test_heuristics.py`
+### Adding a New Signal Detector
+1. Create detector in `lib/heuristics/signals/detectors/<name>.ts`
+2. Implement `SignalDetectorDefinition` interface
+3. Export from `lib/heuristics/signals/detectors/index.ts`
+4. Detector will be auto-included in signal processing
 
-### Working with Next.js Pages
+### Working with Pages
 1. **Protected pages**: Place in `app/(dashboard)/`
 2. **Auth pages**: Place in `app/(auth)/`
 3. **Use Server Components** by default (better performance)
@@ -266,60 +214,38 @@ BRANCH_NAME=feature/my-feature bash scripts/railway_preview_env.sh
 ## Important Constraints
 
 ### Security
-- **Never commit secrets** - Use `.env` (gitignored)
-- **HTTP-only cookies** - Session tokens not accessible to JS
-- **Secure cookies** - `Secure=true` in production (HTTPS only)
-- **Signed sessions** - `itsdangerous` TimestampSigner prevents tampering
-- **CORS** - Backend validates origin in production
-- **Encrypted credentials** - Integration API keys encrypted in DB
+- **Never commit secrets** - Use `.env.local` (gitignored)
+- **Row Level Security** - Supabase RLS enforces data isolation
+- **Server-only secrets** - Use `SUPABASE_SERVICE_ROLE_KEY` only in API routes
+- **Validate workspace access** - Always check user's workspace membership
 
 ### Multi-tenancy
-- **Every request needs workspace context** - Use `get_current_user` dependency
-- **Workspace isolation** - Filter all queries by `workspace_id`
-- **No cross-workspace access** - Enforce in DB layer
+- **Every request needs workspace context** - Check user's workspace
+- **Workspace isolation** - RLS policies enforce isolation
+- **No cross-workspace access** - Database layer prevents it
 
-### Database Migrations
-- **Always backward-compatible** - Add columns, don't drop/rename
-- **Test in staging first** - Never run untested migrations in production
-- **Atomic migrations** - Keep migrations small and focused
-- **No data migrations in schema files** - Use separate data migration scripts
-
-### Next.js Migration
-- **No backend changes during migration** - Frontend-only changes
-- **Both frontends work simultaneously** - Don't break Streamlit
-- **Atomic commits** - Each commit should be deployable
-- **Copy components, don't import** - Full control over UI library
+### Vercel Cron
+- **Max duration**: 5 minutes on Pro plan
+- **Authentication**: Use `CRON_SECRET` header verification
+- **Idempotency**: Design jobs to be safely re-runnable
 
 ## Environment Variables
 
-### Backend (Docker Compose)
-- `DATABASE_URL` - PostgreSQL connection string
-- `BETON_ENCRYPTION_KEY` - For encrypting integration credentials
-- `ENV` - DEV, STAGING, or PRODUCTION
-- `FRONTEND_URL` - For CORS and redirects
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` - OAuth
-- `POSTHOG_API_KEY`, `POSTHOG_PROJECT_ID` - Analytics integration
-- `STRIPE_API_KEY` - Payment integration
-- `APOLLO_API_KEY` - Enrichment integration
+### Required (Next.js)
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key (client-side)
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side only)
 
-### Frontend (Next.js)
-- `NEXT_PUBLIC_API_URL` - Backend API URL (client-side)
-- `API_URL` - Backend API URL (server-side)
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` - OAuth
+### Optional (Integrations)
+- `POSTHOG_API_KEY`, `POSTHOG_PROJECT_ID` - PostHog analytics
+- `STRIPE_API_KEY` - Stripe payments
+- `APOLLO_API_KEY` - Apollo enrichment
+- `ATTIO_API_KEY` - Attio CRM
 
-### CI/CD
-- `RAILWAY_TOKEN` - Railway API token for deployments
-- `RAILWAY_PROJECT_ID` - Railway project ID
+### Vercel Cron
+- `CRON_SECRET` - Secret for authenticating cron requests
 
 ## Common Issues & Solutions
-
-### "Connection refused" on localhost
-**Problem**: Services not running or wrong ports.
-**Solution**: `docker-compose ps` to check status, `docker-compose up -d` to start.
-
-### Alembic "Target database is not up to date"
-**Problem**: Local DB is behind migrations.
-**Solution**: `docker-compose exec backend alembic upgrade head`
 
 ### Next.js build errors
 **Problem**: TypeScript errors or missing dependencies.
@@ -330,41 +256,30 @@ npm install
 npm run build
 ```
 
-### OAuth callback fails
-**Problem**: Supabase redirect URL mismatch or cookie domain issues.
+### Supabase connection issues
+**Problem**: "Failed to fetch" or connection errors.
 **Solution**:
-1. Check Supabase Dashboard → Authentication → URL Configuration has `https://inspector.getbeton.ai/api/oauth/callback`
-2. Verify `API_URL=http://backend.railway.internal:8080` on frontend service
-3. Ensure OAuth redirects go through frontend proxy (not directly to backend)
+1. Check Supabase project is running
+2. Verify environment variables are set
+3. Check RLS policies aren't blocking access
 
-### Railway preview environment not deploying
-**Problem**: Branch name too long or contains invalid characters.
-**Solution**: Railway sanitizes branch names to max 25 chars. Check logs: `railway logs --service backend`
-
-## Testing Strategy
-
-### Backend Tests
-- **Unit tests**: `backend/tests/` - Fast, no DB required
-- **Integration tests**: Require API keys (skipped in CI if keys not set)
-- **Run locally**: `docker-compose exec backend pytest`
-- **Run in CI**: `make py-test` (uses local Python, not Docker)
-
-### Frontend Tests
-- **Phase 3 of migration** - Vitest + Playwright (not yet implemented)
-- Streamlit frontend has no automated tests (manual testing only)
+### Cron job not running
+**Problem**: Scheduled job not executing.
+**Solution**:
+1. Verify `vercel.json` cron config is correct
+2. Check Vercel dashboard → Cron Jobs for status
+3. Test endpoint manually with correct `CRON_SECRET`
 
 ## Key Files Reference
 
-- `backend/app/main.py` - FastAPI app entry point, all endpoints
-- `backend/app/models.py` - SQLAlchemy models
-- `backend/app/auth.py` - Session + JWT authentication
-- `backend/app/config.py` - Settings (Pydantic Settings)
-- `docker-compose.yml` - Local dev environment
+- `app/api/cron/signal-detection/route.ts` - Signal detection cron job
+- `lib/heuristics/signals/processor.ts` - Signal processing engine
+- `lib/heuristics/engine.ts` - Scoring engine
+- `lib/integrations/index.ts` - Integration client exports
+- `lib/supabase/server.ts` - Supabase server client
+- `vercel.json` - Vercel config including cron schedules
+- `docker-compose.yml` - Local PostgreSQL for development
 - `Makefile` - Common commands
-- `DEPLOYMENT.md` - Full deployment runbook
-- `ARCHITECTURE.md` - Legacy Streamlit architecture (outdated)
-- `frontend-nextjs/MIGRATION_PROGRESS.md` - Migration status
-- `scripts/railway_preview_env.sh` - Preview environment automation
 
 ## Additional Context
 
@@ -383,7 +298,6 @@ Beton Inspector is a RevOps intelligence platform that:
 - Platform "inspects" data like a construction inspector
 
 ### Color Palette (Colorblind-Friendly)
-Preserved from Streamlit, carried into Next.js:
 - Primary: Blue (`#4A90E2`)
 - Success: Green (`#7CB342`)
 - Warning: Orange (`#FB8C00`)
