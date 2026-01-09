@@ -9,3 +9,10 @@ export {
   RATE_LIMIT_CONFIG,
   type RateLimitStatus,
 } from './rate-limiter'
+export {
+  QueryService,
+  createQueryService,
+  type QueryExecutionOptions,
+  type QueryExecutionResponse,
+  type QueryServiceDependencies,
+} from './query-service'
