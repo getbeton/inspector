@@ -1,0 +1,339 @@
+---
+description: Implement a complete Plane epic by reading tasks, understanding dependencies, and coding sequentially
+globs:
+  - "frontend-nextjs/**/*.ts"
+  - "frontend-nextjs/**/*.tsx"
+  - "CLAUDE.md"
+---
+
+# /implement-epic - Implement Plane Epic End-to-End
+
+Use this skill to implement a complete epic from Plane. This workflow reads the epic, analyzes dependencies between subtasks, implements them sequentially, and opens a PR when done.
+
+## Usage
+
+```
+/implement-epic <EPIC-ID>
+```
+
+Example: `/implement-epic BETON-42` or `/implement-epic INSP-15`
+
+---
+
+## Workflow
+
+### Phase 1: Epic Discovery
+
+#### Step 1.1: Fetch the Epic
+
+Use the Plane MCP tools to read the epic:
+
+```
+mcp__plane__get_issue_using_readable_identifier:
+  - project_identifier: <PROJECT> (e.g., "BETON", "INSP")
+  - issue_identifier: <NUMBER> (e.g., "42")
+```
+
+Read and note:
+- Epic title and description
+- Acceptance criteria
+- Any attachments or linked resources
+
+#### Step 1.2: Get All Subtasks
+
+Search for subtasks linked to this epic:
+
+```
+mcp__plane__search_issues:
+  - project_id: <uuid from epic>
+  - search: <epic name or related keywords>
+```
+
+Or if the epic has linked issues, fetch each one:
+
+```
+mcp__plane__get_issue_using_readable_identifier for each subtask
+```
+
+#### Step 1.3: Read Attachments
+
+If the epic or subtasks have descriptions with links, requirements docs, or Figma designs:
+- Use WebFetch to read linked documents
+- Note key requirements, API specs, or design decisions
+
+#### Step 1.4: Identify Dependencies
+
+Analyze the subtasks for:
+- **Blockers**: Tasks that must complete before others can start
+- **Shared code**: Tasks that modify the same files
+- **Data dependencies**: Tasks where output feeds into another
+
+Create a dependency order. Example:
+```
+1. BETON-43: Add database schema (no deps)
+2. BETON-44: Create API endpoint (depends on schema)
+3. BETON-45: Add frontend form (depends on API)
+4. BETON-46: Add tests (depends on all above)
+```
+
+---
+
+### Phase 2: Branch Setup
+
+#### Step 2.1: Fetch Latest Staging
+
+```bash
+git fetch origin staging
+```
+
+#### Step 2.2: Create Feature Branch
+
+Branch naming: `feature/<task-id>-<short-name>`
+
+```bash
+git checkout -b feature/<EPIC-ID>-<epic-short-name> origin/staging
+```
+
+Example:
+```bash
+git checkout -b feature/BETON-42-user-dashboard origin/staging
+```
+
+---
+
+### Phase 3: Sequential Implementation
+
+For EACH task in dependency order:
+
+#### Step 3.1: Read the Task
+
+Fetch full task details:
+```
+mcp__plane__get_issue_using_readable_identifier
+```
+
+Understand:
+- What exactly needs to be built
+- Acceptance criteria
+- Edge cases mentioned
+
+#### Step 3.2: Ask Clarifying Questions
+
+If anything is unclear, use AskUserQuestion to clarify:
+- Architecture decisions
+- UI/UX specifics not in the task
+- Error handling requirements
+- Integration points
+
+**Do NOT proceed with assumptions if the task is ambiguous.**
+
+#### Step 3.3: Implement the Code
+
+Write the code following Beton's patterns (see CLAUDE.md):
+
+- **API Routes**: Place in `frontend-nextjs/src/app/api/`
+- **Pages**: Place in `frontend-nextjs/src/app/(dashboard)/`
+- **Components**: Place in `frontend-nextjs/src/components/`
+- **Business Logic**: Place in `frontend-nextjs/src/lib/`
+
+Follow existing patterns in the codebase.
+
+#### Step 3.4: Test the Implementation
+
+**For API endpoints:**
+
+Test with curl to verify the endpoint works:
+
+```bash
+# Example: Test a GET endpoint
+curl -s http://localhost:3000/api/<endpoint> | jq
+
+# Example: Test a POST endpoint
+curl -X POST http://localhost:3000/api/<endpoint> \
+  -H "Content-Type: application/json" \
+  -d '{"field": "value"}' | jq
+
+# Example: Test with auth (if needed)
+curl -s http://localhost:3000/api/<endpoint> \
+  -H "Authorization: Bearer <token>" | jq
+```
+
+Verify:
+- Response status is correct (200, 201, etc.)
+- Response body matches expected schema
+- Error cases return proper error responses
+
+**For UI components:**
+
+- Verify the page loads without errors in browser
+- Check browser console for errors
+- Test key user interactions
+
+#### Step 3.5: Build Locally
+
+**MANDATORY before committing:**
+
+```bash
+cd frontend-nextjs && npm run build
+```
+
+If build fails:
+1. Read the error messages carefully
+2. Fix TypeScript errors
+3. Fix import issues
+4. Re-run build until it passes
+
+**Do NOT commit code that fails the build.**
+
+#### Step 3.6: Commit and Push
+
+Use the `/deploy` skill workflow to:
+- Stage and commit the changes for this task
+- Push to the feature branch
+
+Commit message should reference the task ID:
+```
+feat(<scope>): <task description>
+
+Implements <TASK-ID>: <task title>
+```
+
+**See: [/deploy skill](./deploy.md) for commit and push workflow**
+
+#### Step 3.7: Repeat for Next Task
+
+Move to the next task in dependency order and repeat Steps 3.1-3.6.
+
+---
+
+### Phase 4: Pull Request
+
+Once ALL tasks are complete:
+
+#### Step 4.1: Final Build Check
+
+```bash
+cd frontend-nextjs && npm run build
+```
+
+Ensure entire branch builds cleanly.
+
+#### Step 4.2: Create Pull Request
+
+Use the `/deploy` skill's "Feature → Staging" workflow to:
+- Verify Vercel preview deployment
+- Create PR to staging branch
+- Include all completed task IDs in the PR body
+
+**See: [/deploy skill](./deploy.md) for full PR workflow**
+
+PR body should include:
+```markdown
+## Summary
+Implements epic <EPIC-ID>: <Epic title>
+
+### Tasks Completed
+- [x] <TASK-1>: <description>
+- [x] <TASK-2>: <description>
+- [x] <TASK-3>: <description>
+
+## Test Plan
+- [ ] Verified locally with `npm run build`
+- [ ] Tested API endpoints with curl
+```
+
+#### Step 4.3: Report Completion
+
+Tell the user:
+- PR URL
+- Summary of what was implemented
+- Any follow-up items or notes for review
+
+> **STOP HERE** - Do NOT merge the PR.
+> Beton engineers will review and merge manually.
+
+---
+
+## Checklist
+
+- [ ] Read epic and all subtasks from Plane
+- [ ] Identified dependency order
+- [ ] Created feature branch from origin/staging
+- [ ] For each task:
+  - [ ] Read task details
+  - [ ] Asked clarifying questions if needed
+  - [ ] Implemented code
+  - [ ] Tested with curl (if API)
+  - [ ] Built locally (must pass)
+  - [ ] Used /deploy to commit and push
+- [ ] Created PR to staging (via /deploy)
+- [ ] Reported PR URL to user
+- [ ] **Did NOT merge** - left for human review
+
+---
+
+## Common Patterns
+
+### Multi-tenant data access
+
+Always filter by workspace:
+
+```typescript
+const { data } = await supabase
+  .from('table')
+  .select('*')
+  .eq('workspace_id', workspaceId)
+```
+
+### API Route Authentication
+
+```typescript
+import { createClient } from '@/lib/supabase/server'
+
+export async function GET() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // ... rest of handler
+}
+```
+
+### Error Handling
+
+```typescript
+try {
+  // operation
+} catch (error) {
+  console.error('Operation failed:', error)
+  return Response.json(
+    { error: 'Operation failed' },
+    { status: 500 }
+  )
+}
+```
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Build fails | Read error, fix TypeScript issues |
+| API returns 401 | Check auth headers and Supabase client |
+| Curl connection refused | Ensure `npm run dev` is running |
+| Push rejected | Pull latest staging, resolve conflicts |
+| Task unclear | Ask user with AskUserQuestion |
+
+---
+
+## Notes
+
+- **Do NOT skip the build step** - CI will fail anyway
+- **Do NOT batch commits** - commit after each task
+- **Do NOT proceed with assumptions** - ask if unclear
+- **Do push frequently** - saves progress, enables early feedback
+- **Do NOT merge PRs** - only create them, leave merging to humans
