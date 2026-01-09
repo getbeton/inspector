@@ -1,15 +1,66 @@
 /**
  * PostHog API client for fetching events, persons, and activity data
+ * Extended with query execution, saved queries, and dashboard management
  */
 
 import { PostHogEvent, PostHogPerson, PostHogGroup, createIntegrationError } from '../types'
+import { TimeoutError, PostHogAPIError } from '../../errors/query-errors'
 
 const POSTHOG_API_BASE = 'https://app.posthog.com/api'
+
+/** Default query timeout in milliseconds (60 seconds) */
+const DEFAULT_QUERY_TIMEOUT_MS = 60_000
 
 export interface PostHogClientConfig {
   apiKey: string
   projectId: string
   host?: string
+}
+
+export interface QueryOptions {
+  /** Timeout in milliseconds (default: 60000) */
+  timeoutMs?: number
+}
+
+export interface QueryResult {
+  results: unknown[][]
+  columns: string[]
+}
+
+export interface PostHogSavedQueryInput {
+  name: string
+  description?: string
+  query: {
+    kind: 'HogQLQuery'
+    query: string
+  }
+}
+
+export interface PostHogSavedQueryResponse {
+  id: number | string
+  name: string
+  description?: string
+  query: {
+    kind: string
+    query: string
+  }
+  created_at: string
+  updated_at: string
+}
+
+export interface PostHogDashboardInput {
+  name: string
+  description?: string
+  filters?: Record<string, unknown>
+}
+
+export interface PostHogDashboardResponse {
+  id: number | string
+  name: string
+  description?: string
+  filters?: Record<string, unknown>
+  created_at: string
+  updated_at: string
 }
 
 export class PostHogClient {
@@ -160,18 +211,191 @@ export class PostHogClient {
   }
 
   /**
-   * Execute a HogQL query
+   * Execute a HogQL query with timeout support
+   * @throws TimeoutError if query exceeds timeout
+   * @throws PostHogAPIError if API request fails
    */
-  async query(hogql: string): Promise<{ results: unknown[][]; columns: string[] }> {
-    return this.fetch('/query', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: {
-          kind: 'HogQLQuery',
-          query: hogql,
+  async query(hogql: string, options?: QueryOptions): Promise<QueryResult> {
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS
+    const controller = new AbortController()
+
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, timeoutMs)
+
+    try {
+      const response = await this.fetchWithTimeout('/query', {
+        method: 'POST',
+        body: JSON.stringify({
+          query: {
+            kind: 'HogQLQuery',
+            query: hogql,
+          },
+        }),
+        signal: controller.signal,
+      })
+
+      return response as QueryResult
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new TimeoutError(timeoutMs)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
+  /**
+   * Internal fetch with abort signal support
+   */
+  private async fetchWithTimeout<T>(
+    endpoint: string,
+    options: RequestInit & { signal?: AbortSignal } = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}/projects/${this.projectId}${endpoint}`
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
         },
-      }),
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '')
+        throw new PostHogAPIError({
+          message: `PostHog API error: ${response.statusText}`,
+          statusCode: response.status,
+          posthogError: errorBody,
+        })
+      }
+
+      return response.json()
+    } catch (error) {
+      if (error instanceof PostHogAPIError) {
+        throw error
+      }
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error // Re-throw to be handled by caller
+      }
+      throw new PostHogAPIError({
+        message: error instanceof Error ? error.message : 'Unknown error',
+        retryable: true,
+      })
+    }
+  }
+
+  // ============================================
+  // Saved Queries CRUD
+  // ============================================
+
+  /**
+   * Create a saved query in PostHog
+   */
+  async createSavedQuery(input: PostHogSavedQueryInput): Promise<PostHogSavedQueryResponse> {
+    return this.fetch('/saved_queries/', {
+      method: 'POST',
+      body: JSON.stringify(input),
     })
+  }
+
+  /**
+   * Update a saved query in PostHog
+   */
+  async updateSavedQuery(
+    queryId: string | number,
+    input: Partial<PostHogSavedQueryInput>
+  ): Promise<PostHogSavedQueryResponse> {
+    return this.fetch(`/saved_queries/${queryId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  }
+
+  /**
+   * Delete a saved query from PostHog
+   */
+  async deleteSavedQuery(queryId: string | number): Promise<void> {
+    await this.fetch(`/saved_queries/${queryId}/`, {
+      method: 'DELETE',
+    })
+  }
+
+  /**
+   * Get a saved query by ID
+   */
+  async getSavedQuery(queryId: string | number): Promise<PostHogSavedQueryResponse | null> {
+    try {
+      return await this.fetch<PostHogSavedQueryResponse>(`/saved_queries/${queryId}/`)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * List all saved queries
+   */
+  async listSavedQueries(): Promise<{ results: PostHogSavedQueryResponse[] }> {
+    return this.fetch('/saved_queries/')
+  }
+
+  // ============================================
+  // Dashboards CRUD
+  // ============================================
+
+  /**
+   * Create a dashboard in PostHog
+   */
+  async createDashboard(input: PostHogDashboardInput): Promise<PostHogDashboardResponse> {
+    return this.fetch('/dashboards/', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  /**
+   * Update a dashboard in PostHog
+   */
+  async updateDashboard(
+    dashboardId: string | number,
+    input: Partial<PostHogDashboardInput>
+  ): Promise<PostHogDashboardResponse> {
+    return this.fetch(`/dashboards/${dashboardId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  }
+
+  /**
+   * Delete a dashboard from PostHog
+   */
+  async deleteDashboard(dashboardId: string | number): Promise<void> {
+    await this.fetch(`/dashboards/${dashboardId}/`, {
+      method: 'DELETE',
+    })
+  }
+
+  /**
+   * Get a dashboard by ID
+   */
+  async getDashboard(dashboardId: string | number): Promise<PostHogDashboardResponse | null> {
+    try {
+      return await this.fetch<PostHogDashboardResponse>(`/dashboards/${dashboardId}/`)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * List all dashboards
+   */
+  async listDashboards(): Promise<{ results: PostHogDashboardResponse[] }> {
+    return this.fetch('/dashboards/')
   }
 
   /**
