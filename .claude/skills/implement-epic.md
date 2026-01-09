@@ -99,6 +99,11 @@ Example:
 git checkout -b feature/BETON-42-user-dashboard origin/staging
 ```
 
+Then, publish the branch
+
+```
+git push origin feature/<EPIC-ID>-<epic-short-name>
+```
 ---
 
 ### Phase 3: Sequential Implementation
@@ -128,6 +133,8 @@ If anything is unclear, use AskUserQuestion to clarify:
 **Do NOT proceed with assumptions if the task is ambiguous.**
 
 #### Step 3.3: Implement the Code
+
+Change task status to "In progress" in Plane.
 
 Write the code following Beton's patterns (see CLAUDE.md):
 
@@ -185,17 +192,15 @@ If build fails:
 
 **Do NOT commit code that fails the build.**
 
-#### Step 3.6: Commit and Push
+#### Step 3.6: Commit
 
 Use the `/deploy` skill workflow to:
 - Stage and commit the changes for this task
-- Push to the feature branch
-
-Commit message should reference the task ID:
+Commit message should reference the task ID and provide a URL:
 ```
 feat(<scope>): <task description>
 
-Implements <TASK-ID>: <task title>
+Implements [<TASK-ID>: <task title>](task_url)
 ```
 
 **See: [/deploy skill](./deploy.md) for commit and push workflow**
@@ -208,7 +213,7 @@ Move to the next task in dependency order and repeat Steps 3.1-3.6.
 
 ### Phase 4: Pull Request
 
-Once ALL tasks are complete:
+Once ALL tasks are complete, push the branch to origin. Then:
 
 #### Step 4.1: Final Build Check
 

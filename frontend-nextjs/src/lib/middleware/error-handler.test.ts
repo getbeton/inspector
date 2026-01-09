@@ -49,7 +49,6 @@ describe('withErrorHandler', () => {
       const resetAt = new Date(Date.now() + 3600000)
       const handler = vi.fn().mockRejectedValue(
         new RateLimitError({
-          message: 'Rate limit exceeded',
           resetAt,
           limit: 2400,
           remaining: 0,
@@ -65,7 +64,6 @@ describe('withErrorHandler', () => {
       const resetAt = new Date(Date.now() + 3600000)
       const handler = vi.fn().mockRejectedValue(
         new RateLimitError({
-          message: 'Rate limit exceeded',
           resetAt,
           limit: 2400,
           remaining: 0,
@@ -84,7 +82,6 @@ describe('withErrorHandler', () => {
       const resetAt = new Date(Date.now() + 3600000)
       const handler = vi.fn().mockRejectedValue(
         new RateLimitError({
-          message: 'Rate limit exceeded',
           resetAt,
           limit: 2400,
           remaining: 0,
@@ -102,7 +99,6 @@ describe('withErrorHandler', () => {
       const resetAt = new Date(Date.now() + 3600000)
       const handler = vi.fn().mockRejectedValue(
         new RateLimitError({
-          message: 'Rate limit exceeded',
           resetAt,
           limit: 2400,
           remaining: 0,
@@ -226,10 +222,7 @@ describe('withErrorHandler', () => {
   describe('Generic QueryError handling', () => {
     it('returns 500 status code', async () => {
       const handler = vi.fn().mockRejectedValue(
-        new QueryError({
-          message: 'Unexpected error',
-          code: 'UNKNOWN',
-        })
+        new QueryError('Unexpected error', 'UNKNOWN')
       )
 
       const response = await withErrorHandler(handler)(createMockRequest())
@@ -317,7 +310,6 @@ describe('withErrorHandler', () => {
       {
         name: 'RateLimitError',
         error: new RateLimitError({
-          message: 'Rate limit',
           resetAt: new Date(),
           limit: 100,
           remaining: 0,

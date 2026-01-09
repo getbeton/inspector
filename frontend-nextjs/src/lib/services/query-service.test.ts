@@ -119,8 +119,11 @@ describe('QueryService', () => {
           query_text: validQuery,
           query_hash: 'hash-456',
           status: 'pending',
+          execution_time_ms: null,
+          error_message: null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
         }
 
         mockResultRepository.getCached.mockResolvedValue({
@@ -164,8 +167,11 @@ describe('QueryService', () => {
           query_text: validQuery,
           query_hash: 'hash-789',
           status: 'pending',
+          execution_time_ms: null,
+          error_message: null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
         }
 
         const posthogResult = {
@@ -233,7 +239,6 @@ describe('QueryService', () => {
     describe('rate limit error', () => {
       it('throws RateLimitError when limit exceeded', async () => {
         const rateLimitError = new RateLimitError({
-          message: 'Rate limit exceeded',
           resetAt: new Date(Date.now() + 3600000),
           limit: 2400,
           remaining: 0,
@@ -257,8 +262,11 @@ describe('QueryService', () => {
           query_text: validQuery,
           query_hash: 'hash',
           status: 'pending',
+          execution_time_ms: null,
+          error_message: null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
         }
 
         mockResultRepository.getCached.mockResolvedValue(null)
@@ -295,8 +303,11 @@ describe('QueryService', () => {
           query_text: validQuery,
           query_hash: 'hash-timeout',
           status: 'pending',
+          execution_time_ms: null,
+          error_message: null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
         }
 
         mockResultRepository.getCached.mockResolvedValue(null)
@@ -325,8 +336,11 @@ describe('QueryService', () => {
           query_text: validQuery,
           query_hash: 'hash-api-error',
           status: 'pending',
+          execution_time_ms: null,
+          error_message: null,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          started_at: null,
+          completed_at: null,
         }
 
         mockResultRepository.getCached.mockResolvedValue(null)
