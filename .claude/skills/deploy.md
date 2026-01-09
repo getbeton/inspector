@@ -10,6 +10,12 @@ globs:
 
 Use this skill to commit changes, push to the current branch, and verify the Vercel preview deployment succeeded.
 
+> **IMPORTANT: NO AUTO-MERGE**
+>
+> This skill creates PRs but **NEVER merges them automatically**.
+> All PR reviews and merges are done by Beton engineers manually.
+> Claude should only create PRs and report the PR URL.
+
 ## Quick Workflow
 
 When the user says `/deploy`, execute this workflow:
@@ -73,7 +79,7 @@ npx vercel inspect <deployment-url> --scope getbeton
 
 ### Feature → Staging
 
-**When**: You've finished a feature and want to merge to staging.
+**When**: You've finished a feature and want to create a PR to staging.
 
 ```bash
 # 1. Ensure build passes
@@ -91,8 +97,9 @@ gh pr create --base staging --title "feat: My Feature" --body "Description..."
 # 5. Wait for CI to pass
 gh pr checks
 
-# 6. Merge when approved
-gh pr merge --squash
+# 6. Report PR URL to user
+# STOP HERE - DO NOT MERGE
+# Beton engineers will review and merge manually
 ```
 
 ### Staging → Production
@@ -111,11 +118,9 @@ gh pr create --base main --head staging --title "Release: <version>" --body "
 - [x] Vercel preview passed
 "
 
-# 2. Wait for CI, then merge
-gh pr merge --merge
-
-# 3. Sync staging to match main
-./scripts/sync_staging_to_main.sh
+# 2. Report PR URL to user
+# STOP HERE - DO NOT MERGE
+# Beton engineers will review and merge manually
 ```
 
 ---
