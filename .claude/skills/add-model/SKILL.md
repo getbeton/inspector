@@ -1,8 +1,6 @@
 ---
-description: Create a new SQLAlchemy model with Alembic migration
-globs:
-  - "backend/app/models.py"
-  - "backend/alembic/versions/*.py"
+name: add-model
+description: Create a new SQLAlchemy model with Alembic migration. Use when adding a new database table or entity.
 ---
 
 # /add-model - Add New Database Model

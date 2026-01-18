@@ -1,8 +1,6 @@
 ---
-description: Add a new signal type to the heuristics engine
-globs:
-  - "backend/app/heuristics/*.py"
-  - "backend/tests/test_heuristics.py"
+name: add-signal
+description: Add a new signal type to the heuristics engine. Use when creating a new product usage signal detector for expansion, churn, or engagement patterns.
 ---
 
 # /add-signal - Add New Signal Type

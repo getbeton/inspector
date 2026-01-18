@@ -1,9 +1,6 @@
 ---
-description: Scaffold a new FastAPI endpoint with Pydantic models and tests
-globs:
-  - "backend/app/api/endpoints/*.py"
-  - "backend/app/main.py"
-  - "backend/tests/*.py"
+name: add-endpoint
+description: Scaffold a new FastAPI endpoint with Pydantic models and tests. Use when creating a new API endpoint or route handler.
 ---
 
 # /add-endpoint - Add New API Endpoint
