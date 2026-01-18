@@ -1,8 +1,6 @@
 ---
-description: Create Railway preview environment for a feature branch
-globs:
-  - "scripts/railway_preview_env.sh"
-  - ".github/workflows/preview_env.yml"
+name: preview-env
+description: Create Railway preview environment for a feature branch. Use when setting up a preview deployment for testing.
 ---
 
 # /preview-env - Railway Preview Environment

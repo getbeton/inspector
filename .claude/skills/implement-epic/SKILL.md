@@ -1,9 +1,6 @@
 ---
-description: Implement a complete Plane epic by reading tasks, understanding dependencies, and coding sequentially
-globs:
-  - "frontend-nextjs/**/*.ts"
-  - "frontend-nextjs/**/*.tsx"
-  - "CLAUDE.md"
+name: implement-epic
+description: Implement a complete Plane epic by reading tasks, understanding dependencies, and coding sequentially. Use when working on a full epic or multi-task feature.
 ---
 
 # /implement-epic - Implement Plane Epic End-to-End

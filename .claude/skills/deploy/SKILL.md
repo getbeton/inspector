@@ -1,9 +1,6 @@
 ---
-description: Commit, push, and verify Vercel deployment
-globs:
-  - "DEPLOYMENT.md"
-  - "frontend-nextjs/vercel.json"
-  - ".github/workflows/*.yml"
+name: deploy
+description: Commit, push, and verify Vercel deployment. Use when deploying changes, creating commits, or checking deployment status.
 ---
 
 # /deploy - Commit, Push & Verify Deployment

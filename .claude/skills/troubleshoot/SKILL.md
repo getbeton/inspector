@@ -1,9 +1,6 @@
 ---
-description: Debug common issues (connection, migration, build, OAuth errors)
-globs:
-  - "docker-compose.yml"
-  - "backend/alembic/**"
-  - "frontend-nextjs/**"
+name: troubleshoot
+description: Debug common issues (connection, migration, build, OAuth errors). Use when encountering development errors or deployment problems.
 ---
 
 # /troubleshoot - Debug Common Issues

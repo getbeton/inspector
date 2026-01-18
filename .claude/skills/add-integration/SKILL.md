@@ -1,9 +1,6 @@
 ---
-description: Add a new third-party integration (PostHog, Stripe, Apollo pattern)
-globs:
-  - "backend/app/integrations/*.py"
-  - "backend/app/config.py"
-  - "backend/app/services/sync.py"
+name: add-integration
+description: Add a new third-party integration (PostHog, Stripe, Apollo pattern). Use when connecting to external APIs or services.
 ---
 
 # /add-integration - Add New Third-Party Integration
