@@ -100,12 +100,23 @@ Create these Data Layer Variables in GTM:
 - **Event name:** `.*` (regex match all)
 - **Use regex matching:** ✅ Checked
 - **Fires on:** Some Custom Events
-- **Conditions:**
+- **Conditions:** (exclude ALL GTM built-in events)
   - `Event` does not equal `posthog_identify`
   - AND `Event` does not equal `posthog_reset`
   - AND `Event` does not equal `gtm.js`
   - AND `Event` does not equal `gtm.dom`
   - AND `Event` does not equal `gtm.load`
+  - AND `Event` does not equal `gtm.click`
+  - AND `Event` does not equal `gtm.linkClick`
+  - AND `Event` does not equal `gtm.formSubmit`
+  - AND `Event` does not equal `gtm.historyChange`
+  - AND `Event` does not equal `gtm.scrollDepth`
+  - AND `Event` does not equal `gtm.timer`
+  - AND `Event` does not equal `gtm.video`
+  - AND `Event` does not equal `page_view`
+  - AND `Event` does not equal `scroll`
+
+> **Important:** These exclusions prevent GTM's built-in events from being captured as custom events. PostHog handles pageviews, clicks, and scrolls natively via autocapture.
 
 ---
 
@@ -132,13 +143,15 @@ Create these Data Layer Variables in GTM:
     persistence: 'cookie',
     cross_subdomain_cookie: true,
 
-    // 2025 defaults
+    // 2025 defaults for best practices
     defaults: '2025-11-30',
 
-    // Let GTM handle page views
-    capture_pageview: false,
+    // Let PostHog handle pageviews natively (SPA-friendly, tracks history changes)
+    // This captures $pageview on navigation and $pageleave on exit
+    capture_pageview: 'history_change',
 
-    // Enable autocapture
+    // Enable autocapture for clicks, forms, etc.
+    // Note: Scroll depth is tracked automatically, no need for GTM scroll events
     autocapture: true,
 
     // Session recording
@@ -219,8 +232,22 @@ Create these Data Layer Variables in GTM:
 
     var eventName = {{DLV - event}};
 
-    // Skip GTM internal events
-    if (!eventName || eventName.indexOf('gtm.') === 0) {
+    // Skip if no event name
+    if (!eventName) {
+      return;
+    }
+
+    // Skip GTM built-in events (PostHog handles these natively via autocapture)
+    // This is a safeguard in addition to trigger exclusions
+    var gtmBuiltInEvents = [
+      'gtm.js', 'gtm.dom', 'gtm.load',
+      'gtm.click', 'gtm.linkClick', 'gtm.formSubmit',
+      'gtm.historyChange', 'gtm.scrollDepth', 'gtm.timer', 'gtm.video',
+      'page_view', 'scroll',
+      'posthog_identify', 'posthog_reset'
+    ];
+
+    if (gtmBuiltInEvents.indexOf(eventName) !== -1 || eventName.indexOf('gtm.') === 0) {
       return;
     }
 
@@ -345,6 +372,8 @@ Key settings in PostHog initialization:
 | Duplicate identifies | Check that identify only fires on `posthog_identify` event |
 | Wrong user properties | Verify Data Layer Variable mappings match exactly |
 | GTM ID has newline | Remove trailing whitespace/newline from `NEXT_PUBLIC_GTM_ID` env var |
+| Duplicate page_view/scroll events | Ensure trigger excludes `page_view`, `scroll`, and all `gtm.*` events |
+| Events firing 3x | Check Universal Capture tag has the gtmBuiltInEvents filter array |
 
 ---
 
