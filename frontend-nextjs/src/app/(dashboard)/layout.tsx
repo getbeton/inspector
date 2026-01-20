@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { getSession } from '@/lib/auth/session'
 import { DashboardLayout } from '@/components/layout'
+import { AuthTracker } from '@/components/analytics'
 
 export default async function DashboardRootLayout({
   children,
@@ -21,6 +23,9 @@ export default async function DashboardRootLayout({
         workspace_name: session.workspace_name,
       }}
     >
+      <Suspense fallback={null}>
+        <AuthTracker />
+      </Suspense>
       {children}
     </DashboardLayout>
   )

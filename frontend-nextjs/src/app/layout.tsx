@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { GoogleTagManager } from '@next/third-parties/google'
 import { SessionProvider } from '@/components/auth/session-provider'
+import { PostHogIdentifyProvider } from '@/components/analytics'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -32,7 +33,9 @@ export default function RootLayout({
       {gtmId && <GoogleTagManager gtmId={gtmId} />}
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            <PostHogIdentifyProvider>{children}</PostHogIdentifyProvider>
+          </SessionProvider>
         </Providers>
       </body>
     </html>
