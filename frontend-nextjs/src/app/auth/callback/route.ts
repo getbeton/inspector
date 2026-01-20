@@ -79,8 +79,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Redirect to the requested page
-      return NextResponse.redirect(`${origin}${next}`)
+      // Redirect to the requested page with signup flag for new users
+      const isNewUser = !existingMember
+      const redirectUrl = new URL(`${origin}${next}`)
+      if (isNewUser) {
+        redirectUrl.searchParams.set('signup', 'true')
+      }
+      return NextResponse.redirect(redirectUrl.toString())
     }
   }
 

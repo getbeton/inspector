@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils/cn'
+import { resetIdentity } from '@/lib/analytics'
 
 interface HeaderProps {
   user: {
@@ -23,6 +24,16 @@ export function Header({ user, className, onMenuClick }: HeaderProps) {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
+
+      // Reset PostHog identity BEFORE clearing session
+      // This ensures the user is properly disassociated in analytics
+      resetIdentity()
+
+      // Clear login tracking from sessionStorage
+      Object.keys(sessionStorage)
+        .filter(key => key.startsWith('login_tracked_'))
+        .forEach(key => sessionStorage.removeItem(key))
+
       // Call the Next.js logout API route (relative URL)
       const response = await fetch('/api/auth/logout', {
         method: 'POST',
