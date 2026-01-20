@@ -10,5 +10,10 @@ export {
   trackEvent,
   trackPageView,
   identifyUser,
-  setWorkspaceContext
+  setWorkspaceContext,
+  trackSignup,
+  trackLogin,
+  resetIdentity
 } from './gtm'
+
+export { usePostHogIdentify } from './use-posthog-identify'

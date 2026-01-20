@@ -80,3 +80,52 @@ export function setWorkspaceContext(workspaceId: string, workspaceSlug: string):
     workspace_slug: workspaceSlug
   })
 }
+
+/**
+ * Track user signup event (new user registration).
+ * GTM will forward this to PostHog as 'user_signed_up' event.
+ */
+export function trackSignup(
+  userId: string,
+  properties?: Record<string, unknown>
+): void {
+  pushToDataLayer({
+    event: 'user_signup',
+    user_id: userId,
+    signup_method: 'google_oauth',
+    ...properties,
+  })
+}
+
+/**
+ * Track user login event (returning user).
+ * GTM will forward this to PostHog as 'user_logged_in' event.
+ */
+export function trackLogin(
+  userId: string,
+  properties?: Record<string, unknown>
+): void {
+  pushToDataLayer({
+    event: 'user_login',
+    user_id: userId,
+    login_method: 'google_oauth',
+    ...properties,
+  })
+}
+
+/**
+ * Reset PostHog identity on logout.
+ * GTM will call posthog.reset() to clear the identified user.
+ * Also calls posthog.reset() directly if available for immediate effect.
+ */
+export function resetIdentity(): void {
+  pushToDataLayer({ event: 'posthog_reset' })
+
+  // Also call directly if posthog is available
+  const posthog = typeof window !== 'undefined'
+    ? (window as unknown as { posthog?: { reset?: () => void } }).posthog
+    : null
+  if (posthog?.reset) {
+    posthog.reset()
+  }
+}
