@@ -127,7 +127,7 @@ export function PlaybookCard({ playbook, onToggleStatus, onEdit, onDelete }: Pla
         {/* IF/THEN Rule Display */}
         <div className="bg-muted/50 rounded-lg p-4 space-y-3">
           <div className="flex items-start gap-2">
-            <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">IF</span>
+            <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-sm">IF</span>
             <div className="flex flex-wrap items-center gap-1.5">
               {playbook.conditions.map((condition, i) => (
                 <span key={condition.signal_id} className="flex items-center gap-1.5">
@@ -144,7 +144,7 @@ export function PlaybookCard({ playbook, onToggleStatus, onEdit, onDelete }: Pla
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-success bg-success/10 px-2 py-0.5 rounded">THEN</span>
+            <span className="text-xs font-bold text-success bg-success/10 px-2 py-0.5 rounded-sm">THEN</span>
             <div className="flex items-center gap-2">
               {playbook.actions.map((action) => (
                 <div
@@ -207,7 +207,7 @@ export function PlaybookCard({ playbook, onToggleStatus, onEdit, onDelete }: Pla
             {playbook.webhook_url && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Webhook URL</span>
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded truncate max-w-[200px]">
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded-sm truncate max-w-[200px]">
                   {playbook.webhook_url}
                 </code>
               </div>

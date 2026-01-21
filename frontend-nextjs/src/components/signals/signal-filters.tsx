@@ -38,7 +38,7 @@ export function SignalFiltersBar({ filters, onFiltersChange, className }: Signal
       <select
         value={filters.status}
         onChange={(e) => updateFilter('status', e.target.value as SignalFilters['status'])}
-        className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
         <option value="all">All Status</option>
         <option value="active">Active</option>
@@ -49,7 +49,7 @@ export function SignalFiltersBar({ filters, onFiltersChange, className }: Signal
       <select
         value={filters.source}
         onChange={(e) => updateFilter('source', e.target.value as SignalFilters['source'])}
-        className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
         <option value="all">All Sources</option>
         <option value="Beton-Discovered">Beton-Discovered</option>
@@ -62,7 +62,7 @@ export function SignalFiltersBar({ filters, onFiltersChange, className }: Signal
         <select
           value={filters.minLift}
           onChange={(e) => updateFilter('minLift', parseFloat(e.target.value))}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >
           <option value="0">Any</option>
           <option value="1">1.0x+</option>
@@ -78,7 +78,7 @@ export function SignalFiltersBar({ filters, onFiltersChange, className }: Signal
         <select
           value={filters.minConfidence}
           onChange={(e) => updateFilter('minConfidence', parseFloat(e.target.value))}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >
           <option value="0">Any</option>
           <option value="0.9">90%+</option>

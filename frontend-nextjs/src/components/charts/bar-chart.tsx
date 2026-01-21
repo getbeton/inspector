@@ -169,7 +169,7 @@ export function GroupedBarChart({
                 {payload.map((p, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <div
-                      className="w-3 h-3 rounded"
+                      className="w-3 h-3 rounded-sm"
                       style={{ backgroundColor: p.color }}
                     />
                     <span className="text-sm">{p.name}:</span>

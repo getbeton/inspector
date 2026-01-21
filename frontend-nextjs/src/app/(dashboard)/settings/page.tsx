@@ -200,7 +200,7 @@ export default function SettingsPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className={cn(
-                    'w-10 h-10 rounded flex items-center justify-center font-semibold',
+                    'w-10 h-10 rounded-sm flex items-center justify-center font-semibold',
                     integration.status === 'connected' ? 'bg-success/10 text-success' :
                     integration.status === 'error' ? 'bg-destructive/10 text-destructive' :
                     'bg-muted text-muted-foreground'

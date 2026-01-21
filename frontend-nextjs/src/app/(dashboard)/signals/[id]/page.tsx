@@ -304,8 +304,8 @@ export default function SignalDetailPage() {
       <CollapsibleSection title="Signal Definition">
         <div className="grid grid-cols-2 gap-4 mb-3">
           <div>
-            <p className="text-sm text-muted-foreground">Event: <code className="bg-muted px-1 rounded">{signal.event}</code></p>
-            <p className="text-sm text-muted-foreground mt-1">Condition: <code className="bg-muted px-1 rounded">{signal.condition}</code></p>
+            <p className="text-sm text-muted-foreground">Event: <code className="bg-muted px-1 rounded-sm">{signal.event}</code></p>
+            <p className="text-sm text-muted-foreground mt-1">Condition: <code className="bg-muted px-1 rounded-sm">{signal.condition}</code></p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Source: {signal.source}</p>
