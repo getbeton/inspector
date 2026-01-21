@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isBillingEnabled, BILLING_CONFIG } from '@/lib/utils/deployment';
+import { sendThresholdNotification } from '@/lib/email';
 
 // ============================================
 // Types
@@ -258,12 +259,30 @@ async function queueNotification(
     return false;
   }
 
-  // TODO: Integrate with email service (Resend) in BETON-116
-  // For now, just log that we would send the email
-  console.log(
-    `[Threshold Cron] Would send ${level} notification to workspace ${workspaceId} ` +
-      `(${workspaceName}): ${mtuCount}/${threshold} MTUs, emails: ${emails.join(', ')}`
-  );
+  // Send email notification via Resend
+  const emailResult = await sendThresholdNotification({
+    workspaceId,
+    workspaceName,
+    recipientEmails: emails,
+    notificationLevel: level,
+    mtuCount,
+    threshold,
+    settingsUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.betoninspector.com'}/settings/billing`,
+  });
+
+  if (!emailResult.success) {
+    console.error(
+      `[Threshold Cron] Failed to send ${level} email for workspace ${workspaceId}:`,
+      emailResult.error
+    );
+    // Note: We don't return false here because the notification flag is already set
+    // The email service logs in dev mode, so this is expected behavior
+  } else {
+    console.log(
+      `[Threshold Cron] Sent ${level} notification to workspace ${workspaceId} ` +
+        `(${workspaceName}): ${mtuCount}/${threshold} MTUs, emails: ${emails.join(', ')}`
+    );
+  }
 
   return true;
 }
