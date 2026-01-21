@@ -1,0 +1,309 @@
+'use client';
+
+/**
+ * Billing Status Card
+ *
+ * Displays the current billing status, MTU usage, and subscription details.
+ * Used in settings page and dashboard to show billing information.
+ *
+ * Features:
+ * - MTU usage progress bar
+ * - Subscription status badge
+ * - Payment method info
+ * - Quick actions (add card, manage billing)
+ */
+
+import { CreditCard, ExternalLink, Settings, AlertTriangle } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress, ProgressTrack, ProgressIndicator } from '@/components/ui/progress';
+import { Spinner } from '@/components/ui/spinner';
+import { useBillingStatus, usePaymentMethods, useCreatePortalSession } from '@/lib/hooks/use-billing';
+import { CardLinkingModal } from './card-linking-modal';
+
+// ============================================
+// Types
+// ============================================
+
+interface BillingStatusCardProps {
+  /**
+   * Show compact version with less detail.
+   */
+  compact?: boolean;
+  /**
+   * Callback when card is added successfully.
+   */
+  onCardAdded?: () => void;
+}
+
+// ============================================
+// Helper Components
+// ============================================
+
+function StatusBadge({ status }: { status: string }) {
+  const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+    active: 'default',
+    free: 'secondary',
+    card_required: 'destructive',
+    suspended: 'destructive',
+  };
+
+  const labels: Record<string, string> = {
+    active: 'Active',
+    free: 'Free Tier',
+    card_required: 'Card Required',
+    suspended: 'Suspended',
+  };
+
+  return (
+    <Badge variant={variants[status] || 'outline'}>
+      {labels[status] || status}
+    </Badge>
+  );
+}
+
+function UsageProgressBar({
+  current,
+  limit,
+  percentUsed,
+}: {
+  current: number;
+  limit: number;
+  percentUsed: number;
+}) {
+  // Determine color based on usage
+  let indicatorClass = 'bg-primary';
+  if (percentUsed >= 100) {
+    indicatorClass = 'bg-destructive';
+  } else if (percentUsed >= 95) {
+    indicatorClass = 'bg-destructive';
+  } else if (percentUsed >= 90) {
+    indicatorClass = 'bg-warning';
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">Monthly Tracked Users (MTU)</span>
+        <span className="font-medium">
+          {current.toLocaleString()} / {limit.toLocaleString()}
+        </span>
+      </div>
+      <Progress value={Math.min(100, percentUsed)}>
+        <ProgressTrack>
+          <ProgressIndicator className={indicatorClass} />
+        </ProgressTrack>
+      </Progress>
+      {percentUsed >= 90 && (
+        <div className="flex items-center gap-1 text-xs text-warning">
+          <AlertTriangle className="size-3" />
+          <span>
+            {percentUsed >= 100
+              ? 'Free tier limit exceeded'
+              : `${Math.round(percentUsed)}% of free tier used`}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaymentMethodDisplay({
+  paymentMethods,
+}: {
+  paymentMethods: Array<{
+    id: string;
+    cardBrand: string | null;
+    cardLastFour: string | null;
+    isDefault: boolean;
+  }>;
+}) {
+  const defaultMethod = paymentMethods.find((pm) => pm.isDefault) || paymentMethods[0];
+
+  if (!defaultMethod) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <CreditCard className="size-4" />
+        <span>No payment method</span>
+      </div>
+    );
+  }
+
+  const brandIcons: Record<string, string> = {
+    visa: '💳',
+    mastercard: '💳',
+    amex: '💳',
+    discover: '💳',
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span>{brandIcons[defaultMethod.cardBrand?.toLowerCase() || ''] || '💳'}</span>
+      <span className="capitalize">{defaultMethod.cardBrand || 'Card'}</span>
+      <span className="text-muted-foreground">•••• {defaultMethod.cardLastFour}</span>
+    </div>
+  );
+}
+
+// ============================================
+// Main Component
+// ============================================
+
+export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatusCardProps) {
+  const { data: billingStatus, isLoading: statusLoading, error: statusError } = useBillingStatus();
+  const { data: paymentMethods = [], isLoading: methodsLoading } = usePaymentMethods();
+  const portalSession = useCreatePortalSession();
+
+  const isLoading = statusLoading || methodsLoading;
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Spinner className="size-6" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Error state
+  if (statusError) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <div className="text-center text-sm text-muted-foreground">
+            Unable to load billing information
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // No billing status (billing might be disabled)
+  if (!billingStatus) {
+    return null;
+  }
+
+  // Compact version for dashboard
+  if (compact) {
+    return (
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Billing</span>
+                <StatusBadge status={billingStatus.status} />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {billingStatus.mtu.current.toLocaleString()} / {billingStatus.mtu.limit.toLocaleString()} MTU
+              </div>
+            </div>
+            {!billingStatus.hasPaymentMethod && billingStatus.mtu.percentUsed >= 80 && (
+              <CardLinkingModal
+                trigger={<Button size="sm">Add Card</Button>}
+                onSuccess={onCardAdded}
+              />
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Full version for settings
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Billing</CardTitle>
+            <CardDescription>
+              Manage your subscription and payment methods
+            </CardDescription>
+          </div>
+          <StatusBadge status={billingStatus.status} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* MTU Usage */}
+        <UsageProgressBar
+          current={billingStatus.mtu.current}
+          limit={billingStatus.mtu.limit}
+          percentUsed={billingStatus.mtu.percentUsed}
+        />
+
+        {/* Subscription Info */}
+        {billingStatus.subscription.hasSubscription && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Subscription</div>
+            <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant="outline" className="capitalize">
+                  {billingStatus.subscription.status}
+                </Badge>
+              </div>
+              {billingStatus.subscription.currentPeriodEnd && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Current period ends</span>
+                  <span>
+                    {new Date(billingStatus.subscription.currentPeriodEnd).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Payment Method */}
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Payment Method</div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <PaymentMethodDisplay paymentMethods={paymentMethods} />
+          </div>
+        </div>
+
+        {/* Pricing Info */}
+        <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
+          <div className="text-sm font-medium">Pricing</div>
+          <div className="text-xs text-muted-foreground">
+            Free tier: {billingStatus.mtu.limit.toLocaleString()} MTU/month
+          </div>
+          <div className="text-xs text-muted-foreground">
+            After free tier: $0.02 per MTU
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="flex gap-2">
+        {!billingStatus.hasPaymentMethod ? (
+          <CardLinkingModal
+            trigger={
+              <Button>
+                <CreditCard />
+                Add Payment Method
+              </Button>
+            }
+            onSuccess={onCardAdded}
+          />
+        ) : (
+          <Button
+            variant="outline"
+            onClick={() => portalSession.mutate()}
+            disabled={portalSession.isPending}
+          >
+            {portalSession.isPending ? (
+              <Spinner className="size-4" />
+            ) : (
+              <Settings />
+            )}
+            Manage Billing
+            <ExternalLink className="size-3" />
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}
