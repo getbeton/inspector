@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/mtu-tracking",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/threshold-notifications",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
