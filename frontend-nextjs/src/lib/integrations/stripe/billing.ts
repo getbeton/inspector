@@ -177,6 +177,25 @@ function getStripe(): Stripe | null {
   return stripeInstance;
 }
 
+/**
+ * Gets the Stripe client instance for direct API access.
+ * Use this only when the high-level functions don't cover your use case.
+ *
+ * @throws {StripeBillingDisabledError} If Stripe is disabled or not configured
+ */
+export function getStripeClient(): Stripe {
+  if (!shouldUseStripe()) {
+    throw new StripeBillingDisabledError();
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    throw new StripeBillingDisabledError();
+  }
+
+  return stripe;
+}
+
 // ============================================
 // Error Handling
 // ============================================
