@@ -1,0 +1,75 @@
+/**
+ * Billing Module
+ *
+ * Handles MTU-based billing for Beton Inspector cloud deployments.
+ * All billing features are automatically disabled in self-hosted mode.
+ */
+
+// MTU Calculation Service
+export {
+  calculateMTU,
+  getMTUHistory,
+  getCurrentBillingCycleMTU,
+  getThresholdStatus,
+  storeMTUTracking,
+  markMtuAsReportedToStripe,
+  getUnreportedMtuRecords,
+  invalidateCache as invalidateMtuCache,
+  type MTUResult,
+  type MTUHistory,
+  type ThresholdStatus,
+  type MTUCalculationOptions,
+} from './mtu-service';
+
+// Re-export deployment utilities for convenience
+export {
+  isBillingEnabled,
+  isCloudDeployment,
+  isSelfHosted,
+  shouldTrackMtu,
+  shouldUseStripe,
+  getMtuLimit,
+  BILLING_CONFIG,
+} from '@/lib/utils/deployment';
+
+// Re-export Stripe billing functions
+export {
+  // Error types
+  StripeBillingError,
+  StripeCardDeclinedError,
+  StripeInvalidRequestError,
+  StripeAuthenticationError,
+  StripeRateLimitError,
+  StripeBillingDisabledError,
+  // Customer operations
+  createCustomer as createBillingCustomer,
+  getCustomer as getBillingCustomer,
+  updateCustomer as updateBillingCustomer,
+  // Subscription operations
+  createSubscription as createBillingSubscription,
+  getSubscription as getBillingSubscription,
+  cancelSubscription as cancelBillingSubscription,
+  pauseSubscription as pauseBillingSubscription,
+  resumeSubscription as resumeBillingSubscription,
+  // Meter operations
+  recordMeterEvent,
+  // Payment operations
+  createSetupIntent,
+  listPaymentMethods,
+  setDefaultPaymentMethod,
+  createBillingPortalSession,
+  // Webhook
+  constructWebhookEvent,
+  // Utilities
+  isBillingConfigured,
+  getMtuPriceId,
+  getMtuMeterId,
+  // Types
+  type BillingResult,
+  type CreateCustomerParams,
+  type CreateSubscriptionParams,
+  type RecordMeterEventParams,
+  type SetupIntentResult,
+  type PaymentMethodInfo,
+  type BillingPortalSessionResult,
+} from '@/lib/integrations/stripe/billing';
