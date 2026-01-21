@@ -42,6 +42,25 @@ export {
   type CycleTransitionResult,
 } from './cycle-service';
 
+// Billing Enforcement Service
+export {
+  // Main functions
+  getAccessStatus,
+  checkAccess,
+  isOverThreshold,
+  requiresCardLink,
+  getBlockReason,
+  getThresholdPercentage,
+  getThresholdWarningLevel,
+  // API route helpers
+  enforceAccess,
+  checkAccessForRequest,
+  // Types
+  type AccessStatus,
+  type AccessCheckResult,
+  type AccessStatusType,
+} from './enforcement-service';
+
 // Re-export deployment utilities for convenience
 export {
   isBillingEnabled,
