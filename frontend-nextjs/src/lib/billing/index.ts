@@ -21,6 +21,27 @@ export {
   type MTUCalculationOptions,
 } from './mtu-service';
 
+// Billing Cycle Management Service
+export {
+  // Functions
+  initializeBillingCycle,
+  getCurrentBillingCycle,
+  getNextBillingCycle,
+  isBillingCycleEnding,
+  getDaysRemainingInCycle,
+  transitionToNextCycle,
+  hasCycleEnded,
+  getWorkspacesNeedingCycleTransition,
+  // Date utilities
+  calculateCycleEndDate,
+  getDaysBetween,
+  isDateInCycle,
+  // Types
+  type BillingCycle,
+  type BillingCycleInfo,
+  type CycleTransitionResult,
+} from './cycle-service';
+
 // Re-export deployment utilities for convenience
 export {
   isBillingEnabled,
