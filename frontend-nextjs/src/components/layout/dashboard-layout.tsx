@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
+import { DashboardThresholdBanner, AccessBlockedOverlay } from '@/components/billing'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -37,6 +38,9 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Threshold warning banner (sticky) */}
+        <DashboardThresholdBanner />
+
         <Header user={user} onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Page content */}
@@ -44,6 +48,9 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* Access blocked overlay (when threshold exceeded without payment method) */}
+      <AccessBlockedOverlay />
     </div>
   )
 }
