@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { type SessionUser } from './constants'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // Re-export for convenience
 export { SESSION_COOKIE_NAME, type SessionUser } from './constants'
@@ -36,9 +37,12 @@ export async function getSession(): Promise<SessionUser | null> {
 
     console.log('[getSession] User found:', user.id, user.email)
 
-    // Get workspace membership
+    // Get workspace membership using admin client to bypass RLS
+    // This is safe because we've already authenticated the user above
+    // and we're only fetching THEIR membership (filtered by user_id)
     console.log('[getSession] Querying workspace_members for user:', user.id)
-    const { data: rawMembership, error: membershipError } = await supabase
+    const adminClient = createAdminClient()
+    const { data: rawMembership, error: membershipError } = await adminClient
       .from('workspace_members')
       .select('workspace_id, role, workspaces(id, name, slug)')
       .eq('user_id', user.id)
