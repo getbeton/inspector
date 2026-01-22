@@ -21,20 +21,35 @@ export async function getSession(): Promise<SessionUser | null> {
     const supabase = await createClient()
 
     // Get authenticated user from Supabase
+    console.log('[getSession] Calling supabase.auth.getUser()...')
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    if (authError) {
+      console.log('[getSession] Auth error:', authError.message)
       return null
     }
 
+    if (!user) {
+      console.log('[getSession] No user found')
+      return null
+    }
+
+    console.log('[getSession] User found:', user.id, user.email)
+
     // Get workspace membership
-    const { data: rawMembership } = await supabase
+    console.log('[getSession] Querying workspace_members for user:', user.id)
+    const { data: rawMembership, error: membershipError } = await supabase
       .from('workspace_members')
       .select('workspace_id, role, workspaces(id, name, slug)')
       .eq('user_id', user.id)
       .single()
 
+    if (membershipError) {
+      console.log('[getSession] Workspace membership query error:', membershipError.message, membershipError.code)
+    }
+
     const membership = rawMembership as WorkspaceMembership | null
+    console.log('[getSession] Membership found:', !!membership, membership?.workspace_id)
 
     // Build session user object
     const sessionUser: SessionUser = {
@@ -46,9 +61,10 @@ export async function getSession(): Promise<SessionUser | null> {
       role: membership?.role
     }
 
+    console.log('[getSession] Returning session for:', sessionUser.sub, 'workspace:', sessionUser.workspace_id)
     return sessionUser
   } catch (error) {
-    console.error('Failed to get session:', error)
+    console.error('[getSession] Exception:', error)
     return null
   }
 }
