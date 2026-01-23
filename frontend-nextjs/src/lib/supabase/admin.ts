@@ -16,6 +16,17 @@ export function createAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+  // Debug logging to diagnose missing env vars in Preview environments
+  console.log('[Admin Client] Environment check:', {
+    hasSupabaseUrl: !!supabaseUrl,
+    supabaseUrlPrefix: supabaseUrl?.substring(0, 30),
+    hasServiceRoleKey: !!serviceRoleKey,
+    serviceRoleKeyLength: serviceRoleKey?.length ?? 0,
+    serviceRoleKeyPrefix: serviceRoleKey?.substring(0, 20),
+    nodeEnv: process.env.NODE_ENV,
+    vercelEnv: process.env.VERCEL_ENV,
+  })
+
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing Supabase admin configuration (SUPABASE_SERVICE_ROLE_KEY)')
   }
