@@ -39,7 +39,11 @@ export async function signInWithGoogle() {
     provider: 'google',
     options: {
       // Redirect to Next.js auth callback handler (handles session + workspace creation)
-      redirectTo: `${origin}/auth/callback`
+      redirectTo: `${origin}/auth/callback`,
+      // Force Google to show account picker even if user is already logged in
+      queryParams: {
+        prompt: 'select_account'
+      }
     }
   })
 
