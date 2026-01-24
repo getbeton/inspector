@@ -11,280 +11,358 @@ Use this skill to add a new integration following Beton's established patterns (
 
 ### Step 1: Create the integration client
 
-Create `backend/app/integrations/<service>_client.py`:
+Create `frontend-nextjs/src/lib/integrations/<service>/client.ts`:
 
-```python
-"""
-<Service> integration client.
+```typescript
+/**
+ * <Service> integration client.
+ *
+ * Handles authentication and API communication with <Service>.
+ */
+import { createIntegrationError } from '../types'
 
-Handles authentication and API communication with <Service>.
-"""
-import logging
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+const <SERVICE>_API_BASE = 'https://api.<service>.com/v1'
 
-import httpx
+export interface <Service>ClientConfig {
+  apiKey: string
+  // Add other config options
+}
 
-logger = logging.getLogger(__name__)
+export class <Service>Client {
+  private apiKey: string
+  private baseUrl: string
 
+  constructor(config: <Service>ClientConfig) {
+    if (!config.apiKey) {
+      throw createIntegrationError(
+        '<Service> API key is required',
+        'INVALID_CONFIG'
+      )
+    }
 
-class <Service>Error(Exception):
-    """Base exception for <Service> API errors."""
-    pass
+    this.apiKey = config.apiKey
+    this.baseUrl = <SERVICE>_API_BASE
+  }
 
+  private async fetch<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`
 
-class <Service>AuthError(<Service>Error):
-    """Authentication failed."""
-    pass
-
-
-class <Service>Client:
-    """
-    Client for <Service> API.
-
-    Usage:
-        client = <Service>Client(api_key="...")
-        data = client.get_<entity>()
-    """
-
-    BASE_URL = "https://api.<service>.com/v1"
-
-    def __init__(self, api_key: str, **kwargs):
-        """
-        Initialize client.
-
-        Args:
-            api_key: <Service> API key
-        """
-        self.api_key = api_key
-        self._client = httpx.Client(
-            base_url=self.BASE_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=30.0
-        )
-
-    def _request(
-        self,
-        method: str,
-        path: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """Make authenticated request."""
-        try:
-            response = self._client.request(method, path, **kwargs)
-
-            if response.status_code == 401:
-                raise <Service>AuthError("Invalid API key")
-
-            response.raise_for_status()
-            return response.json()
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"<Service> API error: {e}")
-            raise <Service>Error(f"API error: {e.response.status_code}")
-
-    def health_check(self) -> Dict[str, Any]:
-        """Check API connectivity."""
-        try:
-            # Call a lightweight endpoint to verify credentials
-            self._request("GET", "/me")
-            return {"healthy": True, "status": "connected"}
-        except <Service>AuthError as e:
-            return {"healthy": False, "status": "auth_error", "error": str(e)}
-        except Exception as e:
-            return {"healthy": False, "status": "error", "error": str(e)}
-
-    def get_<entities>(self, limit: int = 100) -> List[Dict]:
-        """
-        Fetch <entities> from <Service>.
-
-        Args:
-            limit: Maximum records to fetch
-
-        Returns:
-            List of <entity> records
-        """
-        return self._request("GET", "/<entities>", params={"limit": limit})
-
-    # Add more methods as needed...
-
-
-def get_<service>_client(
-    db,
-    config_manager
-) -> <Service>Client:
-    """
-    Factory function to create <Service>Client from stored config.
-
-    Args:
-        db: Database session
-        config_manager: ConfigManager instance
-
-    Returns:
-        Configured <Service>Client
-
-    Raises:
-        ValueError: If integration not configured
-    """
-    config = config_manager.get_integration("<service>")
-
-    if not config or not config.get("api_key"):
-        raise ValueError("<Service> integration not configured")
-
-    return <Service>Client(api_key=config["api_key"])
-```
-
-### Step 2: Add configuration settings
-
-Add to `backend/app/config.py`:
-
-```python
-class Settings(BaseSettings):
-    # ... existing settings ...
-
-    # <Service> Integration (optional - loaded from DB)
-    <service>_api_key: Optional[str] = None
-
-    class Config:
-        env_file = ".env"
-```
-
-### Step 3: Create API endpoints
-
-Create `backend/app/api/endpoints/<service>.py`:
-
-```python
-"""<Service> integration endpoints."""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from app.database import get_db
-from app.auth import get_current_user
-from app.core.config_manager import ConfigManager
-from app.core.encryption import EncryptionService
-from app.config import settings
-from app.integrations.<service>_client import (
-    <Service>Client,
-    <Service>Error,
-    <Service>AuthError,
-    get_<service>_client
-)
-
-router = APIRouter(prefix="/<service>", tags=["<service>"])
-
-
-@router.get("/health")
-async def health_check(db: Session = Depends(get_db)):
-    """Check <Service> connection health."""
-    try:
-        encryption = EncryptionService(settings.beton_encryption_key)
-        config_manager = ConfigManager(db, encryption)
-        client = get_<service>_client(db, config_manager)
-        return client.health_check()
-    except ValueError as e:
-        return {"healthy": False, "status": "not_configured", "error": str(e)}
-    except Exception as e:
-        return {"healthy": False, "status": "error", "error": str(e)}
-
-
-@router.post("/configure")
-async def configure_integration(
-    api_key: str,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    """Configure <Service> integration."""
-    # Validate API key by making a test request
-    try:
-        client = <Service>Client(api_key=api_key)
-        health = client.health_check()
-
-        if not health["healthy"]:
-            raise HTTPException(400, f"Invalid API key: {health.get('error')}")
-
-    except <Service>AuthError as e:
-        raise HTTPException(401, str(e))
-
-    # Store encrypted API key
-    encryption = EncryptionService(settings.beton_encryption_key)
-    config_manager = ConfigManager(db, encryption)
-    config_manager.set_integration("<service>", {
-        "api_key": api_key,
-        "configured_at": datetime.utcnow().isoformat(),
-        "configured_by": current_user.id
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
     })
 
-    return {"message": "<Service> configured successfully"}
+    if (!response.ok) {
+      const isRetryable = response.status === 429 || response.status >= 500
+      throw createIntegrationError(
+        `<Service> API error: ${response.statusText}`,
+        'API_ERROR',
+        response.status,
+        isRetryable
+      )
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Test the API connection
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      // Call a lightweight endpoint to verify credentials
+      await this.fetch<unknown>('/me')
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Fetch <entities> from <Service>
+   */
+  async get<Entities>(options: {
+    limit?: number
+    cursor?: string
+  } = {}): Promise<{ results: unknown[]; next?: string }> {
+    const { limit = 100, cursor } = options
+
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (cursor) {
+      params.append('cursor', cursor)
+    }
+
+    return this.fetch<{ results: unknown[]; next?: string }>(
+      `/<entities>?${params.toString()}`
+    )
+  }
+
+  // Add more methods as needed...
+}
+
+/**
+ * Factory function to create a <Service> client
+ */
+export function create<Service>Client(
+  apiKey: string
+): <Service>Client {
+  return new <Service>Client({ apiKey })
+}
 ```
 
-### Step 4: Register the router
+### Step 2: Export from integrations index
 
-Add to `backend/app/main.py`:
+Add to `frontend-nextjs/src/lib/integrations/index.ts`:
 
-```python
-from app.api.endpoints.<service> import router as <service>_router
-
-app.include_router(<service>_router, prefix="/api")
+```typescript
+export * from './<service>/client'
 ```
 
-### Step 5: Add sync service (if data sync needed)
+### Step 3: Create API endpoints for integration management
 
-Create `backend/app/services/<service>_sync.py`:
+Create `frontend-nextjs/src/app/api/integrations/<service>/route.ts`:
 
-```python
-"""Sync service for <Service> data."""
-from typing import List, Dict
-from sqlalchemy.orm import Session
+```typescript
+/**
+ * <Service> integration endpoints
+ */
+import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { NextResponse } from 'next/server'
+import { <Service>Client } from '@/lib/integrations/<service>/client'
 
-from app.integrations.<service>_client import <Service>Client
+/**
+ * GET /api/integrations/<service>
+ * Check integration status and health
+ */
+export async function GET() {
+  try {
+    const supabase = await createClient()
 
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
 
-class <Service>SyncService:
-    """Syncs data between <Service> and Beton."""
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
 
-    def __init__(self, db: Session, client: <Service>Client):
-        self.db = db
-        self.client = client
+    const membership = await getWorkspaceMembership()
 
-    def sync_<entities>(self, limit: int = 1000) -> Dict:
-        """
-        Sync <entities> from <Service>.
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
 
-        Returns:
-            Sync result summary
-        """
-        # Fetch from <Service>
-        records = self.client.get_<entities>(limit=limit)
+    // Get stored integration config
+    const { data: integration } = await supabase
+      .from('integrations')
+      .select('*')
+      .eq('workspace_id', membership.workspaceId)
+      .eq('name', '<service>')
+      .single()
 
-        # Process and store
-        synced = 0
-        errors = 0
+    if (!integration?.config?.api_key) {
+      return NextResponse.json({
+        connected: false,
+        status: 'not_configured'
+      })
+    }
 
-        for record in records:
-            try:
-                self._upsert_<entity>(record)
-                synced += 1
-            except Exception as e:
-                errors += 1
+    // Test connection
+    const client = new <Service>Client({
+      apiKey: integration.config.api_key
+    })
 
-        self.db.commit()
+    const isHealthy = await client.testConnection()
 
-        return {
-            "total": len(records),
-            "synced": synced,
-            "errors": errors
+    return NextResponse.json({
+      connected: isHealthy,
+      status: isHealthy ? 'connected' : 'error',
+      configured_at: integration.updated_at
+    })
+  } catch (error) {
+    console.error('Error checking <service> status:', error)
+    return NextResponse.json({
+      connected: false,
+      status: 'error',
+      error: 'Failed to check connection'
+    })
+  }
+}
+
+/**
+ * POST /api/integrations/<service>
+ * Configure the integration
+ */
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient()
+    const body = await request.json()
+    const { api_key } = body
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    if (!api_key) {
+      return NextResponse.json({ error: 'API key is required' }, { status: 400 })
+    }
+
+    // Validate API key by testing connection
+    const client = new <Service>Client({ apiKey: api_key })
+    const isValid = await client.testConnection()
+
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Invalid API key - connection test failed' },
+        { status: 400 }
+      )
+    }
+
+    // Store or update integration config
+    const { error } = await supabase
+      .from('integrations')
+      .upsert({
+        workspace_id: membership.workspaceId,
+        name: '<service>',
+        config: { api_key },
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'workspace_id,name'
+      })
+
+    if (error) {
+      console.error('Error saving integration:', error)
+      return NextResponse.json({ error: 'Failed to save integration' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      message: '<Service> configured successfully',
+      connected: true
+    })
+  } catch (error) {
+    console.error('Error configuring <service>:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/integrations/<service>
+ * Disconnect the integration
+ */
+export async function DELETE() {
+  try {
+    const supabase = await createClient()
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    const { error } = await supabase
+      .from('integrations')
+      .delete()
+      .eq('workspace_id', membership.workspaceId)
+      .eq('name', '<service>')
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to disconnect' }, { status: 500 })
+    }
+
+    return NextResponse.json({ message: '<Service> disconnected' })
+  } catch (error) {
+    console.error('Error disconnecting <service>:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+```
+
+### Step 4: Add sync service (if data sync needed)
+
+Create `frontend-nextjs/src/lib/integrations/<service>/sync.ts`:
+
+```typescript
+/**
+ * Sync service for <Service> data
+ */
+import { SupabaseClient } from '@supabase/supabase-js'
+import { <Service>Client } from './client'
+
+export interface SyncResult {
+  total: number
+  synced: number
+  errors: number
+}
+
+export class <Service>SyncService {
+  constructor(
+    private supabase: SupabaseClient,
+    private client: <Service>Client,
+    private workspaceId: string
+  ) {}
+
+  async sync<Entities>(limit: number = 1000): Promise<SyncResult> {
+    const result: SyncResult = {
+      total: 0,
+      synced: 0,
+      errors: 0
+    }
+
+    try {
+      const { results } = await this.client.get<Entities>({ limit })
+      result.total = results.length
+
+      for (const record of results) {
+        try {
+          await this.upsert<Entity>(record)
+          result.synced++
+        } catch (error) {
+          console.error('Error syncing record:', error)
+          result.errors++
         }
+      }
+    } catch (error) {
+      console.error('Sync failed:', error)
+      throw error
+    }
 
-    def _upsert_<entity>(self, data: Dict):
-        """Upsert a single <entity> record."""
-        # Implementation
-        pass
+    return result
+  }
+
+  private async upsert<Entity>(data: unknown): Promise<void> {
+    // Transform and upsert the record
+    // Implementation depends on data structure
+  }
+}
 ```
 
-### Step 6: Add UI in Next.js settings
+### Step 5: Add UI in settings page
 
 Add to `frontend-nextjs/src/app/(dashboard)/settings/integrations/page.tsx`:
 
@@ -305,29 +383,29 @@ Add to `frontend-nextjs/src/app/(dashboard)/settings/integrations/page.tsx`:
 
 | Integration | Client File | Purpose |
 |-------------|-------------|---------|
-| PostHog | `posthog.py` | Analytics events, persons |
-| Stripe | `stripe.py` | Payment, subscription data |
-| Apollo | `apollo.py` | Company enrichment |
-| Attio | `attio_client.py` | CRM sync (most comprehensive example) |
+| PostHog | `lib/integrations/posthog/client.ts` | Analytics events, persons, HogQL queries |
+| Stripe | `lib/integrations/stripe/client.ts` | Payment, subscription data |
+| Apollo | `lib/integrations/apollo/client.ts` | Company enrichment |
+| Attio | `lib/integrations/attio/client.ts` | CRM sync (most comprehensive example) |
 
 ---
 
 ## Security Notes
 
-1. **API keys are encrypted** using `EncryptionService` before storage
-2. **Never log API keys** - use masked versions for debugging
+1. **API keys stored in database** - Use the `integrations` table with workspace isolation
+2. **Never log API keys** - Use masked versions for debugging
 3. **Validate keys** before storing by making a test API call
-4. **Workspace isolation** - each workspace has its own integration config
+4. **Workspace isolation** - Each workspace has its own integration config
+5. **Server-side only** - Integration clients should only run in API routes, never on the client
 
 ---
 
 ## Checklist
 
-- [ ] Created client in `backend/app/integrations/<service>_client.py`
-- [ ] Added settings to `backend/app/config.py`
-- [ ] Created API endpoints in `backend/app/api/endpoints/<service>.py`
-- [ ] Registered router in `backend/app/main.py`
-- [ ] Added sync service (if needed) in `backend/app/services/<service>_sync.py`
-- [ ] Added UI in Next.js settings page
-- [ ] Added tests for client and endpoints
-- [ ] Documented required API key/scopes in README
+- [ ] Created client in `frontend-nextjs/src/lib/integrations/<service>/client.ts`
+- [ ] Exported from `lib/integrations/index.ts`
+- [ ] Created API endpoints in `app/api/integrations/<service>/route.ts`
+- [ ] Added sync service (if needed) in `lib/integrations/<service>/sync.ts`
+- [ ] Added UI in settings page
+- [ ] Tested locally with `npm run dev`
+- [ ] Ran `npm run build` before committing

@@ -1,273 +1,409 @@
 ---
 name: add-endpoint
-description: Scaffold a new FastAPI endpoint with Pydantic models and tests. Use when creating a new API endpoint or route handler.
+description: Scaffold a new Next.js API route with TypeScript types. Use when creating a new API endpoint or route handler.
 ---
 
 # /add-endpoint - Add New API Endpoint
 
-Use this skill to create a new FastAPI endpoint following Beton's established patterns.
+Use this skill to create a new Next.js API route following Beton's established patterns.
 
 ## Workflow
 
-### Step 1: Create the endpoint file
+### Step 1: Create the route file
 
-Create `backend/app/api/endpoints/<module>.py`:
+Create `frontend-nextjs/src/app/api/<module>/route.ts`:
 
-```python
-"""
-<Module Name> API endpoints.
+```typescript
+/**
+ * <Module Name> API endpoints.
+ *
+ * Provides endpoints for:
+ * - <List key functionality>
+ */
+import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-Provides endpoints for:
-- <List key functionality>
-"""
-import logging
-from typing import List, Optional
-from datetime import datetime
+/**
+ * GET /api/<module>
+ * List all <entities> for current workspace
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const searchParams = request.nextUrl.searchParams
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
+    // Parse query parameters
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
 
-from app.config import settings
-from app.database import get_db
-from app.auth import get_current_user
-from app.models import User  # Add other models as needed
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
 
-logger = logging.getLogger(__name__)
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
 
-router = APIRouter(prefix="/<module>", tags=["<module>"])
+    // Get user's workspace
+    const membership = await getWorkspaceMembership()
 
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
 
-# ============================================
-# Response Models
-# ============================================
+    // Build query with workspace isolation
+    const { data, error, count } = await supabase
+      .from('<table_name>')
+      .select('*', { count: 'exact' })
+      .eq('workspace_id', membership.workspaceId)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
 
-class <Entity>Response(BaseModel):
-    id: int
-    # Add fields
-    created_at: datetime
+    if (error) {
+      console.error('Error fetching <entities>:', error)
+      return NextResponse.json({ error: 'Failed to fetch <entities>' }, { status: 500 })
+    }
 
+    return NextResponse.json({
+      data,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        pages: count ? Math.ceil(count / limit) : 0
+      }
+    })
+  } catch (error) {
+    console.error('Error in GET /api/<module>:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 
-class <Entity>CreateRequest(BaseModel):
-    # Add fields for creation
-    pass
+/**
+ * POST /api/<module>
+ * Create a new <entity>
+ */
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient()
 
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
 
-# ============================================
-# Endpoints
-# ============================================
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
 
-@router.get("/", response_model=List[<Entity>Response])
-async def list_<entities>(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    List all <entities>.
+    // Get user's workspace
+    const membership = await getWorkspaceMembership()
 
-    Returns paginated list of <entities> for the current workspace.
-    """
-    # Implementation
-    pass
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
 
+    const body = await request.json()
+    const { name, ...otherFields } = body
 
-@router.get("/{<entity>_id}", response_model=<Entity>Response)
-async def get_<entity>(
-    <entity>_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get a single <entity> by ID."""
-    # Implementation
-    pass
+    if (!name) {
+      return NextResponse.json(
+        { error: 'name is required' },
+        { status: 400 }
+      )
+    }
 
+    // Create entity
+    const { data, error } = await supabase
+      .from('<table_name>')
+      .insert({
+        workspace_id: membership.workspaceId,
+        name,
+        ...otherFields
+      })
+      .select()
+      .single()
 
-@router.post("/", response_model=<Entity>Response)
-async def create_<entity>(
-    request: <Entity>CreateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new <entity>."""
-    # Implementation
-    pass
+    if (error) {
+      console.error('Error creating <entity>:', error)
+      return NextResponse.json({ error: 'Failed to create <entity>' }, { status: 500 })
+    }
+
+    return NextResponse.json({ data }, { status: 201 })
+  } catch (error) {
+    console.error('Error in POST /api/<module>:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 ```
 
-### Step 2: Register the router
+### Step 2: Create dynamic route (for single entity operations)
 
-Add to `backend/app/main.py`:
+Create `frontend-nextjs/src/app/api/<module>/[id]/route.ts`:
 
-```python
-from app.api.endpoints.<module> import router as <module>_router
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { NextResponse } from 'next/server'
 
-# In the router includes section:
-app.include_router(<module>_router, prefix="/api")
+interface RouteParams {
+  params: Promise<{ id: string }>
+}
+
+/**
+ * GET /api/<module>/[id]
+ * Get a single <entity> by ID
+ */
+export async function GET(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    const { data, error } = await supabase
+      .from('<table_name>')
+      .select('*')
+      .eq('id', id)
+      .eq('workspace_id', membership.workspaceId)
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json({ error: '<Entity> not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error in GET /api/<module>/[id]:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/<module>/[id]
+ * Update a <entity>
+ */
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+    const body = await request.json()
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    const { data, error } = await supabase
+      .from('<table_name>')
+      .update(body)
+      .eq('id', id)
+      .eq('workspace_id', membership.workspaceId)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to update <entity>' }, { status: 500 })
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error in PATCH /api/<module>/[id]:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/<module>/[id]
+ * Delete a <entity>
+ */
+export async function DELETE(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    const { error } = await supabase
+      .from('<table_name>')
+      .delete()
+      .eq('id', id)
+      .eq('workspace_id', membership.workspaceId)
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to delete <entity>' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error in DELETE /api/<module>/[id]:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 ```
 
-### Step 3: Add Pydantic models (if complex)
+### Step 3: Add TypeScript types (optional but recommended)
 
-For complex request/response models, consider adding to `backend/app/schemas/<module>.py`:
+Add to `frontend-nextjs/src/lib/supabase/types.ts` or create module-specific types:
 
-```python
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
+```typescript
+export interface <Entity> {
+  id: string
+  workspace_id: string
+  name: string
+  // Add other fields
+  created_at: string
+  updated_at: string
+}
 
+export interface <Entity>Insert {
+  workspace_id: string
+  name: string
+  // Add required fields
+}
 
-class <Entity>Base(BaseModel):
-    """Base model with shared fields."""
-    name: str = Field(..., min_length=1, max_length=255)
-    # Add other fields
-
-
-class <Entity>Create(<Entity>Base):
-    """Request model for creating."""
-    pass
-
-
-class <Entity>Response(<Entity>Base):
-    """Response model with DB fields."""
-    id: int
-    created_at: datetime
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
+export interface <Entity>Update {
+  name?: string
+  // Add optional fields
+}
 ```
 
-### Step 4: Create tests
-
-Add `backend/tests/test_<module>.py`:
-
-```python
-"""Tests for <module> endpoints."""
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
-
-from app.main import app
-
-client = TestClient(app)
-
-
-class Test<Module>Endpoints:
-    """Test suite for <module> endpoints."""
-
-    def test_list_<entities>_success(self):
-        """Test listing <entities>."""
-        # Mock auth
-        with patch("app.auth.get_current_user") as mock_user:
-            mock_user.return_value = MagicMock(id=1, workspace_id=1)
-
-            response = client.get("/api/<module>/")
-
-            assert response.status_code == 200
-            assert isinstance(response.json(), list)
-
-    def test_get_<entity>_not_found(self):
-        """Test getting non-existent <entity>."""
-        with patch("app.auth.get_current_user") as mock_user:
-            mock_user.return_value = MagicMock(id=1, workspace_id=1)
-
-            response = client.get("/api/<module>/99999")
-
-            assert response.status_code == 404
-
-    def test_create_<entity>_success(self):
-        """Test creating <entity>."""
-        with patch("app.auth.get_current_user") as mock_user:
-            mock_user.return_value = MagicMock(id=1, workspace_id=1)
-
-            response = client.post(
-                "/api/<module>/",
-                json={"name": "Test <Entity>"}
-            )
-
-            assert response.status_code in [200, 201]
-```
-
-### Step 5: Update API client (frontend)
+### Step 4: Add API client hook (for frontend consumption)
 
 Add to `frontend-nextjs/src/lib/api/<module>.ts`:
 
 ```typescript
-import { apiClient } from './client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 export interface <Entity> {
-  id: number;
+  id: string
+  name: string
   // Add fields
-  created_at: string;
+  created_at: string
 }
 
-export interface Create<Entity>Request {
-  // Add fields
+export function use<Entities>() {
+  return useQuery({
+    queryKey: ['<entities>'],
+    queryFn: async () => {
+      const res = await fetch('/api/<module>')
+      if (!res.ok) throw new Error('Failed to fetch <entities>')
+      return res.json()
+    }
+  })
 }
 
-export const <module>Api = {
-  list: () => apiClient.get<Entity[]>('/api/<module>/'),
+export function useCreate<Entity>() {
+  const queryClient = useQueryClient()
 
-  get: (id: number) => apiClient.get<Entity>(`/api/<module>/${id}`),
-
-  create: (data: Create<Entity>Request) =>
-    apiClient.post<Entity>('/api/<module>/', data),
-};
+  return useMutation({
+    mutationFn: async (data: Partial<<Entity>>) => {
+      const res = await fetch('/api/<module>', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (!res.ok) throw new Error('Failed to create <entity>')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['<entities>'] })
+    }
+  })
+}
 ```
 
 ---
 
 ## Reference Pattern
 
-See `backend/app/api/endpoints/attio.py` for a comprehensive example with:
-- Response models (Pydantic)
-- Error handling (HTTPException)
-- Background tasks
-- Health checks
-- Logging
+See `frontend-nextjs/src/app/api/signals/route.ts` for a comprehensive example with:
+- Query parameters parsing
+- Pagination
+- Workspace isolation
+- Error handling
+- Related data (joins)
 
 ---
 
 ## Checklist
 
-- [ ] Created endpoint file in `backend/app/api/endpoints/`
-- [ ] Registered router in `backend/app/main.py`
-- [ ] Added Pydantic request/response models
-- [ ] Created tests in `backend/tests/`
-- [ ] Updated frontend API client
-- [ ] Tested locally with `docker-compose exec backend pytest`
+- [ ] Created route file in `frontend-nextjs/src/app/api/<module>/route.ts`
+- [ ] Created dynamic route for single-entity operations (if needed)
+- [ ] Added TypeScript types
+- [ ] Added React Query hooks for frontend
+- [ ] Tested locally with `npm run dev`
+- [ ] Ran `npm run build` before committing
 
 ---
 
 ## Common Patterns
 
 ### Workspace isolation (multi-tenant)
-```python
-@router.get("/")
-async def list_items(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    return db.query(Item).filter(
-        Item.workspace_id == current_user.workspace_id
-    ).all()
+```typescript
+const membership = await getWorkspaceMembership()
+const { data } = await supabase
+  .from('table')
+  .select('*')
+  .eq('workspace_id', membership.workspaceId)
 ```
 
 ### Error handling
-```python
-from fastapi import HTTPException
+```typescript
+if (!data) {
+  return NextResponse.json({ error: 'Not found' }, { status: 404 })
+}
 
-if not item:
-    raise HTTPException(status_code=404, detail="Item not found")
-
-if not current_user.can_edit(item):
-    raise HTTPException(status_code=403, detail="Not authorized")
+if (!user) {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+}
 ```
 
-### Background tasks
-```python
-from fastapi import BackgroundTasks
-
-@router.post("/sync")
-async def trigger_sync(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_sync_job)
-    return {"message": "Sync started"}
+### Query with relationships
+```typescript
+const { data } = await supabase
+  .from('signals')
+  .select(`
+    *,
+    accounts (
+      id,
+      name,
+      domain
+    )
+  `)
+  .eq('workspace_id', workspaceId)
 ```

@@ -18,6 +18,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchSession = async () => {
+      console.log('[SessionProvider] Fetching session from /api/session...')
       try {
         const response = await fetch('/api/session', {
           method: 'GET',
@@ -27,17 +28,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           credentials: 'include'
         })
 
+        console.log('[SessionProvider] Response status:', response.status)
+
         if (response.ok) {
           const data = await response.json()
+          console.log('[SessionProvider] Session data received:', {
+            hasData: !!data,
+            sub: data?.sub,
+            email: data?.email,
+            workspace_id: data?.workspace_id
+          })
           setSession(data)
         } else {
+          console.log('[SessionProvider] Response not OK, setting session to null')
           setSession(null)
         }
       } catch (err) {
-        console.error('Failed to fetch session:', err)
+        console.error('[SessionProvider] Failed to fetch session:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch session')
       } finally {
         setLoading(false)
+        console.log('[SessionProvider] Loading complete')
       }
     }
 
