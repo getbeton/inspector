@@ -11,161 +11,133 @@ Use this skill to add a new signal type to Beton's heuristics engine. Signals de
 
 ### Step 1: Define the signal detector
 
-Add to `backend/app/heuristics/signals.py` (or create a new file in the heuristics folder):
+Create `frontend-nextjs/src/lib/heuristics/signals/detectors/<signal-name>.ts`:
 
-```python
-class <SignalName>Detector(BaseSignalDetector):
-    """
-    Detects <description of what this signal identifies>.
+```typescript
+/**
+ * <Signal Name> Detector
+ * Detects <description of what this signal identifies>
+ */
 
-    Triggers when:
-    - <Condition 1>
-    - <Condition 2>
+import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
+import { signalExists, createDetectedSignal, daysAgo } from '../helpers'
 
-    Signal value: <what the value represents>
-    """
-
-    SIGNAL_TYPE = "<signal_type_snake_case>"
-    SIGNAL_CATEGORY = "<expansion|churn|engagement|billing>"
-
-    def __init__(self, db: Session, config: Dict):
-        super().__init__(db, config)
-        # Get thresholds from config
-        self.threshold = config.get('signals', {}).get(
-            '<signal_type>_threshold', <default_value>
-        )
-
-    def detect(self, account_id: int) -> Optional[Signal]:
-        """
-        Detect <signal_type> for an account.
-
-        Args:
-            account_id: Account to check
-
-        Returns:
-            Signal if detected, None otherwise
-        """
-        account = self.db.query(Account).get(account_id)
-        if not account:
-            return None
-
-        # Your detection logic here
-        # Example: Check metrics, events, or account state
-        metric_value = self._get_metric(account_id, '<metric_name>')
-
-        if metric_value and metric_value > self.threshold:
-            return Signal(
-                account_id=account_id,
-                workspace_id=account.workspace_id,
-                type=self.SIGNAL_TYPE,
-                value=metric_value,
-                category=self.SIGNAL_CATEGORY,
-                timestamp=datetime.utcnow(),
-                metadata={
-                    'threshold': self.threshold,
-                    'actual_value': metric_value,
-                    # Add context for the signal
-                }
-            )
-
-        return None
-
-    def _get_metric(self, account_id: int, metric_name: str) -> Optional[float]:
-        """Get latest metric value for account."""
-        from .models import MetricSnapshot
-
-        snapshot = self.db.query(MetricSnapshot).filter(
-            MetricSnapshot.account_id == account_id,
-            MetricSnapshot.metric_name == metric_name
-        ).order_by(MetricSnapshot.snapshot_date.desc()).first()
-
-        return snapshot.metric_value if snapshot else None
-```
-
-### Step 2: Register the detector
-
-Add to `backend/app/heuristics/signal_processor.py` in `_init_signal_detectors()`:
-
-```python
-def _init_signal_detectors(self):
-    """Initialize all signal detectors."""
-    self.detectors = [
-        # ... existing detectors ...
-        <SignalName>Detector(self.db, self.config),
-    ]
-```
-
-### Step 3: Add configuration (optional)
-
-Add thresholds to `backend/app/heuristics/config.yaml` or the scoring config:
-
-```yaml
-signals:
-  <signal_type>_threshold: <value>
-  <signal_type>_weight: <scoring_weight>
-```
-
-### Step 4: Update scoring weights
-
-If the signal affects health/expansion/churn scores, add to `backend/app/heuristics/heuristics_engine.py`:
-
-```python
-SIGNAL_WEIGHTS = {
-    # ... existing weights ...
-    '<signal_type>': {
-        'health_impact': <-10 to +10>,      # Negative = bad for health
-        'expansion_impact': <-10 to +10>,   # Positive = expansion opportunity
-        'churn_impact': <-10 to +10>,       # Positive = churn risk
+export const <signalName>Detector: SignalDetectorDefinition = {
+  meta: {
+    name: '<signal_name_snake_case>',
+    category: '<expansion|churn|engagement|billing>',
+    description: '<Human-readable description>',
+    defaultConfig: {
+      threshold: <default_value>,
+      lookback_days: 1,
+      // Add other config options
     },
+  },
+
+  async detect(accountId: string, context: DetectorContext): Promise<DetectedSignal | null> {
+    const { supabase, workspaceId, config } = context
+    const threshold = config?.threshold ?? <default_threshold>
+    const lookbackDays = config?.lookback_days ?? 1
+
+    // Check for existing signal (prevent duplicates)
+    if (await signalExists(supabase, accountId, '<signal_name>', lookbackDays)) {
+      return null
+    }
+
+    // Your detection logic here
+    // Example: Query account data, metrics, or events
+
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('id', accountId)
+      .single()
+
+    if (!account) {
+      return null
+    }
+
+    // Calculate the metric or condition
+    const metricValue = <calculate_metric>
+
+    // Check if threshold is met
+    if (metricValue >= threshold) {
+      return createDetectedSignal(
+        accountId,
+        workspaceId,
+        '<signal_name>',
+        metricValue,
+        {
+          threshold,
+          actual_value: metricValue,
+          // Add relevant context for the signal
+        }
+      )
+    }
+
+    return null
+  },
 }
 ```
 
-### Step 5: Create tests
+### Step 2: Export the detector
 
-Add to `backend/tests/test_heuristics.py`:
+Add to `frontend-nextjs/src/lib/heuristics/signals/detectors/index.ts`:
 
-```python
-class Test<SignalName>Detector:
-    """Tests for <signal_type> detection."""
+```typescript
+export { <signalName>Detector } from './<signal-name>'
+```
 
-    def test_detects_when_threshold_exceeded(self, db_session, test_account):
-        """Signal fires when metric exceeds threshold."""
-        # Setup: Create metric above threshold
-        from app.heuristics.models import MetricSnapshot
+### Step 3: Register in the processor
 
-        MetricSnapshot(
-            account_id=test_account.id,
-            metric_name='<metric_name>',
-            metric_value=<above_threshold>,
-            snapshot_date=date.today()
-        )
-        db_session.commit()
+The detector will be automatically included via the detectors index.
 
-        # Act
-        detector = <SignalName>Detector(db_session, {})
-        signal = detector.detect(test_account.id)
+Verify in `frontend-nextjs/src/lib/heuristics/signals/processor.ts` that detectors are loaded from the index.
 
-        # Assert
-        assert signal is not None
-        assert signal.type == '<signal_type>'
-        assert signal.value == <expected_value>
+### Step 4: Add configuration (optional)
 
-    def test_no_signal_when_below_threshold(self, db_session, test_account):
-        """No signal when metric is below threshold."""
-        # Setup: Create metric below threshold
-        # ...
+If the signal needs workspace-specific configuration, add to the scoring config in `frontend-nextjs/src/lib/heuristics/scoring-config.ts`:
 
-        detector = <SignalName>Detector(db_session, {})
-        signal = detector.detect(test_account.id)
+```typescript
+export const SIGNAL_DEFAULTS = {
+  // ... existing signals ...
+  <signal_name>: {
+    threshold: <value>,
+    weight: <scoring_weight>,
+  },
+}
+```
 
-        assert signal is None
+### Step 5: Update scoring weights (if affects scores)
 
-    def test_no_signal_when_no_data(self, db_session, test_account):
-        """No signal when account has no metric data."""
-        detector = <SignalName>Detector(db_session, {})
-        signal = detector.detect(test_account.id)
+If the signal impacts health/expansion/churn scores, update `frontend-nextjs/src/lib/heuristics/engine.ts`:
 
-        assert signal is None
+```typescript
+const SIGNAL_WEIGHTS: Record<string, SignalWeight> = {
+  // ... existing weights ...
+  '<signal_name>': {
+    health_impact: <-10 to +10>,      // Negative = bad for health
+    expansion_impact: <-10 to +10>,   // Positive = expansion opportunity
+    churn_impact: <-10 to +10>,       // Positive = churn risk
+  },
+}
+```
+
+### Step 6: Test the detector
+
+Create tests or manually verify:
+
+```typescript
+// Manual test in API route or script
+import { <signalName>Detector } from '@/lib/heuristics/signals/detectors/<signal-name>'
+
+const result = await <signalName>Detector.detect(accountId, {
+  supabase,
+  workspaceId,
+  config: { threshold: 0.5 }
+})
+
+console.log(result)
 ```
 
 ---
@@ -179,28 +151,64 @@ class Test<SignalName>Detector:
 | `engagement` | User engagement patterns | Director signup, invites sent |
 | `billing` | Revenue-related signals | ARR decrease, upcoming renewal |
 
+---
+
 ## Existing Detectors (Reference)
 
-Located in `backend/app/heuristics/signals.py`:
+Located in `frontend-nextjs/src/lib/heuristics/signals/detectors/`:
 
-- `UsageSpikeDetector` - Detects sudden usage increases
-- `UsageDropDetector` - Detects usage declines
-- `NearingPaywallDetector` - Approaching plan limits
-- `DirectorSignupDetector` - Decision-maker signed up
-- `InvitesSentDetector` - Team expansion activity
-- `HighNPSDetector` / `LowNPSDetector` - NPS-based signals
-- `InactivityDetector` - No recent activity
-- `TrialEndingDetector` - Trial expiration approaching
-- `UpcomingRenewalDetector` - Contract renewal due
-- ... and more (see `signal_processor.py:36-57`)
+- `usage-spike.ts` - Detects significant usage increases (>20%)
+- `usage-drop.ts` - Detects usage declines
+- `usage-wow-decline.ts` - Week-over-week usage decline
+- `nearing-paywall.ts` - Approaching plan limits
+- `approaching-seat-limit.ts` - Nearing seat capacity
+- `director-signup.ts` - Decision-maker signed up
+- `invites-sent.ts` - Team expansion activity
+- `high-nps.ts` / `low-nps.ts` - NPS-based signals
+- `inactivity.ts` - No recent activity
+- `trial-ending.ts` - Trial expiration approaching
+- `upcoming-renewal.ts` - Contract renewal due
+- `arr-decrease.ts` - Revenue decline
+- `future-cancellation.ts` - Scheduled cancellation
+- `health-score-decrease.ts` - Health score dropped
+- `incomplete-onboarding.ts` - Onboarding not finished
+- `overage.ts` - Usage exceeded plan limits
+- `free-decision-maker.ts` - Decision-maker on free plan
+- `new-department-user.ts` - User from new department
+- `upgrade-page-visit.ts` - Visited upgrade/pricing page
+
+---
+
+## Helper Functions
+
+Use the helpers from `frontend-nextjs/src/lib/heuristics/signals/helpers.ts`:
+
+```typescript
+// Check if signal already exists (prevent duplicates)
+await signalExists(supabase, accountId, 'signal_name', lookbackDays)
+
+// Create a signal object
+createDetectedSignal(accountId, workspaceId, 'signal_name', value, metadata)
+
+// Calculate percentage change
+calculatePercentageChange(oldValue, newValue)
+
+// Get date N days ago
+daysAgo(days)
+
+// Count signals for an account
+await countSignals(supabase, accountId, { startDate, endDate })
+```
 
 ---
 
 ## Checklist
 
-- [ ] Created detector class in `backend/app/heuristics/signals.py`
-- [ ] Registered detector in `signal_processor.py`
-- [ ] Added configuration thresholds (if needed)
-- [ ] Updated scoring weights in `heuristics_engine.py`
-- [ ] Created tests in `backend/tests/test_heuristics.py`
-- [ ] Tested locally: `docker-compose exec backend pytest -k test_<signal>`
+- [ ] Created detector in `lib/heuristics/signals/detectors/<name>.ts`
+- [ ] Exported from `lib/heuristics/signals/detectors/index.ts`
+- [ ] Defined `meta` with name, category, description, defaultConfig
+- [ ] Implemented `detect()` function with proper return type
+- [ ] Added duplicate prevention with `signalExists()`
+- [ ] Updated scoring weights in `engine.ts` (if needed)
+- [ ] Tested locally with `npm run dev`
+- [ ] Ran `npm run build` before committing

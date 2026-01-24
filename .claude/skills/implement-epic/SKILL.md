@@ -26,9 +26,9 @@ Example: `/implement-epic BETON-42` or `/implement-epic INSP-15`
 Use the Plane MCP tools to read the epic:
 
 ```
-mcp__plane__get_issue_using_readable_identifier:
+mcp__plane__retrieve_work_item_by_identifier:
   - project_identifier: <PROJECT> (e.g., "BETON", "INSP")
-  - issue_identifier: <NUMBER> (e.g., "42")
+  - sequence_id: <NUMBER> (e.g., "42")
 ```
 
 Read and note:
@@ -41,7 +41,7 @@ Read and note:
 Search for subtasks linked to this epic:
 
 ```
-mcp__plane__search_issues:
+mcp__plane__search_work_items:
   - project_id: <uuid from epic>
   - search: <epic name or related keywords>
 ```
@@ -49,7 +49,7 @@ mcp__plane__search_issues:
 Or if the epic has linked issues, fetch each one:
 
 ```
-mcp__plane__get_issue_using_readable_identifier for each subtask
+mcp__plane__retrieve_work_item_by_identifier for each subtask
 ```
 
 #### Step 1.3: Read Attachments
@@ -67,8 +67,8 @@ Analyze the subtasks for:
 
 Create a dependency order. Example:
 ```
-1. BETON-43: Add database schema (no deps)
-2. BETON-44: Create API endpoint (depends on schema)
+1. BETON-43: Add database migration (no deps)
+2. BETON-44: Create API endpoint (depends on migration)
 3. BETON-45: Add frontend form (depends on API)
 4. BETON-46: Add tests (depends on all above)
 ```
@@ -98,9 +98,10 @@ git checkout -b feature/BETON-42-user-dashboard origin/staging
 
 Then, publish the branch
 
-```
+```bash
 git push origin feature/<EPIC-ID>-<epic-short-name>
 ```
+
 ---
 
 ### Phase 3: Sequential Implementation
@@ -111,7 +112,7 @@ For EACH task in dependency order:
 
 Fetch full task details:
 ```
-mcp__plane__get_issue_using_readable_identifier
+mcp__plane__retrieve_work_item_by_identifier
 ```
 
 Understand:
@@ -133,12 +134,15 @@ If anything is unclear, use AskUserQuestion to clarify:
 
 Change task status to "In progress" in Plane.
 
-Write the code following Beton's patterns (see CLAUDE.md):
+Write the code following Beton's patterns:
 
 - **API Routes**: Place in `frontend-nextjs/src/app/api/`
 - **Pages**: Place in `frontend-nextjs/src/app/(dashboard)/`
 - **Components**: Place in `frontend-nextjs/src/components/`
 - **Business Logic**: Place in `frontend-nextjs/src/lib/`
+- **Signal Detectors**: Place in `frontend-nextjs/src/lib/heuristics/signals/detectors/`
+- **Integration Clients**: Place in `frontend-nextjs/src/lib/integrations/`
+- **Supabase Migrations**: Place in `supabase/migrations/`
 
 Follow existing patterns in the codebase.
 
@@ -156,10 +160,6 @@ curl -s http://localhost:3000/api/<endpoint> | jq
 curl -X POST http://localhost:3000/api/<endpoint> \
   -H "Content-Type: application/json" \
   -d '{"field": "value"}' | jq
-
-# Example: Test with auth (if needed)
-curl -s http://localhost:3000/api/<endpoint> \
-  -H "Authorization: Bearer <token>" | jq
 ```
 
 Verify:
@@ -193,14 +193,15 @@ If build fails:
 
 Use the `/deploy` skill workflow to:
 - Stage and commit the changes for this task
+
 Commit message should reference the task ID and provide a URL:
 ```
 feat(<scope>): <task description>
 
 Implements [<TASK-ID>: <task title>](task_url)
-```
 
-**See: [/deploy skill](./deploy.md) for commit and push workflow**
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
 
 #### Step 3.7: Repeat for Next Task
 
@@ -227,8 +228,6 @@ Use the `/deploy` skill's "Feature → Staging" workflow to:
 - Create PR to staging branch
 - Include all completed task IDs in the PR body
 
-**See: [/deploy skill](./deploy.md) for full PR workflow**
-
 PR body should include:
 ```markdown
 ## Summary
@@ -242,6 +241,9 @@ Implements epic <EPIC-ID>: <Epic title>
 ## Test Plan
 - [ ] Verified locally with `npm run build`
 - [ ] Tested API endpoints with curl
+- [ ] Checked UI in browser
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
 #### Step 4.3: Report Completion
@@ -281,23 +283,31 @@ Tell the user:
 Always filter by workspace:
 
 ```typescript
+const membership = await getWorkspaceMembership()
 const { data } = await supabase
   .from('table')
   .select('*')
-  .eq('workspace_id', workspaceId)
+  .eq('workspace_id', membership.workspaceId)
 ```
 
 ### API Route Authentication
 
 ```typescript
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { NextResponse } from 'next/server'
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const membership = await getWorkspaceMembership()
+  if (!membership) {
+    return NextResponse.json({ error: 'No workspace' }, { status: 404 })
   }
 
   // ... rest of handler
@@ -311,7 +321,7 @@ try {
   // operation
 } catch (error) {
   console.error('Operation failed:', error)
-  return Response.json(
+  return NextResponse.json(
     { error: 'Operation failed' },
     { status: 500 }
   )
@@ -329,6 +339,7 @@ try {
 | Curl connection refused | Ensure `npm run dev` is running |
 | Push rejected | Pull latest staging, resolve conflicts |
 | Task unclear | Ask user with AskUserQuestion |
+| RLS violation | Add `.eq('workspace_id', ...)` filter |
 
 ---
 

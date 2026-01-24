@@ -1,209 +1,270 @@
 ---
 name: add-model
-description: Create a new SQLAlchemy model with Alembic migration. Use when adding a new database table or entity.
+description: Create a new Supabase table with migration. Use when adding a new database table or entity.
 ---
 
-# /add-model - Add New Database Model
+# /add-model - Add New Database Table
 
-Use this skill to add a new SQLAlchemy model and create the corresponding Alembic migration.
+Use this skill to add a new table to the Supabase database and create the corresponding migration.
 
 ## Workflow
 
-### Step 1: Define the model
+### Step 1: Create the migration file
 
-Add to `backend/app/models.py`:
+Create a new migration in `supabase/migrations/<timestamp>_add_<table_name>.sql`:
 
-```python
-class <ModelName>(Base):
-    """
-    <Description of what this model represents>.
+```sql
+-- Migration: Add <table_name> table
+-- Description: <Description of what this table stores>
 
-    Relationships:
-    - <List related models>
-    """
-    __tablename__ = "<table_name>"
+-- Create the table
+CREATE TABLE IF NOT EXISTS public.<table_name> (
+  -- Primary key (UUID for Supabase)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    # Primary key
-    id = Column(Integer, primary_key=True, index=True)
+  -- Foreign key for multi-tenancy
+  workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
 
-    # Foreign keys (for multi-tenancy)
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False, index=True)
+  -- Core fields
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'active',
 
-    # Core fields
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
-    status = Column(String(50), default="active")
+  -- JSON field for flexible data
+  metadata JSONB DEFAULT '{}'::jsonb,
 
-    # JSON fields (for flexible data)
-    metadata_json = Column(JSON, default=dict)
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+-- Add index for workspace isolation queries
+CREATE INDEX idx_<table_name>_workspace_id ON public.<table_name>(workspace_id);
 
-    # Relationships
-    workspace = relationship("Workspace", back_populates="<table_name>")
+-- Add other useful indexes
+CREATE INDEX idx_<table_name>_status ON public.<table_name>(status);
+CREATE INDEX idx_<table_name>_created_at ON public.<table_name>(created_at DESC);
 
-    def __repr__(self):
-        return f"<<ModelName> {self.id}: {self.name}>"
-```
+-- Enable Row Level Security
+ALTER TABLE public.<table_name> ENABLE ROW LEVEL SECURITY;
 
-### Step 2: Add relationship to parent model
-
-If adding a relationship to an existing model (e.g., Workspace), update that model:
-
-```python
-class Workspace(Base):
-    # ... existing fields ...
-
-    # Add relationship
-    <table_name> = relationship("<ModelName>", back_populates="workspace")
-```
-
-### Step 3: Create the migration
-
-```bash
-docker-compose exec backend alembic revision --autogenerate -m "add <model_name> table"
-```
-
-### Step 4: Review the migration
-
-Check `backend/alembic/versions/<timestamp>_add_<model_name>_table.py`:
-
-```python
-"""add <model_name> table
-
-Revision ID: <revision_id>
-Revises: <previous_revision>
-Create Date: <date>
-"""
-from alembic import op
-import sqlalchemy as sa
-
-# revision identifiers
-revision = '<revision_id>'
-down_revision = '<previous_revision>'
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.create_table(
-        '<table_name>',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('workspace_id', sa.Integer(), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        # ... other columns ...
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], ),
-        sa.PrimaryKeyConstraint('id')
+-- RLS Policy: Users can only access data in their workspace
+CREATE POLICY "<table_name>_workspace_isolation"
+  ON public.<table_name>
+  FOR ALL
+  USING (
+    workspace_id IN (
+      SELECT workspace_id
+      FROM public.workspace_members
+      WHERE user_id = auth.uid()
     )
-    op.create_index(op.f('ix_<table_name>_id'), '<table_name>', ['id'], unique=False)
-    op.create_index(op.f('ix_<table_name>_workspace_id'), '<table_name>', ['workspace_id'], unique=False)
+  );
 
+-- Trigger to auto-update updated_at
+CREATE OR REPLACE FUNCTION update_<table_name>_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-def downgrade() -> None:
-    op.drop_index(op.f('ix_<table_name>_workspace_id'), table_name='<table_name>')
-    op.drop_index(op.f('ix_<table_name>_id'), table_name='<table_name>')
-    op.drop_table('<table_name>')
+CREATE TRIGGER <table_name>_updated_at_trigger
+  BEFORE UPDATE ON public.<table_name>
+  FOR EACH ROW
+  EXECUTE FUNCTION update_<table_name>_updated_at();
+
+-- Add comment for documentation
+COMMENT ON TABLE public.<table_name> IS '<Description of the table purpose>';
 ```
 
-**Review checklist**:
-- [ ] All columns present
-- [ ] Correct types and nullability
-- [ ] Foreign keys correct
-- [ ] Indexes on frequently queried columns
-- [ ] `downgrade()` correctly reverses `upgrade()`
+### Step 2: Generate migration filename with timestamp
 
-### Step 5: Apply the migration locally
-
-```bash
-docker-compose exec backend alembic upgrade head
+Use this format for the filename:
+```
+YYYYMMDDHHMMSS_add_<table_name>.sql
 ```
 
-### Step 6: Verify
+Example: `20240115143000_add_playbooks.sql`
+
+To get the current timestamp:
+```bash
+date +%Y%m%d%H%M%S
+```
+
+### Step 3: Add TypeScript types
+
+Add to `frontend-nextjs/src/lib/supabase/types.ts`:
+
+```typescript
+// <TableName> types
+export interface <TableName> {
+  id: string
+  workspace_id: string
+  name: string
+  description: string | null
+  status: string
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface <TableName>Insert {
+  workspace_id: string
+  name: string
+  description?: string
+  status?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface <TableName>Update {
+  name?: string
+  description?: string
+  status?: string
+  metadata?: Record<string, unknown>
+}
+```
+
+### Step 4: Apply the migration
+
+**For local development (with Supabase CLI):**
+```bash
+cd supabase
+npx supabase db push
+```
+
+**For staging/production:**
+Migrations are auto-applied when deployed or can be applied via Supabase Dashboard.
+
+### Step 5: Verify
 
 ```bash
-# Check migration applied
-docker-compose exec backend alembic current
+# Check migration was applied (via Supabase CLI)
+npx supabase db diff
 
-# Test table exists (optional)
-docker-compose exec backend python -c "
-from app.models import <ModelName>
-from app.database import SessionLocal
-db = SessionLocal()
-print(db.query(<ModelName>).count())
-"
+# Or verify in Supabase Dashboard → Table Editor
 ```
 
 ---
 
 ## Migration Safety Rules
 
-1. **Always backward-compatible**: Add columns, don't drop/rename
-2. **Test in staging first**: Never run untested migrations in production
+1. **Always backward-compatible**: Add columns, don't drop/rename in production
+2. **Test in staging first**: Apply to staging Supabase project before production
 3. **Atomic migrations**: Keep migrations small and focused
-4. **No data migrations in schema files**: Use separate scripts for data changes
+4. **Include RLS policies**: Always add Row Level Security for multi-tenant data
+5. **No data migrations in schema files**: Use separate scripts for data changes
 
 ---
 
 ## Common Column Types
 
-```python
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Float, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+```sql
+-- Standard types
+id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name TEXT NOT NULL
+description TEXT
+is_active BOOLEAN DEFAULT true
+score NUMERIC
+amount DECIMAL(12, 2)
+created_at TIMESTAMPTZ DEFAULT NOW()
+config JSONB DEFAULT '{}'::jsonb
 
-# Standard types
-id = Column(Integer, primary_key=True)
-name = Column(String(255), nullable=False)
-description = Column(Text)
-is_active = Column(Boolean, default=True)
-score = Column(Float)
-created_at = Column(DateTime, default=datetime.utcnow)
-config = Column(JSON, default=dict)
+-- With constraints
+email TEXT UNIQUE NOT NULL
+workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE
+status TEXT CHECK (status IN ('active', 'inactive', 'pending'))
 
-# PostgreSQL specific
-uuid = Column(UUID(as_uuid=True), default=uuid.uuid4)
-tags = Column(ARRAY(String))
+-- Arrays
+tags TEXT[]
 
-# With constraints
-email = Column(String(255), unique=True, index=True)
-workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
+-- Enums (create type first)
+CREATE TYPE status_enum AS ENUM ('active', 'inactive', 'pending');
+status status_enum DEFAULT 'active'
 ```
 
 ---
 
 ## Relationship Patterns
 
-```python
-# One-to-Many
-class Workspace(Base):
-    accounts = relationship("Account", back_populates="workspace")
+### One-to-Many
+```sql
+-- Parent table (workspaces)
+CREATE TABLE workspaces (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL
+);
 
-class Account(Base):
-    workspace_id = Column(Integer, ForeignKey("workspaces.id"))
-    workspace = relationship("Workspace", back_populates="accounts")
+-- Child table (accounts belong to workspace)
+CREATE TABLE accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL
+);
+```
 
-# Many-to-Many (with association table)
-account_tags = Table(
-    'account_tags',
-    Base.metadata,
-    Column('account_id', Integer, ForeignKey('accounts.id')),
-    Column('tag_id', Integer, ForeignKey('tags.id'))
-)
+### Many-to-Many (with junction table)
+```sql
+-- Junction table
+CREATE TABLE account_tags (
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (account_id, tag_id)
+);
+```
 
-class Account(Base):
-    tags = relationship("Tag", secondary=account_tags, back_populates="accounts")
+---
+
+## RLS Policy Patterns
+
+### Standard workspace isolation
+```sql
+CREATE POLICY "workspace_isolation"
+  ON public.<table_name>
+  FOR ALL
+  USING (
+    workspace_id IN (
+      SELECT workspace_id
+      FROM public.workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+```
+
+### Read-only for regular users, write for admins
+```sql
+CREATE POLICY "read_access"
+  ON public.<table_name>
+  FOR SELECT
+  USING (
+    workspace_id IN (
+      SELECT workspace_id
+      FROM public.workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "admin_write_access"
+  ON public.<table_name>
+  FOR INSERT
+  USING (
+    workspace_id IN (
+      SELECT workspace_id
+      FROM public.workspace_members
+      WHERE user_id = auth.uid()
+        AND role = 'admin'
+    )
+  );
 ```
 
 ---
 
 ## Checklist
 
-- [ ] Added model to `backend/app/models.py`
-- [ ] Added relationships to related models
-- [ ] Created migration with `alembic revision --autogenerate`
-- [ ] Reviewed migration file for correctness
-- [ ] Applied migration locally with `alembic upgrade head`
-- [ ] Committed both model and migration files
+- [ ] Created migration file in `supabase/migrations/`
+- [ ] Added appropriate indexes
+- [ ] Enabled RLS and created policies
+- [ ] Added updated_at trigger
+- [ ] Added TypeScript types to `lib/supabase/types.ts`
+- [ ] Tested migration locally with `supabase db push`
+- [ ] Committed migration file
