@@ -16,11 +16,17 @@ import { pushToDataLayer } from './gtm'
  * (requires PostHog init with persistence: 'cookie' and cross_subdomain_cookie: true)
  */
 export function usePostHogIdentify() {
-  const { session, loading } = useSession()
+  const { session, loading, error } = useSession()
   const identifiedUserId = useRef<string | null>(null)
 
   useEffect(() => {
-    if (loading) return
+    // Debug logging
+    console.log('[PostHog Identify] State:', { loading, hasSession: !!session, error, sub: session?.sub })
+
+    if (loading) {
+      console.log('[PostHog Identify] Still loading session, waiting...')
+      return
+    }
 
     const posthog =
       typeof window !== 'undefined'
@@ -30,13 +36,19 @@ export function usePostHogIdentify() {
     // User is logged in
     if (session?.sub) {
       // Skip if already identified with same user
-      if (identifiedUserId.current === session.sub) return
+      if (identifiedUserId.current === session.sub) {
+        console.log('[PostHog Identify] Already identified this user, skipping')
+        return
+      }
 
       // Check PostHog's internal state (if available)
       if (posthog?._isIdentified?.()) {
+        console.log('[PostHog Identify] PostHog says already identified, skipping')
         identifiedUserId.current = session.sub
         return
       }
+
+      console.log('[PostHog Identify] Pushing identify event for user:', session.sub)
 
       // Push identify event to dataLayer → GTM will call posthog.identify()
       pushToDataLayer({
@@ -55,12 +67,16 @@ export function usePostHogIdentify() {
       })
 
       identifiedUserId.current = session.sub
+      console.log('[PostHog Identify] Event pushed successfully')
+    } else {
+      console.log('[PostHog Identify] No session.sub, user not logged in or session fetch failed')
     }
 
     // User logged out — reset PostHog
     if (!session && identifiedUserId.current) {
+      console.log('[PostHog Identify] User logged out, resetting PostHog')
       pushToDataLayer({ event: 'posthog_reset' })
       identifiedUserId.current = null
     }
-  }, [session, loading])
+  }, [session, loading, error])
 }

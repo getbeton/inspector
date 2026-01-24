@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { type SessionUser } from './constants'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // Re-export for convenience
 export { SESSION_COOKIE_NAME, type SessionUser } from './constants'
@@ -21,20 +22,38 @@ export async function getSession(): Promise<SessionUser | null> {
     const supabase = await createClient()
 
     // Get authenticated user from Supabase
+    console.log('[getSession] Calling supabase.auth.getUser()...')
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    if (authError) {
+      console.log('[getSession] Auth error:', authError.message)
       return null
     }
 
-    // Get workspace membership
-    const { data: rawMembership } = await supabase
+    if (!user) {
+      console.log('[getSession] No user found')
+      return null
+    }
+
+    console.log('[getSession] User found:', user.id, user.email)
+
+    // Get workspace membership using admin client to bypass RLS
+    // This is safe because we've already authenticated the user above
+    // and we're only fetching THEIR membership (filtered by user_id)
+    console.log('[getSession] Querying workspace_members for user:', user.id)
+    const adminClient = createAdminClient()
+    const { data: rawMembership, error: membershipError } = await adminClient
       .from('workspace_members')
       .select('workspace_id, role, workspaces(id, name, slug)')
       .eq('user_id', user.id)
       .single()
 
+    if (membershipError) {
+      console.log('[getSession] Workspace membership query error:', membershipError.message, membershipError.code)
+    }
+
     const membership = rawMembership as WorkspaceMembership | null
+    console.log('[getSession] Membership found:', !!membership, membership?.workspace_id)
 
     // Build session user object
     const sessionUser: SessionUser = {
@@ -46,9 +65,10 @@ export async function getSession(): Promise<SessionUser | null> {
       role: membership?.role
     }
 
+    console.log('[getSession] Returning session for:', sessionUser.sub, 'workspace:', sessionUser.workspace_id)
     return sessionUser
   } catch (error) {
-    console.error('Failed to get session:', error)
+    console.error('[getSession] Exception:', error)
     return null
   }
 }

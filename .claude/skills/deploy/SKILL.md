@@ -17,18 +17,26 @@ Use this skill to commit changes, push to the current branch, and verify the Ver
 
 When the user says `/deploy`, execute this workflow:
 
-### Step 1: Stage Changes
+### Step 1: Build Locally (MANDATORY)
+
+```bash
+cd frontend-nextjs && npm run build
+```
+
+**Do NOT proceed if the build fails.** Fix any TypeScript errors first.
+
+### Step 2: Stage Changes
 
 ```bash
 # Stage all changes except local config
 git add -A
-git reset HEAD -- .claude/ venv/ supabase/.temp/ node_modules/
+git reset HEAD -- .claude/ node_modules/ .env.local
 
 # Show what will be committed
 git status --short
 ```
 
-### Step 2: Create Commit
+### Step 3: Create Commit
 
 ```bash
 # Get recent commit style
@@ -47,13 +55,13 @@ EOF
 
 Commit types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`
 
-### Step 3: Push to Remote
+### Step 4: Push to Remote
 
 ```bash
 git push origin <current-branch>
 ```
 
-### Step 4: Verify Vercel Deployment
+### Step 5: Verify Vercel Deployment
 
 ```bash
 # List recent deployments
@@ -63,7 +71,7 @@ npx vercel ls --scope getbeton 2>&1 | head -20
 # If it shows "● Building", wait and check again
 ```
 
-### Step 5: Inspect Deployment (if needed)
+### Step 6: Inspect Deployment (if needed)
 
 ```bash
 # Get details on a specific deployment
@@ -89,7 +97,18 @@ git push origin feature/my-feature
 npx vercel ls --scope getbeton
 
 # 4. Create PR to staging
-gh pr create --base staging --title "feat: My Feature" --body "Description..."
+gh pr create --base staging --title "feat: My Feature" --body "$(cat <<'EOF'
+## Summary
+<1-3 bullet points>
+
+## Test plan
+- [ ] Tested locally with `npm run build`
+- [ ] Verified API endpoints work
+- [ ] Checked UI in browser
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
 
 # 5. Wait for CI to pass
 gh pr checks
@@ -105,7 +124,7 @@ gh pr checks
 
 ```bash
 # 1. Create PR from staging to main
-gh pr create --base main --head staging --title "Release: <version>" --body "
+gh pr create --base main --head staging --title "Release: <version>" --body "$(cat <<'EOF'
 ## Changes
 - Feature 1
 - Feature 2
@@ -113,7 +132,10 @@ gh pr create --base main --head staging --title "Release: <version>" --body "
 ## Testing
 - [x] Tested on staging
 - [x] Vercel preview passed
-"
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
 
 # 2. Report PR URL to user
 # STOP HERE - DO NOT MERGE
@@ -164,6 +186,7 @@ npx vercel logs <deployment-url> --scope getbeton
 | Deployment stuck | Check Vercel dashboard |
 | Wrong branch deployed | Verify git branch before push |
 | Cron not running | Check `vercel.json` cron config |
+| TypeScript errors | Run `npx tsc --noEmit` to see all errors |
 
 ---
 
@@ -179,6 +202,9 @@ npx vercel inspect <url> --scope getbeton
 # View build logs
 npx vercel logs <url> --scope getbeton
 
-# Promote preview to production
-npx vercel promote <url> --scope getbeton
+# Create PR
+gh pr create --base staging --title "feat: description"
+
+# Check PR status
+gh pr checks
 ```
