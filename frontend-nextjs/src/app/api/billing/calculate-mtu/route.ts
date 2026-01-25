@@ -57,12 +57,18 @@ async function calculateMTUDirect(
   const billingCycleStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const billingCycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-  // Query for distinct users in this billing period
+  // Query for distinct identified users (those with email) in this billing period
+  // This filters out anonymous visitors who haven't been identified via posthog.identify()
   const hogqlQuery = `
     SELECT count(DISTINCT person_id) as mtu_count
     FROM events
     WHERE timestamp >= toDateTime('${billingCycleStart.toISOString().split('T')[0]}')
       AND timestamp <= toDateTime('${billingCycleEnd.toISOString().split('T')[0]} 23:59:59')
+      AND person_id IN (
+        SELECT id FROM persons
+        WHERE properties['email'] IS NOT NULL
+          AND properties['email'] != ''
+      )
   `
 
   try {

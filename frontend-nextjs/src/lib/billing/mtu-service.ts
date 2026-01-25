@@ -158,13 +158,15 @@ async function queryPostHogMTU(
   const startDateStr = formatDateForHogQL(startDate);
   const endDateStr = formatDateForHogQL(endDate);
 
-  // HogQL query to count distinct persons who had any activity in the date range
-  // This counts unique person IDs from the persons table
+  // HogQL query to count distinct identified persons (those with email) in the date range
+  // This filters out anonymous visitors who haven't been identified via posthog.identify()
   const hogql = `
     SELECT count(distinct id) as mtu_count
     FROM persons
     WHERE created_at >= toDateTime('${startDateStr}')
-    AND created_at < toDateTime('${endDateStr}')
+      AND created_at < toDateTime('${endDateStr}')
+      AND properties['email'] IS NOT NULL
+      AND properties['email'] != ''
   `;
 
   try {
@@ -206,7 +208,11 @@ async function countPersonsViaAPI(
 
   while (hasMore) {
     const response = await client.getPersons({ limit: 100, cursor });
-    totalCount += response.results.length;
+    // Filter to only count persons with email property (identified users)
+    const identifiedPersons = response.results.filter(
+      (person) => person.properties?.email
+    );
+    totalCount += identifiedPersons.length;
     cursor = response.next;
     hasMore = !!response.next;
 

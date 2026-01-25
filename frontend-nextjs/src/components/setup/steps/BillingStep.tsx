@@ -11,10 +11,10 @@ import { useCreateSetupIntent, useCompleteSetup, useBillingStatus } from "@/lib/
 import { Check, AlertCircle, CreditCard, Shield, Users } from "lucide-react";
 
 /**
- * Free tier limit (MTU)
- * Users below this limit won't be charged
+ * Default free tier limit (MTU) - used as fallback if billing status not loaded
+ * The actual limit comes from Stripe via billingStatus.mtu.limit
  */
-const FREE_TIER_LIMIT = 1000;
+const DEFAULT_FREE_TIER_LIMIT = 200;
 
 /**
  * Component state machine
@@ -157,9 +157,12 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
   const { data: billingStatus, isLoading: statusLoading } = useBillingStatus();
   const createSetupIntent = useCreateSetupIntent();
 
+  // Get dynamic free tier limit from billing status (fallback to default if not loaded)
+  const freeTierLimit = billingStatus?.mtu?.limit ?? DEFAULT_FREE_TIER_LIMIT;
+
   // Computed values
-  const isOverLimit = mtuCount > FREE_TIER_LIMIT;
-  const usersOverLimit = Math.max(0, mtuCount - FREE_TIER_LIMIT);
+  const isOverLimit = mtuCount > freeTierLimit;
+  const usersOverLimit = Math.max(0, mtuCount - freeTierLimit);
   const pricePerMtu = billingStatus?.pricing?.pricePerMtu ?? "$0.10";
   const estimatedCharge = isOverLimit
     ? `$${(usersOverLimit * 0.1).toFixed(2)}`
@@ -241,7 +244,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
         </div>
         <div className="text-3xl font-bold">{mtuCount.toLocaleString()}</div>
         <div className="text-sm text-muted-foreground">
-          Free tier: {FREE_TIER_LIMIT.toLocaleString()} users
+          Free tier: {freeTierLimit.toLocaleString()} users
         </div>
       </div>
 
@@ -263,7 +266,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
           <AlertTitle>Within Free Tier</AlertTitle>
           <AlertDescription>
             You have <strong>{mtuCount.toLocaleString()}</strong> users (within the{" "}
-            {FREE_TIER_LIMIT.toLocaleString()} user free tier). You won&apos;t be
+            {freeTierLimit.toLocaleString()} user free tier). You won&apos;t be
             charged now, but we need a card on file for when you grow.
           </AlertDescription>
         </Alert>
