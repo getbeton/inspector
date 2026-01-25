@@ -189,13 +189,18 @@ export function CardLinkingModal({
   );
 
   // Start the card setup flow
+  // IMPORTANT: We fetch the clientSecret BEFORE transitioning to the 'card' step
+  // to avoid a race condition where React swaps DOM nodes while Stripe is initializing.
+  // This prevents the "removeChild" error from Stripe's iframe management code.
   const handleStartSetup = async () => {
-    setStep('card');
     setErrorMessage(null);
+    // Keep showing 'info' step with loading state while fetching
 
     try {
       const result = await createSetupIntent.mutateAsync();
       setClientSecret(result.clientSecret);
+      // Only NOW switch to card step, with clientSecret already available
+      setStep('card');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start setup';
       setErrorMessage(message);
@@ -279,15 +284,26 @@ export function CardLinkingModal({
             </DialogPanel>
             <DialogFooter>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button onClick={handleStartSetup}>
-                <CreditCard />
-                Continue
+              <Button onClick={handleStartSetup} disabled={createSetupIntent.isPending}>
+                {createSetupIntent.isPending ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard />
+                    Continue
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </>
         );
 
       case 'card':
+        // clientSecret is guaranteed to be available here since we only transition
+        // to this step AFTER the SetupIntent is created in handleStartSetup()
         return (
           <>
             <DialogHeader>
@@ -297,19 +313,13 @@ export function CardLinkingModal({
               </DialogDescription>
             </DialogHeader>
             <DialogPanel>
-              {clientSecret ? (
-                <StripeElementsProvider clientSecret={clientSecret}>
-                  <CardForm
-                    onSuccess={handleSuccess}
-                    onError={handleError}
-                    onProcessing={() => {}}
-                  />
-                </StripeElementsProvider>
-              ) : (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                </div>
-              )}
+              <StripeElementsProvider clientSecret={clientSecret!}>
+                <CardForm
+                  onSuccess={handleSuccess}
+                  onError={handleError}
+                  onProcessing={() => {}}
+                />
+              </StripeElementsProvider>
             </DialogPanel>
             <DialogFooter variant="bare">
               <Button variant="ghost" onClick={() => setStep('info')}>
