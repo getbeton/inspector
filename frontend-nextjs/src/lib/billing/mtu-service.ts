@@ -95,6 +95,29 @@ export function invalidateCache(workspaceId: string): void {
 }
 
 // ============================================
+// Date Formatting Helpers
+// ============================================
+
+/** Regex pattern for YYYY-MM-DD date format */
+const DATE_FORMAT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Safely formats a Date object to YYYY-MM-DD string for HogQL queries.
+ * Validates the output format to prevent injection attacks.
+ * @throws Error if date cannot be safely formatted
+ */
+function formatDateForHogQL(date: Date): string {
+  const dateStr = date.toISOString().split('T')[0];
+
+  // Validate the format is exactly YYYY-MM-DD
+  if (!DATE_FORMAT_REGEX.test(dateStr)) {
+    throw new Error(`Invalid date format for HogQL: ${dateStr}`);
+  }
+
+  return dateStr;
+}
+
+// ============================================
 // PostHog Integration
 // ============================================
 
@@ -124,19 +147,24 @@ async function getPostHogClientForWorkspace(workspaceId: string): Promise<PostHo
 
 /**
  * Queries PostHog for distinct user count using HogQL.
+ * Uses validated date formatting to prevent SQL injection.
  */
 async function queryPostHogMTU(
   client: PostHogClient,
   startDate: Date,
   endDate: Date
 ): Promise<number> {
+  // Safely format dates with validation
+  const startDateStr = formatDateForHogQL(startDate);
+  const endDateStr = formatDateForHogQL(endDate);
+
   // HogQL query to count distinct persons who had any activity in the date range
   // This counts unique person IDs from the persons table
   const hogql = `
     SELECT count(distinct id) as mtu_count
     FROM persons
-    WHERE created_at >= toDateTime('${startDate.toISOString().split('T')[0]}')
-    AND created_at < toDateTime('${endDate.toISOString().split('T')[0]}')
+    WHERE created_at >= toDateTime('${startDateStr}')
+    AND created_at < toDateTime('${endDateStr}')
   `;
 
   try {
@@ -157,6 +185,9 @@ async function queryPostHogMTU(
     throw error;
   }
 }
+
+/** Maximum persons to count via API fallback (prevents Vercel timeout) */
+const MAX_PERSONS_API_COUNT = 100_000;
 
 /**
  * Alternative: Count distinct persons using the Persons API with pagination.
@@ -179,9 +210,9 @@ async function countPersonsViaAPI(
     cursor = response.next;
     hasMore = !!response.next;
 
-    // Safety limit to prevent infinite loops
-    if (totalCount > 1_000_000) {
-      console.warn('[MTU Service] Safety limit reached, stopping pagination');
+    // Safety limit to prevent Vercel timeout (5 min limit on Pro plan)
+    if (totalCount > MAX_PERSONS_API_COUNT) {
+      console.warn(`[MTU Service] Safety limit of ${MAX_PERSONS_API_COUNT} reached, stopping pagination`);
       break;
     }
   }
@@ -367,12 +398,15 @@ export async function getThresholdStatus(workspaceId: string): Promise<Threshold
   const percentage = limit > 0 ? Math.round((currentMtu / limit) * 100) : 0;
   const remainingMtu = Math.max(0, limit - currentMtu);
 
+  // Use threshold constants from BILLING_CONFIG for consistency
+  const { WARNING_90, WARNING_95, EXCEEDED } = BILLING_CONFIG.THRESHOLDS;
+
   let status: ThresholdStatus['status'] = 'safe';
-  if (percentage >= 100) {
+  if (percentage >= EXCEEDED) {
     status = 'exceeded';
-  } else if (percentage >= 95) {
+  } else if (percentage >= WARNING_95) {
     status = 'warning_95';
-  } else if (percentage >= 90) {
+  } else if (percentage >= WARNING_90) {
     status = 'warning_90';
   }
 

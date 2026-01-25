@@ -247,13 +247,16 @@ export async function getThresholdWarningLevel(
     return null;
   }
 
-  if (status.percentUsed >= 100) {
+  // Use threshold constants from BILLING_CONFIG for consistency
+  const { WARNING_90, WARNING_95, EXCEEDED } = BILLING_CONFIG.THRESHOLDS;
+
+  if (status.percentUsed >= EXCEEDED) {
     return 'exceeded';
   }
-  if (status.percentUsed >= 95) {
+  if (status.percentUsed >= WARNING_95) {
     return 'warning_95';
   }
-  if (status.percentUsed >= 90) {
+  if (status.percentUsed >= WARNING_90) {
     return 'warning_90';
   }
 
