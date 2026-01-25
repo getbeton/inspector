@@ -19,6 +19,8 @@ import {
   createSubscription,
   listPaymentMethods,
   StripeBillingDisabledError,
+  StripeInvalidRequestError,
+  StripeAuthenticationError,
 } from '@/lib/integrations/stripe/billing';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
 import type { BillingStatus } from '@/lib/supabase/types';
@@ -271,6 +273,22 @@ export async function POST(
       return NextResponse.json(
         { error: 'Billing is not configured' },
         { status: 400 }
+      );
+    }
+
+    if (error instanceof StripeInvalidRequestError) {
+      console.error('[Complete Setup] Invalid request:', error.message);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof StripeAuthenticationError) {
+      console.error('[Complete Setup] Stripe authentication failed');
+      return NextResponse.json(
+        { error: 'Billing service authentication failed' },
+        { status: 500 }
       );
     }
 

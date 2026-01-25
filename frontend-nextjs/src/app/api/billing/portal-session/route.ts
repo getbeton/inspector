@@ -130,7 +130,7 @@ export async function POST(
     // Create billing portal session
     const result = await createBillingPortalSession(customerId, returnUrl);
 
-    if (!result.success || !('url' in result)) {
+    if (!result.success || !('data' in result)) {
       console.error('[Portal Session] Failed to create portal session:', result);
       return NextResponse.json(
         { error: 'Failed to create billing portal session' },
@@ -138,7 +138,7 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ url: result.url as string });
+    return NextResponse.json({ url: result.data.url });
   } catch (error) {
     if (error instanceof StripeBillingDisabledError) {
       return NextResponse.json(

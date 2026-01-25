@@ -123,7 +123,7 @@ export async function GET(): Promise<NextResponse<PaymentMethodsResponse | { err
     // List payment methods from Stripe
     const result = await listPaymentMethods(customerId);
 
-    if (!result.success || !('paymentMethods' in result)) {
+    if (!result.success || !('data' in result)) {
       console.error('[Payment Methods] Failed to list payment methods:', result);
       return NextResponse.json(
         { error: 'Failed to retrieve payment methods' },
@@ -132,7 +132,7 @@ export async function GET(): Promise<NextResponse<PaymentMethodsResponse | { err
     }
 
     return NextResponse.json({
-      paymentMethods: result.paymentMethods as PaymentMethodInfo[],
+      paymentMethods: result.data,
       defaultPaymentMethodId,
     });
   } catch (error) {
