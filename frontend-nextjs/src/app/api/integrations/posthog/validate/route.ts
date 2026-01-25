@@ -8,7 +8,7 @@
  *   "api_key": "phx_...",
  *   "project_id": "12345",
  *   "region": "us" | "eu",
- *   "host": "https://us.posthog.com" (optional, derived from region)
+ *   "host": "..." (deprecated - ignored, always derived from region)
  * }
  *
  * Response (success):
@@ -185,14 +185,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Determine host from region or use provided host
-    let host = providedHost
-    if (!host && region) {
-      host = REGION_HOSTS[region.toLowerCase()]
-    }
-    if (!host) {
-      host = REGION_HOSTS.us // Default to US
-    }
+    // Always derive host from region - don't trust client-provided host
+    // REGION_HOSTS includes the /api path needed for API calls
+    const normalizedRegion = (region || 'us').toLowerCase()
+    const host = REGION_HOSTS[normalizedRegion] || REGION_HOSTS.us
 
     // Create PostHog client and test connection
     const client = new PostHogClient({
