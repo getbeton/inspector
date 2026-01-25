@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
-import { isBillingEnabled, getDeploymentMode } from '@/lib/utils/deployment';
+import { isBillingEnabled } from '@/lib/utils/deployment';
 import { getAccessStatus, getThresholdWarningLevel } from '@/lib/billing/enforcement-service';
 import { getCurrentBillingCycle } from '@/lib/billing/cycle-service';
 
@@ -17,29 +17,29 @@ import { getCurrentBillingCycle } from '@/lib/billing/cycle-service';
 // Types
 // ============================================
 
+/**
+ * Response shape expected by the frontend client.
+ * Must match the BillingStatus interface in /lib/api/billing.ts
+ */
 interface BillingStatusResponse {
-  deploymentMode: 'cloud' | 'self-hosted';
-  billingStatus: string;
-  mtu?: {
+  workspaceId: string;
+  status: 'active' | 'free' | 'card_required' | 'suspended';
+  hasPaymentMethod: boolean;
+  mtu: {
     current: number;
-    threshold: number;
+    limit: number;
     percentUsed: number;
   };
-  subscription?: {
-    status: string;
-    currentPeriodStart: string | null;
+  subscription: {
+    hasSubscription: boolean;
+    status: string | null;
     currentPeriodEnd: string | null;
-    cancelAtPeriodEnd: boolean;
-  } | null;
-  paymentMethod?: {
-    cardBrand: string | null;
-    cardLastFour: string | null;
-    cardExpMonth: number | null;
-    cardExpYear: number | null;
-  } | null;
-  hasAccess: boolean;
-  requiresCardLink: boolean;
-  thresholdWarning: '90_percent' | '95_percent' | 'over_threshold' | null;
+  };
+  threshold: {
+    level: 'normal' | 'warning_90' | 'warning_95' | 'exceeded';
+    canAccess: boolean;
+    accessWarning: string | null;
+  };
 }
 
 // ============================================
@@ -133,14 +133,27 @@ export async function GET(): Promise<NextResponse<BillingStatusResponse | { erro
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Self-hosted mode: return simplified response
+  // Self-hosted mode: return simplified response with unlimited access
   if (!isBillingEnabled()) {
     const response: BillingStatusResponse = {
-      deploymentMode: 'self-hosted',
-      billingStatus: 'unlimited',
-      hasAccess: true,
-      requiresCardLink: false,
-      thresholdWarning: null,
+      workspaceId,
+      status: 'active',
+      hasPaymentMethod: true, // Treat as always having payment method in self-hosted
+      mtu: {
+        current: 0,
+        limit: Infinity,
+        percentUsed: 0,
+      },
+      subscription: {
+        hasSubscription: false,
+        status: null,
+        currentPeriodEnd: null,
+      },
+      threshold: {
+        level: 'normal',
+        canAccess: true,
+        accessWarning: null,
+      },
     };
 
     return NextResponse.json(response, {
@@ -156,39 +169,47 @@ export async function GET(): Promise<NextResponse<BillingStatusResponse | { erro
   const billingCycle = await getCurrentBillingCycle(workspaceId);
   const billingDetails = await getBillingDetails(workspaceId, supabase);
 
-  // Map threshold warning to API format
-  let thresholdWarningApi: BillingStatusResponse['thresholdWarning'] = null;
-  if (thresholdWarning === 'warning_90') thresholdWarningApi = '90_percent';
-  else if (thresholdWarning === 'warning_95') thresholdWarningApi = '95_percent';
-  else if (thresholdWarning === 'exceeded') thresholdWarningApi = 'over_threshold';
+  // Map billing status to expected format
+  const statusMap: Record<string, BillingStatusResponse['status']> = {
+    active: 'active',
+    free: 'free',
+    card_required: 'card_required',
+    suspended: 'suspended',
+  };
+  const status = statusMap[accessStatus.billingStatus || 'free'] || 'free';
+
+  // Determine if user has a payment method
+  const hasPaymentMethod = Boolean(billingDetails?.cardLastFour);
+
+  // Build access warning message if needed
+  let accessWarning: string | null = null;
+  if (thresholdWarning === 'exceeded' && !hasPaymentMethod) {
+    accessWarning = 'Free tier limit exceeded. Please add a payment method to continue.';
+  } else if (thresholdWarning === 'warning_95' && !hasPaymentMethod) {
+    accessWarning = 'You have used 95% of your free tier. Add a payment method to avoid interruption.';
+  } else if (thresholdWarning === 'warning_90' && !hasPaymentMethod) {
+    accessWarning = 'You have used 90% of your free tier.';
+  }
 
   const response: BillingStatusResponse = {
-    deploymentMode: getDeploymentMode(),
-    billingStatus: accessStatus.billingStatus || 'free',
+    workspaceId,
+    status,
+    hasPaymentMethod,
     mtu: {
       current: accessStatus.mtuCount,
-      threshold: accessStatus.threshold,
+      limit: accessStatus.threshold,
       percentUsed: accessStatus.percentUsed,
     },
-    subscription: billingDetails?.stripeSubscriptionId
-      ? {
-          status: billingDetails.status,
-          currentPeriodStart: billingCycle?.start.toISOString() ?? null,
-          currentPeriodEnd: billingCycle?.end.toISOString() ?? null,
-          cancelAtPeriodEnd: false, // Would need to get this from Stripe
-        }
-      : null,
-    paymentMethod: billingDetails?.cardLastFour
-      ? {
-          cardBrand: billingDetails.cardBrand,
-          cardLastFour: billingDetails.cardLastFour,
-          cardExpMonth: billingDetails.cardExpMonth,
-          cardExpYear: billingDetails.cardExpYear,
-        }
-      : null,
-    hasAccess: accessStatus.hasAccess,
-    requiresCardLink: accessStatus.requiresCardLink,
-    thresholdWarning: thresholdWarningApi,
+    subscription: {
+      hasSubscription: Boolean(billingDetails?.stripeSubscriptionId),
+      status: billingDetails?.status ?? null,
+      currentPeriodEnd: billingCycle?.end.toISOString() ?? null,
+    },
+    threshold: {
+      level: thresholdWarning ?? 'normal',
+      canAccess: accessStatus.hasAccess,
+      accessWarning,
+    },
   };
 
   return NextResponse.json(response, {
