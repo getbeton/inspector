@@ -103,7 +103,7 @@ async function getOrCreateStripeCustomer(
     name: workspaceName,
   });
 
-  if (!customerResult.success || !('customerId' in customerResult)) {
+  if (!customerResult.success || !('data' in customerResult)) {
     console.error('[Setup Intent] Failed to create Stripe customer:', customerResult);
     return null;
   }
@@ -116,7 +116,7 @@ async function getOrCreateStripeCustomer(
     .upsert(
       {
         workspace_id: workspaceId,
-        stripe_customer_id: customerResult.customerId,
+        stripe_customer_id: customerResult.data.id,
         status: 'free',
       },
       { onConflict: 'workspace_id' }
@@ -127,7 +127,7 @@ async function getOrCreateStripeCustomer(
     // Still return the customer ID even if we couldn't save it
   }
 
-  return customerResult.customerId as string;
+  return customerResult.data.id;
 }
 
 // ============================================
@@ -171,7 +171,7 @@ export async function POST(): Promise<NextResponse<SetupIntentResponse | { error
     // Create SetupIntent
     const setupIntentResult = await createSetupIntent(customerId);
 
-    if (!setupIntentResult.success || !('clientSecret' in setupIntentResult)) {
+    if (!setupIntentResult.success || !('data' in setupIntentResult)) {
       console.error('[Setup Intent] Failed to create SetupIntent:', setupIntentResult);
       return NextResponse.json(
         { error: 'Failed to initialize payment setup' },
@@ -180,7 +180,7 @@ export async function POST(): Promise<NextResponse<SetupIntentResponse | { error
     }
 
     return NextResponse.json({
-      clientSecret: setupIntentResult.clientSecret as string,
+      clientSecret: setupIntentResult.data.clientSecret,
       customerId,
     });
   } catch (error) {
