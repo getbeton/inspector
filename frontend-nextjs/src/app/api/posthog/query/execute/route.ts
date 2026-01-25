@@ -24,72 +24,56 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import { QueryService } from '@/lib/services/query-service'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
+import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { ConfigurationError, InvalidQueryError } from '@/lib/errors/query-errors'
-import type { IntegrationConfig, Json } from '@/lib/supabase/types'
 import type { QueryExecutionRequest, QueryExecutionResult } from '@/lib/types/posthog-query'
-
-/** PostHog config from integration_configs.config_json */
-interface PostHogConfigJson {
-  project_id?: string
-  host?: string
-}
 
 /**
  * Get PostHog configuration for the workspace
+ * Uses the new credentials helper to decrypt stored credentials
  */
 async function getPostHogConfig(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
   workspaceId: string
 ): Promise<{ apiKey: string; projectId: string; host?: string }> {
-  const { data, error } = await supabase
-    .from('integration_configs')
-    .select('api_key_encrypted, config_json, is_active, status')
-    .eq('workspace_id', workspaceId)
-    .eq('integration_name', 'posthog')
-    .single()
+  const credentials = await getIntegrationCredentials(workspaceId, 'posthog')
 
-  const config = data as IntegrationConfig | null
-
-  if (error || !config) {
+  if (!credentials) {
     throw new ConfigurationError(
       'PostHog integration is not configured for this workspace. ' +
       'Please configure PostHog in Settings → Integrations.'
     )
   }
 
-  if (!config.is_active) {
+  if (!credentials.isActive) {
     throw new ConfigurationError(
       'PostHog integration is disabled for this workspace. ' +
       'Please enable it in Settings → Integrations.'
     )
   }
 
-  if (config.status !== 'connected' && config.status !== 'validating') {
+  if (credentials.status !== 'connected' && credentials.status !== 'validating') {
     throw new ConfigurationError(
-      `PostHog integration status is "${config.status}". ` +
+      `PostHog integration status is "${credentials.status}". ` +
       'Please reconnect PostHog in Settings → Integrations.'
     )
   }
 
-  if (!config.api_key_encrypted) {
+  if (!credentials.apiKey) {
     throw new ConfigurationError(
       'PostHog API key is missing. Please reconfigure PostHog.'
     )
   }
 
-  const configJson = config.config_json as PostHogConfigJson | null
-
-  if (!configJson?.project_id) {
+  if (!credentials.projectId) {
     throw new ConfigurationError(
       'PostHog project ID is missing. Please reconfigure PostHog with a project ID.'
     )
   }
 
   return {
-    apiKey: config.api_key_encrypted,
-    projectId: configJson.project_id,
-    host: configJson.host,
+    apiKey: credentials.apiKey,
+    projectId: credentials.projectId,
+    host: credentials.host || undefined,
   }
 }
 
@@ -119,8 +103,8 @@ async function handleExecute(
     throw new InvalidQueryError('Query cannot be empty')
   }
 
-  // Get PostHog configuration for workspace
-  const posthogConfig = await getPostHogConfig(supabase, workspaceId)
+  // Get PostHog configuration for workspace (credentials are decrypted automatically)
+  const posthogConfig = await getPostHogConfig(workspaceId)
 
   // Create PostHog client
   const posthogClient = new PostHogClient({

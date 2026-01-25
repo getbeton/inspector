@@ -1,0 +1,92 @@
+/**
+ * Integration credentials retrieval and decryption
+ *
+ * Provides a helper function to fetch integration configurations from the database
+ * and decrypt the stored credentials for use in API calls.
+ */
+
+import { createClient } from '@/lib/supabase/server'
+import { decryptCredentials, isEncrypted } from '@/lib/crypto/encryption'
+import type { IntegrationConfig, Json } from '@/lib/supabase/types'
+
+export interface IntegrationCredentials {
+  apiKey: string
+  projectId: string | null
+  region: string | null
+  host: string | null
+  isActive: boolean
+  status: string
+}
+
+/**
+ * Retrieve and decrypt integration credentials for a workspace
+ *
+ * @param workspaceId - The workspace UUID
+ * @param integrationName - The integration name (e.g., 'posthog', 'attio')
+ * @returns Decrypted credentials or null if not found
+ */
+export async function getIntegrationCredentials(
+  workspaceId: string,
+  integrationName: string
+): Promise<IntegrationCredentials | null> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('integration_configs')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('integration_name', integrationName)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  const config = data as IntegrationConfig
+  const configJson = config.config_json as Record<string, Json>
+
+  // Handle backwards compatibility:
+  // - New encrypted credentials will be in the salt:iv:tag:ciphertext format
+  // - Old unencrypted credentials should still work (during migration period)
+  let apiKey: string
+  let projectId: string | null = null
+
+  if (isEncrypted(config.api_key_encrypted)) {
+    // New format: decrypt the credentials
+    const decrypted = decryptCredentials({
+      apiKeyEncrypted: config.api_key_encrypted,
+      projectIdEncrypted: config.project_id_encrypted
+    })
+    apiKey = decrypted.apiKey
+    projectId = decrypted.projectId
+  } else {
+    // Legacy format: credentials stored as plain text (backwards compatibility)
+    // This path will be removed after all credentials are migrated
+    apiKey = config.api_key_encrypted
+    projectId = (configJson.project_id as string) || null
+  }
+
+  return {
+    apiKey,
+    projectId,
+    region: (configJson.region as string) || null,
+    host: (configJson.host as string) || null,
+    isActive: config.is_active,
+    status: config.status
+  }
+}
+
+/**
+ * Check if an integration is configured and active for a workspace
+ *
+ * @param workspaceId - The workspace UUID
+ * @param integrationName - The integration name
+ * @returns true if the integration is configured and active
+ */
+export async function isIntegrationConfigured(
+  workspaceId: string,
+  integrationName: string
+): Promise<boolean> {
+  const credentials = await getIntegrationCredentials(workspaceId, integrationName)
+  return credentials !== null && credentials.isActive
+}
