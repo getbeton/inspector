@@ -22,6 +22,47 @@ export { PostHogClient, createPostHogClient, type PostHogClientConfig } from './
 // Stripe
 export { StripeClient, createStripeClient, type StripeClientConfig } from './stripe/client'
 
+// Stripe Billing (MTU-based billing operations)
+export {
+  // Error types
+  StripeBillingError,
+  StripeCardDeclinedError,
+  StripeInvalidRequestError,
+  StripeAuthenticationError,
+  StripeRateLimitError,
+  StripeBillingDisabledError,
+  // Functions
+  createCustomer as createBillingCustomer,
+  getCustomer as getBillingCustomer,
+  updateCustomer as updateBillingCustomer,
+  createSubscription as createBillingSubscription,
+  getSubscription as getBillingSubscription,
+  cancelSubscription as cancelBillingSubscription,
+  pauseSubscription as pauseBillingSubscription,
+  resumeSubscription as resumeBillingSubscription,
+  recordMeterEvent,
+  createSetupIntent,
+  listPaymentMethods,
+  setDefaultPaymentMethod,
+  createBillingPortalSession,
+  constructWebhookEvent,
+  isBillingConfigured,
+  getMtuProductId,
+  getMtuMeterId,
+  // Price fetching
+  getActivePrice,
+  getPriceFromSubscription,
+  // Types
+  type BillingResult,
+  type CreateCustomerParams,
+  type CreateSubscriptionParams,
+  type RecordMeterEventParams,
+  type SetupIntentResult,
+  type PaymentMethodInfo,
+  type BillingPortalSessionResult,
+  type PriceInfo,
+} from './stripe/billing'
+
 // Apollo
 export { ApolloClient, createApolloClient, type ApolloClientConfig, type ApolloSearchResult } from './apollo/client'
 

@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils/cn'
+import { BillingStatusCard } from '@/components/billing'
+import { useBillingStatus } from '@/lib/hooks/use-billing'
 
 interface Integration {
   id: string
@@ -176,6 +178,9 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* Billing */}
+      <BillingStatusCard />
+
       {/* Integrations */}
       <Card>
         <CardHeader>
@@ -200,7 +205,7 @@ export default function SettingsPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className={cn(
-                    'w-10 h-10 rounded flex items-center justify-center font-semibold',
+                    'w-10 h-10 rounded-sm flex items-center justify-center font-semibold',
                     integration.status === 'connected' ? 'bg-success/10 text-success' :
                     integration.status === 'error' ? 'bg-destructive/10 text-destructive' :
                     'bg-muted text-muted-foreground'

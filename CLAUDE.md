@@ -53,7 +53,7 @@ This is a **blocking requirement** - do not commit code that fails the local bui
 - **Frontend**: Next.js 14 (TypeScript) - Full-stack with API routes
 - **Database**: PostgreSQL via Supabase - user data, workspaces, API keys, signals, accounts
 - **Authentication**: Supabase Auth (OAuth with PKCE)
-- **Deployment**: Vercel (production) + Railway (staging)
+- **Deployment**: Vercel (production, staging, and preview environments)
 - **Background Jobs**: Vercel Cron
 
 ### Service Architecture
@@ -154,10 +154,15 @@ frontend-nextjs/src/
 
 ## Deployment Workflow
 
-### Environments
-- **Production**: Vercel (deploys from `main` branch)
-- **Staging**: Railway or Vercel Preview (deploys from `staging` branch)
-- **Preview**: Auto-created for PRs
+### Environment Matrix
+
+| Git Branch | Vercel Environment | Supabase Project |
+|------------|-------------------|------------------|
+| `main` | Production | `beton-inspector` / `main` branch |
+| `staging` | Staging | `beton-inspector` / `staging` branch |
+| Feature branches | Preview | `beton-inspector` / `staging` branch |
+
+> **Note**: All feature branch previews use the **staging** Supabase database. Only the `main` branch connects to the production Supabase project.
 
 ### Branch Strategy
 ```
@@ -165,6 +170,7 @@ feature/my-feature  →  [PR]  →  staging  →  [PR]  →  main
       │                          │                   │
       │                          │                   │
    Preview                    Staging           Production
+  (staging DB)             (staging DB)        (production DB)
 ```
 
 ### Deployment Steps

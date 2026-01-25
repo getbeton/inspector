@@ -7,6 +7,16 @@ description: Commit, push, and verify Vercel deployment. Use when deploying chan
 
 Use this skill to commit changes, push to the current branch, and verify the Vercel preview deployment succeeded.
 
+## Environment Matrix
+
+| Git Branch | Vercel Environment | Supabase Project |
+|------------|-------------------|------------------|
+| `main` | Production | `beton-inspector` / `main` branch |
+| `staging` | Staging | `beton-inspector` / `staging` branch |
+| Feature branches | Preview | `beton-inspector` / `staging` branch |
+
+> **Note**: All feature branch previews use the **staging** Supabase database. Only the `main` branch connects to the production Supabase project.
+
 > **IMPORTANT: NO AUTO-MERGE**
 >
 > This skill creates PRs but **NEVER merges them automatically**.
