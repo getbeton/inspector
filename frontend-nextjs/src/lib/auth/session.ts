@@ -32,11 +32,16 @@ export async function getSession(): Promise<SessionUser | null> {
     // This is safe because we've already authenticated the user above
     // and we're only fetching THEIR membership (filtered by user_id)
     const adminClient = createAdminClient()
-    const { data: rawMembership } = await adminClient
+    const { data: rawMembership, error: membershipError } = await adminClient
       .from('workspace_members')
       .select('workspace_id, role, workspaces(id, name, slug)')
       .eq('user_id', user.id)
       .single()
+
+    // Log actual database errors (PGRST116 = no rows found, which is expected for new users)
+    if (membershipError && membershipError.code !== 'PGRST116') {
+      console.error('[getSession] Membership query failed:', membershipError.code, membershipError.message)
+    }
 
     const membership = rawMembership as WorkspaceMembership | null
 
