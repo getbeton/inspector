@@ -87,6 +87,19 @@ function mapError(error: unknown): ErrorMapping {
     }
   }
 
+  // Invalid response (HTML instead of JSON - usually wrong region)
+  if (
+    errorStr.includes('Invalid response') ||
+    errorStr.includes('region') ||
+    errorStr.includes('not valid JSON')
+  ) {
+    return {
+      code: 'invalid_region',
+      message: 'Invalid response from PostHog. Please verify your region (US/EU) and project ID.',
+      status: 400,
+    }
+  }
+
   // Network errors
   if (
     errorStr.includes('fetch') ||

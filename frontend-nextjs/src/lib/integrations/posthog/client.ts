@@ -106,6 +106,17 @@ export class PostHogClient {
       )
     }
 
+    // Check content type to avoid JSON parse errors on HTML responses
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      throw createIntegrationError(
+        'Invalid response from PostHog. Please verify your region and project ID.',
+        'API_ERROR',
+        response.status,
+        false
+      )
+    }
+
     return response.json()
   }
 
