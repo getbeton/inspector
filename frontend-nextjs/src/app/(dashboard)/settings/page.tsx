@@ -61,17 +61,6 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     lastSync: '2024-12-31T08:15:00Z',
   },
   {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Real-time notifications and alerts',
-    icon: 'S',
-    status: 'not_connected',
-    fields: [
-      { id: 'webhook_url', label: 'Webhook URL', type: 'text', placeholder: 'https://hooks.slack.com/...', value: '' },
-      { id: 'channel', label: 'Default Channel', type: 'text', placeholder: '#signals', value: '' },
-    ],
-  },
-  {
     id: 'apollo',
     name: 'Apollo',
     description: 'Company enrichment and firmographic data',
