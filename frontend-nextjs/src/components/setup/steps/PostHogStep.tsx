@@ -118,6 +118,7 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       const validateResponse = await fetch("/api/integrations/posthog/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           api_key: apiKey,
           project_id: projectId,
@@ -137,6 +138,7 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       const mtuResponse = await fetch("/api/billing/calculate-mtu", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           api_key: apiKey,
           project_id: projectId,

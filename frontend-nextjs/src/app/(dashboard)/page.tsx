@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SetupWizard } from '@/components/setup'
-import { isBillingEnabled } from '@/lib/utils/deployment'
 
 interface SetupStatus {
   setupComplete: boolean
@@ -101,7 +100,7 @@ export default function DashboardHomePage() {
   // If we're here and not redirecting, setup is not complete
   return (
     <div className="max-w-2xl mx-auto py-8">
-      <SetupWizard billingEnabled={isBillingEnabled()} />
+      <SetupWizard billingEnabled={setupStatus?.billing?.required ?? false} />
     </div>
   )
 }
