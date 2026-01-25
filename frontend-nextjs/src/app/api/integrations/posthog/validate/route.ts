@@ -38,8 +38,8 @@ import type { IntegrationConfigInsert } from '@/lib/supabase/types'
  * PostHog region hosts
  */
 const REGION_HOSTS: Record<string, string> = {
-  us: 'https://us.posthog.com',
-  eu: 'https://eu.posthog.com',
+  us: 'https://us.posthog.com/api',
+  eu: 'https://eu.posthog.com/api',
 }
 
 /**

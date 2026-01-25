@@ -14,8 +14,20 @@ import { Check, AlertCircle, Globe, Eye, EyeOff } from "lucide-react";
  * US and EU are the two main hosted regions
  */
 const REGIONS = [
-  { id: "us", label: "US", host: "https://us.posthog.com" },
-  { id: "eu", label: "EU", host: "https://eu.posthog.com" },
+  {
+    id: "us",
+    label: "US",
+    host: "https://us.posthog.com",
+    apiKeysUrl: "https://us.posthog.com/settings/user-api-keys",
+    projectSettingsUrl: "https://us.posthog.com/settings/project",
+  },
+  {
+    id: "eu",
+    label: "EU",
+    host: "https://eu.posthog.com",
+    apiKeysUrl: "https://eu.posthog.com/settings/user-api-keys",
+    projectSettingsUrl: "https://eu.posthog.com/settings/project",
+  },
 ] as const;
 
 type Region = (typeof REGIONS)[number]["id"];
@@ -223,7 +235,22 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Find this in PostHog → Settings → Personal API Keys
+          Create one in{" "}
+          <a
+            href={REGIONS.find((r) => r.id === region)?.apiKeysUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            PostHog Settings → Personal API Keys
+          </a>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Required scopes:{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">person:read</code>{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">query:read</code>{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">event:read</code>{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">group:read</code>
         </p>
       </div>
 
@@ -239,7 +266,15 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
           disabled={isLoading || isSuccess}
         />
         <p className="text-xs text-muted-foreground">
-          Find this in PostHog → Settings → Project Details
+          Find this in{" "}
+          <a
+            href={REGIONS.find((r) => r.id === region)?.projectSettingsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            PostHog Settings → Project Details
+          </a>
         </p>
       </div>
 
