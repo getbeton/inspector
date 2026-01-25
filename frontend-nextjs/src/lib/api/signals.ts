@@ -35,29 +35,6 @@ export interface SignalListResponse {
   mock: boolean
 }
 
-export interface BacktestRequest {
-  signal_name: string
-  conditions: any[]
-  time_window?: string
-  date_from?: string
-  date_to?: string
-}
-
-export interface BacktestResponse {
-  signal_name: string
-  total_users: number
-  users_with_signal: number
-  converted_with_signal: number
-  converted_without_signal: number
-  conversion_rate_with: number
-  conversion_rate_without: number
-  lift: number
-  precision: number
-  recall: number
-  f1_score: number
-  estimated_arr: number
-}
-
 /**
  * Get list of all signals
  */
@@ -112,20 +89,6 @@ export async function enableSignal(id: string, useMockData = false): Promise<{ s
  */
 export async function disableSignal(id: string, useMockData = false): Promise<{ signal: Signal }> {
   return apiClient.put<{ signal: Signal }>(`/api/signals/${id}/disable`, {}, { useMockData })
-}
-
-/**
- * Run backtest on a signal
- */
-export async function runBacktest(
-  request: BacktestRequest,
-  useMockData = false
-): Promise<{ result: BacktestResponse }> {
-  return apiClient.post<{ result: BacktestResponse }>(
-    '/api/signals/backtest',
-    request,
-    { useMockData }
-  )
 }
 
 /**
