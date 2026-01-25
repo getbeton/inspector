@@ -118,8 +118,22 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
 
+    console.log('[posthog/validate] Auth check:', {
+      hasUser: !!user,
+      userId: user?.id?.substring(0, 8),
+    })
+
     if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'not_authenticated',
+            message: 'Your session has expired. Please refresh the page.',
+          },
+        },
+        { status: 401 }
+      )
     }
 
     // Get workspace
@@ -174,11 +188,11 @@ export async function POST(request: Request) {
       host,
     })
 
-    let testResult: boolean
-    try {
-      testResult = await client.testConnection()
-    } catch (error) {
-      const mapped = mapError(error)
+    const testResult = await client.testConnection()
+
+    if (!testResult.success) {
+      console.log('[posthog/validate] Connection test failed:', testResult.error)
+      const mapped = mapError(testResult.error || 'Connection failed')
       return NextResponse.json(
         {
           success: false,
@@ -188,19 +202,6 @@ export async function POST(request: Request) {
           },
         },
         { status: mapped.status }
-      )
-    }
-
-    if (!testResult) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'invalid_api_key',
-            message: 'Could not connect to PostHog. Please verify your credentials.',
-          },
-        },
-        { status: 401 }
       )
     }
 

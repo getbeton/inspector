@@ -129,7 +129,9 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
 
       if (!validateResponse.ok) {
         const data = await validateResponse.json().catch(() => ({}));
-        throw new Error(data.error || `${validateResponse.status}`);
+        // Extract error message from nested structure: { error: { message: "..." } }
+        const errorMsg = data.error?.message || data.error || `${validateResponse.status}`;
+        throw new Error(errorMsg);
       }
 
       // Phase 2: Calculate MTU

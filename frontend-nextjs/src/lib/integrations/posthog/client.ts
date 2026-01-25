@@ -400,14 +400,16 @@ export class PostHogClient {
 
   /**
    * Test the PostHog API connection
+   * Returns success/error details instead of swallowing errors
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
       // Simple request to verify credentials
       await this.fetch<unknown>('/persons?limit=1')
-      return true
-    } catch {
-      return false
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
     }
   }
 
