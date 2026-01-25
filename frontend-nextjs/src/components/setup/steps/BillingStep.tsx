@@ -57,12 +57,13 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
   const elements = useElements();
   const completeSetup = useCompleteSetup();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
-      onError("Stripe has not loaded yet. Please try again.");
+    if (!stripe || !elements || !isReady) {
+      onError("Payment form is not ready yet. Please wait a moment.");
       return;
     }
 
@@ -110,15 +111,22 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {!isReady && (
+        <div className="flex items-center justify-center py-4">
+          <Spinner className="h-5 w-5" />
+          <span className="ml-2 text-sm text-muted-foreground">Loading payment form...</span>
+        </div>
+      )}
       <PaymentElement
         options={{
           layout: "tabs",
         }}
+        onReady={() => setIsReady(true)}
       />
       <Button
         type="submit"
         className="w-full"
-        disabled={!stripe || !elements || isSubmitting}
+        disabled={!stripe || !elements || !isReady || isSubmitting}
       >
         {isSubmitting ? (
           <>
