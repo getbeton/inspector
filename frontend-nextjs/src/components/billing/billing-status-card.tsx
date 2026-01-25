@@ -270,15 +270,20 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
         <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
           <div className="text-sm font-medium">Pricing</div>
           <div className="text-xs text-muted-foreground">
-            Free tier: {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU/month
+            Free tier: up to {(billingStatus.mtu?.limit ?? 0).toLocaleString()} monthly tracked users
           </div>
           {billingStatus.pricing ? (
             <div className="text-xs text-muted-foreground">
-              After free tier: {billingStatus.pricing.pricePerMtu} per MTU
+              After {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU: {billingStatus.pricing.pricePerMtu} per MTU
             </div>
           ) : (
             <div className="text-xs text-muted-foreground">
-              After free tier: Usage-based pricing
+              After {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU: Usage-based pricing
+            </div>
+          )}
+          {!billingStatus.hasPaymentMethod && (
+            <div className="text-xs text-muted-foreground italic">
+              Until you link a card, Beton will track signals only for {(billingStatus.mtu?.limit ?? 0).toLocaleString()} first users
             </div>
           )}
         </div>
@@ -289,7 +294,7 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
             trigger={
               <Button>
                 <CreditCard />
-                Add Payment Method
+                Subscribe by linking a card
               </Button>
             }
             onSuccess={onCardAdded}

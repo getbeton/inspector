@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils/cn'
-import { BillingStatusCard, CardLinkingModal } from '@/components/billing'
+import { BillingStatusCard } from '@/components/billing'
 import { useBillingStatus } from '@/lib/hooks/use-billing'
 
 interface Integration {
@@ -90,26 +90,6 @@ export default function SettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
-  const [showCardPrompt, setShowCardPrompt] = useState(false)
-
-  // Billing status
-  const { data: billingStatus } = useBillingStatus()
-
-  // Check if we should show the card prompt after PostHog connection
-  useEffect(() => {
-    const posthogIntegration = integrations.find(i => i.id === 'posthog')
-    const shouldPrompt =
-      posthogIntegration?.status === 'connected' &&
-      billingStatus &&
-      !billingStatus.hasPaymentMethod &&
-      billingStatus.status !== 'active'
-
-    if (shouldPrompt) {
-      // Show prompt after a short delay to let the save animation complete
-      const timer = setTimeout(() => setShowCardPrompt(true), 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [integrations, billingStatus])
 
   const getStatusBadge = (status: Integration['status']) => {
     switch (status) {
@@ -200,13 +180,6 @@ export default function SettingsPage() {
 
       {/* Billing */}
       <BillingStatusCard />
-
-      {/* Card Linking Prompt Modal (shows after PostHog connection) */}
-      <CardLinkingModal
-        open={showCardPrompt}
-        onOpenChange={setShowCardPrompt}
-        onSuccess={() => setShowCardPrompt(false)}
-      />
 
       {/* Integrations */}
       <Card>

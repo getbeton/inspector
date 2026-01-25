@@ -142,7 +142,7 @@ function CardForm({ onSuccess, onError, onProcessing }: CardFormProps) {
         ) : (
           <>
             <CreditCard />
-            Add Payment Method
+            Subscribe
           </>
         )}
       </Button>
@@ -222,9 +222,9 @@ export function CardLinkingModal({
         return (
           <>
             <DialogHeader>
-              <DialogTitle>Add Payment Method</DialogTitle>
+              <DialogTitle>Subscribe to Beton</DialogTitle>
               <DialogDescription>
-                Add a card to unlock full access to Beton Inspector
+                Link a card to continue tracking signals beyond the free tier
               </DialogDescription>
             </DialogHeader>
             <DialogPanel>
@@ -255,11 +255,15 @@ export function CardLinkingModal({
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-                      <span>Pay only for what you use ($0.02/MTU)</span>
+                      <span>
+                        Pay only for what you use ({billingStatus?.pricing?.pricePerMtu ?? 'usage-based pricing'}/MTU)
+                      </span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-                      <span>No charge until you exceed free tier</span>
+                      <span>
+                        No charge until you exceed {(billingStatus?.mtu?.limit ?? 0).toLocaleString()} MTU free tier
+                      </span>
                     </li>
                   </ul>
                 </div>
