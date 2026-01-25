@@ -327,16 +327,10 @@ export default function SignalDetailPage() {
       </CollapsibleSection>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border">
-        <Link href="/playbooks">
-          <Button className="w-full">Add to Playbook</Button>
-        </Link>
-        <Button variant="outline" className="w-full">
+      <div className="flex gap-4 pt-4 border-t border-border">
+        <Button variant="outline" className="flex-1">
           Export Users
         </Button>
-        <Link href="/backtest">
-          <Button variant="outline" className="w-full">Run Backtest</Button>
-        </Link>
       </div>
     </div>
   )
