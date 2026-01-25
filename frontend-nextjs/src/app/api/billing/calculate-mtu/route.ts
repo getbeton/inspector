@@ -11,7 +11,7 @@
  * {
  *   "api_key": "phx_...",
  *   "project_id": "12345",
- *   "host": "https://us.posthog.com"
+ *   "region": "us" | "eu"
  * }
  *
  * Request (normal mode):
@@ -32,6 +32,7 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { calculateMTU, storeMTUTracking } from '@/lib/billing/mtu-service'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
+import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 
 /**
  * Calculate MTU directly from PostHog using provided credentials
@@ -40,8 +41,11 @@ import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 async function calculateMTUDirect(
   apiKey: string,
   projectId: string,
-  host?: string
+  region?: string
 ): Promise<{ mtuCount: number; source: string }> {
+  // Always derive host from region to ensure /api path is included
+  const host = getPostHogHost(region)
+
   const client = new PostHogClient({
     apiKey,
     projectId,
@@ -117,7 +121,7 @@ export async function POST(request: Request) {
 
     // Parse request body
     const body = await request.json().catch(() => ({}))
-    const { api_key, project_id, host } = body
+    const { api_key, project_id, region } = body
 
     // Determine mode based on whether credentials are provided
     const hasDirectCredentials = api_key && project_id
@@ -125,7 +129,7 @@ export async function POST(request: Request) {
     if (hasDirectCredentials) {
       // Setup mode: Calculate using provided credentials
       try {
-        const result = await calculateMTUDirect(api_key, project_id, host)
+        const result = await calculateMTUDirect(api_key, project_id, region)
 
         return NextResponse.json({
           mtu_count: result.mtuCount,

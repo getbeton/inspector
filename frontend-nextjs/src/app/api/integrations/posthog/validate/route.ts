@@ -32,15 +32,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
+import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
-
-/**
- * PostHog region hosts
- */
-const REGION_HOSTS: Record<string, string> = {
-  us: 'https://us.posthog.com/api',
-  eu: 'https://eu.posthog.com/api',
-}
 
 /**
  * Error code mapping based on HTTP status and error types
@@ -186,9 +179,8 @@ export async function POST(request: Request) {
     }
 
     // Always derive host from region - don't trust client-provided host
-    // REGION_HOSTS includes the /api path needed for API calls
-    const normalizedRegion = (region || 'us').toLowerCase()
-    const host = REGION_HOSTS[normalizedRegion] || REGION_HOSTS.us
+    // getPostHogHost() includes the /api path needed for API calls
+    const host = getPostHogHost(region)
 
     // Create PostHog client and test connection
     const client = new PostHogClient({

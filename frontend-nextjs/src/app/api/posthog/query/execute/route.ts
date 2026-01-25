@@ -25,6 +25,7 @@ import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middlew
 import { QueryService } from '@/lib/services/query-service'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
+import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { ConfigurationError, InvalidQueryError } from '@/lib/errors/query-errors'
 import type { QueryExecutionRequest, QueryExecutionResult } from '@/lib/types/posthog-query'
 
@@ -73,7 +74,8 @@ async function getPostHogConfig(
   return {
     apiKey: credentials.apiKey,
     projectId: credentials.projectId,
-    host: credentials.host || undefined,
+    // Always derive host from region to ensure /api path is included
+    host: getPostHogHost(credentials.region),
   }
 }
 

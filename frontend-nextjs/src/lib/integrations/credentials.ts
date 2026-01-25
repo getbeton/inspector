@@ -7,6 +7,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { decryptCredentials, isEncrypted } from '@/lib/crypto/encryption'
+import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import type { IntegrationConfig, Json } from '@/lib/supabase/types'
 
 export interface IntegrationCredentials {
@@ -66,11 +67,19 @@ export async function getIntegrationCredentials(
     projectId = (configJson.project_id as string) || null
   }
 
+  // For PostHog, always derive host from region to ensure /api path is included
+  // For other integrations, use the stored host value
+  const region = (configJson.region as string) || null
+  const storedHost = (configJson.host as string) || null
+  const derivedHost = integrationName === 'posthog' && region
+    ? getPostHogHost(region)
+    : storedHost
+
   return {
     apiKey,
     projectId,
-    region: (configJson.region as string) || null,
-    host: (configJson.host as string) || null,
+    region,
+    host: derivedHost,
     isActive: config.is_active,
     status: config.status
   }

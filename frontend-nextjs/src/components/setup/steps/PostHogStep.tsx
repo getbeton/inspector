@@ -156,7 +156,7 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
         body: JSON.stringify({
           api_key: apiKey,
           project_id: projectId,
-          host: selectedRegion?.host,
+          region: region,  // Send region, not host - server derives host with /api path
         }),
       });
 
