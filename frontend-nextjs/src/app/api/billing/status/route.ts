@@ -12,6 +12,13 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import { getAccessStatus, getThresholdWarningLevel } from '@/lib/billing/enforcement-service';
 import { getCurrentBillingCycle } from '@/lib/billing/cycle-service';
+import {
+  getActivePrice,
+  getPriceFromSubscription,
+  getMtuProductId,
+  type BillingResult,
+  type PriceInfo,
+} from '@/lib/integrations/stripe/billing';
 
 // ============================================
 // Types
@@ -40,6 +47,11 @@ interface BillingStatusResponse {
     canAccess: boolean;
     accessWarning: string | null;
   };
+  pricing: {
+    pricePerMtu: string;
+    currency: string;
+    isSubscriptionPrice: boolean;
+  } | null;
 }
 
 // ============================================
@@ -119,6 +131,49 @@ async function getBillingDetails(
   };
 }
 
+/**
+ * Gets pricing information for the billing status.
+ * Tries subscription price first, then falls back to product's active price.
+ */
+async function getPricingInfo(
+  subscriptionId: string | null
+): Promise<BillingStatusResponse['pricing']> {
+  try {
+    // Try to get price from subscription first
+    if (subscriptionId) {
+      const subPriceResult = await getPriceFromSubscription(subscriptionId);
+      if (subPriceResult.success && subPriceResult.data) {
+        return {
+          pricePerMtu: subPriceResult.data.formattedPrice,
+          currency: subPriceResult.data.currency,
+          isSubscriptionPrice: true,
+        };
+      }
+    }
+
+    // Fall back to active price for the configured product
+    const productId = getMtuProductId();
+    if (!productId) {
+      console.warn('[Billing Status] No MTU product ID configured');
+      return null;
+    }
+
+    const activePriceResult = await getActivePrice(productId);
+    if (activePriceResult.success && activePriceResult.data) {
+      return {
+        pricePerMtu: activePriceResult.data.formattedPrice,
+        currency: activePriceResult.data.currency,
+        isSubscriptionPrice: false,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[Billing Status] Failed to fetch pricing info:', error);
+    return null;
+  }
+}
+
 // ============================================
 // Route Handler
 // ============================================
@@ -154,6 +209,7 @@ export async function GET(): Promise<NextResponse<BillingStatusResponse | { erro
         canAccess: true,
         accessWarning: null,
       },
+      pricing: null, // No pricing in self-hosted mode
     };
 
     return NextResponse.json(response, {
@@ -168,6 +224,9 @@ export async function GET(): Promise<NextResponse<BillingStatusResponse | { erro
   const thresholdWarning = await getThresholdWarningLevel(workspaceId);
   const billingCycle = await getCurrentBillingCycle(workspaceId);
   const billingDetails = await getBillingDetails(workspaceId, supabase);
+
+  // Fetch pricing information (from subscription or product)
+  const pricing = await getPricingInfo(billingDetails?.stripeSubscriptionId ?? null);
 
   // Map billing status to expected format
   const statusMap: Record<string, BillingStatusResponse['status']> = {
@@ -210,6 +269,7 @@ export async function GET(): Promise<NextResponse<BillingStatusResponse | { erro
       canAccess: accessStatus.hasAccess,
       accessWarning,
     },
+    pricing,
   };
 
   return NextResponse.json(response, {

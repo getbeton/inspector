@@ -47,8 +47,11 @@ export {
   createBillingPortalSession,
   constructWebhookEvent,
   isBillingConfigured,
-  getMtuPriceId,
+  getMtuProductId,
   getMtuMeterId,
+  // Price fetching
+  getActivePrice,
+  getPriceFromSubscription,
   // Types
   type BillingResult,
   type CreateCustomerParams,
@@ -57,6 +60,7 @@ export {
   type SetupIntentResult,
   type PaymentMethodInfo,
   type BillingPortalSessionResult,
+  type PriceInfo,
 } from './stripe/billing'
 
 // Apollo

@@ -28,6 +28,11 @@ export interface BillingStatus {
     canAccess: boolean;
     accessWarning: string | null;
   };
+  pricing: {
+    pricePerMtu: string;
+    currency: string;
+    isSubscriptionPrice: boolean;
+  } | null;
 }
 
 export interface SetupIntentResponse {

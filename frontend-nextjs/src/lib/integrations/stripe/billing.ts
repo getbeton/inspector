@@ -128,8 +128,20 @@ export type BillingResult<T> =
 export interface StripeBillingConfig {
   secretKey: string;
   webhookSecret?: string;
-  mtuPriceId?: string;
+  mtuProductId?: string;
   mtuMeterId?: string;
+}
+
+// ============================================
+// Price Information Types
+// ============================================
+
+export interface PriceInfo {
+  priceId: string;
+  productId: string;
+  unitAmount: number; // Amount in cents
+  currency: string;
+  formattedPrice: string; // e.g., "$0.50"
 }
 
 function getStripeConfig(): StripeBillingConfig | null {
@@ -142,7 +154,7 @@ function getStripeConfig(): StripeBillingConfig | null {
   return {
     secretKey,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
-    mtuPriceId: process.env.STRIPE_MTU_PRICE_ID || 'PLACEHOLDER_PRICE_ID',
+    mtuProductId: process.env.STRIPE_MTU_PRODUCT_ID || 'PLACEHOLDER_PRODUCT_ID',
     mtuMeterId: process.env.STRIPE_MTU_METER_ID || 'PLACEHOLDER_METER_ID',
   };
 }
@@ -194,6 +206,163 @@ export function getStripeClient(): Stripe {
   }
 
   return stripe;
+}
+
+// ============================================
+// Price Caching
+// ============================================
+
+interface CachedPrice {
+  price: PriceInfo;
+  expiresAt: number;
+}
+
+// Simple in-memory cache with 15-minute TTL
+const priceCache = new Map<string, CachedPrice>();
+const PRICE_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function getCachedPrice(key: string): PriceInfo | null {
+  const cached = priceCache.get(key);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    priceCache.delete(key);
+    return null;
+  }
+  return cached.price;
+}
+
+function setCachedPrice(key: string, price: PriceInfo): void {
+  priceCache.set(key, {
+    price,
+    expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
+  });
+}
+
+// ============================================
+// Price Fetching
+// ============================================
+
+/**
+ * Maps a Stripe Price object to our PriceInfo format.
+ */
+function mapPriceToInfo(price: Stripe.Price): PriceInfo {
+  const unitAmount = price.unit_amount ?? 0;
+  const currency = price.currency.toUpperCase();
+
+  // Format price based on currency (most currencies use 2 decimal places)
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: price.currency,
+  }).format(unitAmount / 100);
+
+  return {
+    priceId: price.id,
+    productId: typeof price.product === 'string' ? price.product : price.product.id,
+    unitAmount,
+    currency,
+    formattedPrice: formatted,
+  };
+}
+
+/**
+ * Fetches the active price for a product.
+ * Uses caching to avoid repeated API calls.
+ *
+ * @param productId - The Stripe product ID
+ * @returns The active price info or error
+ */
+export async function getActivePrice(
+  productId: string
+): Promise<BillingResult<PriceInfo>> {
+  if (!isBillingEnabled()) {
+    return { success: false, disabled: true };
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    return { success: false, disabled: true };
+  }
+
+  // Check cache first
+  const cacheKey = `product:${productId}`;
+  const cached = getCachedPrice(cacheKey);
+  if (cached) {
+    return { success: true, data: cached };
+  }
+
+  try {
+    const prices = await stripe.prices.list({
+      product: productId,
+      active: true,
+      type: 'recurring',
+      limit: 1,
+    });
+
+    if (prices.data.length === 0) {
+      throw new StripeInvalidRequestError(`No active price found for product ${productId}`);
+    }
+
+    const priceInfo = mapPriceToInfo(prices.data[0]);
+    setCachedPrice(cacheKey, priceInfo);
+
+    return { success: true, data: priceInfo };
+  } catch (error) {
+    if (error instanceof StripeBillingError) {
+      throw error;
+    }
+    handleStripeError(error, 'Failed to fetch active price');
+  }
+}
+
+/**
+ * Gets price info from an existing subscription.
+ * Uses caching to avoid repeated API calls.
+ *
+ * @param subscriptionId - The Stripe subscription ID
+ * @returns The price info from the subscription or error
+ */
+export async function getPriceFromSubscription(
+  subscriptionId: string
+): Promise<BillingResult<PriceInfo>> {
+  if (!isBillingEnabled()) {
+    return { success: false, disabled: true };
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    return { success: false, disabled: true };
+  }
+
+  // Check cache first
+  const cacheKey = `subscription:${subscriptionId}`;
+  const cached = getCachedPrice(cacheKey);
+  if (cached) {
+    return { success: true, data: cached };
+  }
+
+  try {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ['items.data.price'],
+    });
+
+    const firstItem = subscription.items.data[0];
+    if (!firstItem?.price) {
+      throw new StripeInvalidRequestError('Subscription has no price items');
+    }
+
+    const priceInfo = mapPriceToInfo(firstItem.price);
+    setCachedPrice(cacheKey, priceInfo);
+
+    return { success: true, data: priceInfo };
+  } catch (error) {
+    if (error instanceof StripeBillingError) {
+      throw error;
+    }
+    if ((error as Stripe.errors.StripeError).code === 'resource_missing') {
+      return { success: true, data: null as unknown as PriceInfo };
+    }
+    handleStripeError(error, 'Failed to fetch subscription price');
+  }
 }
 
 // ============================================
@@ -331,7 +500,7 @@ export async function updateCustomer(
 
 /**
  * Creates a metered subscription for a customer.
- * Uses the configured MTU price ID.
+ * Fetches the active price dynamically from the configured product.
  */
 export async function createSubscription(
   params: CreateSubscriptionParams
@@ -346,9 +515,25 @@ export async function createSubscription(
     return { success: false, disabled: true };
   }
 
-  const priceId = params.priceId || config.mtuPriceId;
-  if (!priceId || priceId === 'PLACEHOLDER_PRICE_ID') {
-    throw new StripeInvalidRequestError('MTU Price ID not configured');
+  // Determine the price ID to use
+  let priceId = params.priceId;
+
+  if (!priceId) {
+    // Fetch price dynamically from the configured product
+    const productId = config.mtuProductId;
+    if (!productId || productId === 'PLACEHOLDER_PRODUCT_ID') {
+      throw new StripeInvalidRequestError('MTU Product ID not configured');
+    }
+
+    const priceResult = await getActivePrice(productId);
+    if (!priceResult.success) {
+      if ('disabled' in priceResult && priceResult.disabled) {
+        return { success: false, disabled: true };
+      }
+      throw new StripeInvalidRequestError('Failed to fetch active price for product');
+    }
+
+    priceId = priceResult.data.priceId;
   }
 
   try {
@@ -728,14 +913,14 @@ export function isBillingConfigured(): boolean {
 }
 
 /**
- * Gets the configured MTU price ID (or placeholder if not set).
+ * Gets the configured MTU product ID (or null if not set).
  */
-export function getMtuPriceId(): string | null {
+export function getMtuProductId(): string | null {
   const config = getStripeConfig();
-  if (!config?.mtuPriceId || config.mtuPriceId === 'PLACEHOLDER_PRICE_ID') {
+  if (!config?.mtuProductId || config.mtuProductId === 'PLACEHOLDER_PRODUCT_ID') {
     return null;
   }
-  return config.mtuPriceId;
+  return config.mtuProductId;
 }
 
 /**

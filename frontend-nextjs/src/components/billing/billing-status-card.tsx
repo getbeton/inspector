@@ -272,9 +272,15 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
           <div className="text-xs text-muted-foreground">
             Free tier: {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU/month
           </div>
-          <div className="text-xs text-muted-foreground">
-            After free tier: $0.02 per MTU
-          </div>
+          {billingStatus.pricing ? (
+            <div className="text-xs text-muted-foreground">
+              After free tier: {billingStatus.pricing.pricePerMtu} per MTU
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              After free tier: Usage-based pricing
+            </div>
+          )}
         </div>
       </CardContent>
       <CardFooter className="flex gap-2">
