@@ -228,12 +228,12 @@ export function CardLinkingModal({
                   <div className="rounded-lg border bg-muted/50 p-4">
                     <div className="text-sm text-muted-foreground">Current Usage</div>
                     <div className="mt-1 text-2xl font-semibold">
-                      {billingStatus.mtu.current.toLocaleString()} / {billingStatus.mtu.limit.toLocaleString()} MTU
+                      {(billingStatus.mtu?.current ?? 0).toLocaleString()} / {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU
                     </div>
                     <div className="mt-1 h-2 rounded-full bg-muted">
                       <div
                         className="h-2 rounded-full bg-primary transition-all"
-                        style={{ width: `${Math.min(100, billingStatus.mtu.percentUsed)}%` }}
+                        style={{ width: `${Math.min(100, billingStatus.mtu?.percentUsed ?? 0)}%` }}
                       />
                     </div>
                   </div>

@@ -87,7 +87,7 @@ function UsageProgressBar({
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">Monthly Tracked Users (MTU)</span>
         <span className="font-medium">
-          {current.toLocaleString()} / {limit.toLocaleString()}
+          {(current ?? 0).toLocaleString()} / {(limit ?? 0).toLocaleString()}
         </span>
       </div>
       <Progress value={Math.min(100, percentUsed)}>
@@ -198,7 +198,7 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
                 <StatusBadge status={billingStatus.status} />
               </div>
               <div className="text-xs text-muted-foreground">
-                {billingStatus.mtu.current.toLocaleString()} / {billingStatus.mtu.limit.toLocaleString()} MTU
+                {(billingStatus.mtu?.current ?? 0).toLocaleString()} / {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU
               </div>
             </div>
             {!billingStatus.hasPaymentMethod && billingStatus.mtu.percentUsed >= 80 && (
@@ -270,7 +270,7 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
         <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
           <div className="text-sm font-medium">Pricing</div>
           <div className="text-xs text-muted-foreground">
-            Free tier: {billingStatus.mtu.limit.toLocaleString()} MTU/month
+            Free tier: {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU/month
           </div>
           <div className="text-xs text-muted-foreground">
             After free tier: $0.02 per MTU

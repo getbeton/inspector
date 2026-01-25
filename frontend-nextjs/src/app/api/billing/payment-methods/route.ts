@@ -88,12 +88,12 @@ async function getWorkspaceBillingInfo(
 // ============================================
 
 export async function GET(): Promise<NextResponse<PaymentMethodsResponse | { error: string }>> {
-  // Check if billing is enabled
+  // In self-hosted mode, return empty payment methods (graceful degradation)
   if (!isBillingEnabled()) {
-    return NextResponse.json(
-      { error: 'Billing is disabled in self-hosted mode' },
-      { status: 400 }
-    );
+    return NextResponse.json({
+      paymentMethods: [],
+      defaultPaymentMethodId: null,
+    });
   }
 
   const supabase = await createServerClient();
