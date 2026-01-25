@@ -244,9 +244,23 @@ function setCachedPrice(key: string, price: PriceInfo): void {
 
 /**
  * Maps a Stripe Price object to our PriceInfo format.
+ * Handles both simple prices and tiered pricing.
+ * For tiered pricing, extracts the unit price from the paid tier (above free threshold).
  */
 function mapPriceToInfo(price: Stripe.Price): PriceInfo {
-  const unitAmount = price.unit_amount ?? 0;
+  let unitAmount = price.unit_amount ?? 0;
+
+  // Handle tiered pricing: find the paid tier (one with unit_amount > 0)
+  if (price.tiers && price.tiers.length > 0) {
+    // Find the tier that has a unit_amount (the paid tier, typically the last one)
+    const paidTier = price.tiers.find(
+      (tier) => tier.unit_amount !== null && tier.unit_amount > 0
+    );
+    if (paidTier && paidTier.unit_amount !== null) {
+      unitAmount = paidTier.unit_amount;
+    }
+  }
+
   const currency = price.currency.toUpperCase();
 
   // Format price based on currency (most currencies use 2 decimal places)
@@ -296,6 +310,7 @@ export async function getActivePrice(
       active: true,
       type: 'recurring',
       limit: 1,
+      expand: ['data.tiers'],
     });
 
     if (prices.data.length === 0) {
@@ -342,7 +357,7 @@ export async function getPriceFromSubscription(
 
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-      expand: ['items.data.price'],
+      expand: ['items.data.price', 'items.data.price.tiers'],
     });
 
     const firstItem = subscription.items.data[0];
