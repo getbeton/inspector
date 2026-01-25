@@ -103,27 +103,21 @@ async function updateWorkspaceBilling(
   }
 
   const paymentMethodsResult = await listPaymentMethods(customerId);
-  if (!paymentMethodsResult.success || !('paymentMethods' in paymentMethodsResult)) {
+  if (!paymentMethodsResult.success || !('data' in paymentMethodsResult)) {
     throw new Error('Failed to get payment method details');
   }
 
   // Type assertion after narrowing check
-  const paymentMethods = paymentMethodsResult.paymentMethods as Array<{
-    id: string;
-    cardBrand: string | null;
-    cardLastFour: string | null;
-    cardExpMonth: number | null;
-    cardExpYear: number | null;
-  }>;
+  const paymentMethods = paymentMethodsResult.data;
   const paymentMethod = paymentMethods.find((pm) => pm.id === paymentMethodId);
 
   const updates: Record<string, unknown> = {
     stripe_payment_method_id: paymentMethodId,
     status: subscriptionId ? 'active' : 'card_required',
-    card_brand: paymentMethod?.cardBrand || null,
-    card_last_four: paymentMethod?.cardLastFour || null,
-    card_exp_month: paymentMethod?.cardExpMonth || null,
-    card_exp_year: paymentMethod?.cardExpYear || null,
+    card_brand: paymentMethod?.card?.brand || null,
+    card_last_four: paymentMethod?.card?.last4 || null,
+    card_exp_month: paymentMethod?.card?.expMonth || null,
+    card_exp_year: paymentMethod?.card?.expYear || null,
   };
 
   if (subscriptionId) {
@@ -235,8 +229,8 @@ export async function POST(
       // Payment method is already set via setDefaultPaymentMethod above
     });
 
-    if (subscriptionResult.success && 'subscriptionId' in subscriptionResult) {
-      subscriptionId = subscriptionResult.subscriptionId as string;
+    if (subscriptionResult.success && 'data' in subscriptionResult) {
+      subscriptionId = subscriptionResult.data.id;
 
       // Initialize billing cycle
       await initializeBillingCycle(workspaceId);

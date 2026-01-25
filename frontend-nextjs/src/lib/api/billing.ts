@@ -99,14 +99,14 @@ export async function createSetupIntent(): Promise<SetupIntentResponse> {
 /**
  * Completes the card setup after Stripe confirmation.
  */
-export async function completeSetup(setupIntentId: string): Promise<CompleteSetupResponse> {
+export async function completeSetup(setupIntentId: string, paymentMethodId: string): Promise<CompleteSetupResponse> {
   const response = await fetch('/api/billing/complete-setup', {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ setupIntentId }),
+    body: JSON.stringify({ setupIntentId, paymentMethodId }),
   });
 
   if (!response.ok) {

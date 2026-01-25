@@ -103,8 +103,14 @@ function CardForm({ onSuccess, onError, onProcessing }: CardFormProps) {
         throw new Error('Card setup did not complete successfully');
       }
 
+      // Extract payment method ID from the confirmed SetupIntent
+      const paymentMethodId = setupIntent.payment_method;
+      if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+        throw new Error('No payment method returned from Stripe');
+      }
+
       // Complete the setup on our backend
-      await completeSetup.mutateAsync(setupIntent.id);
+      await completeSetup.mutateAsync({ setupIntentId: setupIntent.id, paymentMethodId });
 
       onSuccess();
     } catch (error) {

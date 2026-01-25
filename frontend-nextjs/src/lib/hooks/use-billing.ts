@@ -80,7 +80,8 @@ export function useCompleteSetup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: completeSetup,
+    mutationFn: ({ setupIntentId, paymentMethodId }: { setupIntentId: string; paymentMethodId: string }) =>
+      completeSetup(setupIntentId, paymentMethodId),
     onSuccess: () => {
       // Invalidate all billing queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: billingKeys.all });
