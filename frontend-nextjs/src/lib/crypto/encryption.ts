@@ -6,7 +6,11 @@
  * Output format: salt:iv:tag:ciphertext (hex-encoded)
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
+import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'crypto'
+import { promisify } from 'util'
+
+// Promisify scrypt for non-blocking key derivation
+const scryptAsync = promisify(scrypt)
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY_LENGTH = 32 // 256 bits for AES-256
@@ -121,28 +125,35 @@ function getEncryptionKey(): string {
 }
 
 /**
- * Derive a 256-bit key from the passphrase using scrypt
+ * Derive a 256-bit key from the passphrase using scrypt (async)
+ *
+ * Uses async scrypt to avoid blocking the event loop during key derivation.
+ * This is important for server performance under concurrent load.
+ *
  * @param passphrase - The passphrase to derive the key from
  * @param salt - The salt for key derivation (should be unique per encryption)
  */
-function deriveKey(passphrase: string, salt: Buffer): Buffer {
-  return scryptSync(passphrase, salt, KEY_LENGTH)
+async function deriveKey(passphrase: string, salt: Buffer): Promise<Buffer> {
+  return scryptAsync(passphrase, salt, KEY_LENGTH) as Promise<Buffer>
 }
 
 /**
  * Encrypt a plaintext string using AES-256-GCM
+ *
+ * Uses async key derivation to avoid blocking the event loop.
+ *
  * @param plaintext - The string to encrypt
  * @returns Encrypted string in format: salt:iv:tag:ciphertext (hex-encoded)
  */
-export function encrypt(plaintext: string): string {
+export async function encrypt(plaintext: string): Promise<string> {
   const passphrase = getEncryptionKey()
 
   // Generate unique salt and IV for this encryption
   const salt = randomBytes(SALT_LENGTH)
   const iv = randomBytes(IV_LENGTH)
 
-  // Derive key using scrypt
-  const key = deriveKey(passphrase, salt)
+  // Derive key using scrypt (async to avoid blocking event loop)
+  const key = await deriveKey(passphrase, salt)
 
   // Create cipher and encrypt
   const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH })
@@ -163,11 +174,14 @@ export function encrypt(plaintext: string): string {
 
 /**
  * Decrypt a ciphertext string using AES-256-GCM
+ *
+ * Uses async key derivation to avoid blocking the event loop.
+ *
  * @param ciphertext - The encrypted string in format: salt:iv:tag:ciphertext
  * @returns Decrypted plaintext string
  * @throws Error if decryption fails (wrong key or tampered data)
  */
-export function decrypt(ciphertext: string): string {
+export async function decrypt(ciphertext: string): Promise<string> {
   const passphrase = getEncryptionKey()
 
   // Parse the ciphertext components
@@ -193,8 +207,8 @@ export function decrypt(ciphertext: string): string {
     throw new Error('Invalid auth tag length')
   }
 
-  // Derive key using same salt
-  const key = deriveKey(passphrase, salt)
+  // Derive key using same salt (async to avoid blocking event loop)
+  const key = await deriveKey(passphrase, salt)
 
   // Create decipher and decrypt
   const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH })
@@ -210,37 +224,55 @@ export function decrypt(ciphertext: string): string {
 
 /**
  * Encrypt integration credentials (API key and optional project ID)
+ *
+ * Encrypts credentials in parallel for better performance.
+ *
  * @param credentials - Object containing apiKey and optional projectId
  * @returns Object with encrypted values
  */
-export function encryptCredentials(credentials: {
+export async function encryptCredentials(credentials: {
   apiKey: string
   projectId?: string
-}): {
+}): Promise<{
   apiKeyEncrypted: string
   projectIdEncrypted: string | null
-} {
+}> {
+  // Encrypt in parallel for better performance
+  const [apiKeyEncrypted, projectIdEncrypted] = await Promise.all([
+    encrypt(credentials.apiKey),
+    credentials.projectId ? encrypt(credentials.projectId) : Promise.resolve(null),
+  ])
+
   return {
-    apiKeyEncrypted: encrypt(credentials.apiKey),
-    projectIdEncrypted: credentials.projectId ? encrypt(credentials.projectId) : null
+    apiKeyEncrypted,
+    projectIdEncrypted,
   }
 }
 
 /**
  * Decrypt integration credentials
+ *
+ * Decrypts credentials in parallel for better performance.
+ *
  * @param encrypted - Object containing encrypted apiKey and optional projectId
  * @returns Object with decrypted values
  */
-export function decryptCredentials(encrypted: {
+export async function decryptCredentials(encrypted: {
   apiKeyEncrypted: string
   projectIdEncrypted: string | null
-}): {
+}): Promise<{
   apiKey: string
   projectId: string | null
-} {
+}> {
+  // Decrypt in parallel for better performance
+  const [apiKey, projectId] = await Promise.all([
+    decrypt(encrypted.apiKeyEncrypted),
+    encrypted.projectIdEncrypted ? decrypt(encrypted.projectIdEncrypted) : Promise.resolve(null),
+  ])
+
   return {
-    apiKey: decrypt(encrypted.apiKeyEncrypted),
-    projectId: encrypted.projectIdEncrypted ? decrypt(encrypted.projectIdEncrypted) : null
+    apiKey,
+    projectId,
   }
 }
 

@@ -204,8 +204,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // Connection successful - encrypt and store credentials
-    const { apiKeyEncrypted, projectIdEncrypted } = encryptCredentials({
+    // Connection successful - encrypt and store credentials (async to avoid blocking)
+    const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
       apiKey: api_key,
       projectId: project_id,
     })
