@@ -18,6 +18,7 @@ import {
   setDefaultPaymentMethod,
   createSubscription,
   listPaymentMethods,
+  getStripeClient,
   StripeBillingDisabledError,
   StripeInvalidRequestError,
   StripeAuthenticationError,
@@ -32,6 +33,12 @@ import type { BillingStatus } from '@/lib/supabase/types';
 interface CompleteSetupRequest {
   setupIntentId: string;
   paymentMethodId: string;
+  /** Whether to charge immediately (for users over free tier limit) */
+  chargeImmediately?: boolean;
+  /** Amount to charge in cents (for immediate charge) */
+  overageAmount?: number;
+  /** MTU count above free tier (for invoice description) */
+  overageMtu?: number;
 }
 
 interface CompleteSetupResponse {
@@ -140,6 +147,57 @@ async function updateWorkspaceBilling(
 }
 
 /**
+ * Creates an immediate charge for overage users.
+ * This happens when a user exceeds the free tier during initial setup.
+ */
+async function chargeOverageImmediately(
+  customerId: string,
+  amountCents: number,
+  overageMtu: number
+): Promise<{ success: boolean; invoiceId?: string; error?: string }> {
+  try {
+    const stripe = getStripeClient();
+
+    // Create an invoice item for the overage
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      amount: amountCents,
+      currency: 'usd',
+      description: `Initial setup overage charge: ${overageMtu} MTU above free tier`,
+    });
+
+    // Create and finalize the invoice
+    const invoice = await stripe.invoices.create({
+      customer: customerId,
+      auto_advance: true, // Automatically finalize
+      collection_method: 'charge_automatically',
+      description: 'Initial setup - MTU overage charge',
+    });
+
+    // Finalize the invoice (this triggers the charge)
+    const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+
+    // If payment is not immediate, try to pay it
+    if (finalizedInvoice.status === 'open') {
+      await stripe.invoices.pay(invoice.id);
+    }
+
+    console.log(
+      `[Complete Setup] Charged overage: $${(amountCents / 100).toFixed(2)} ` +
+        `for ${overageMtu} MTU, invoice: ${invoice.id}`
+    );
+
+    return { success: true, invoiceId: invoice.id };
+  } catch (error) {
+    console.error('[Complete Setup] Failed to charge overage:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process payment',
+    };
+  }
+}
+
+/**
  * Logs a billing event for audit purposes.
  */
 async function logBillingEvent(
@@ -191,11 +249,19 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { setupIntentId, paymentMethodId } = body;
+  const { setupIntentId, paymentMethodId, chargeImmediately, overageAmount, overageMtu } = body;
 
   if (!setupIntentId || !paymentMethodId) {
     return NextResponse.json(
       { error: 'setupIntentId and paymentMethodId are required' },
+      { status: 400 }
+    );
+  }
+
+  // Validate overage params if charging immediately
+  if (chargeImmediately && (!overageAmount || overageAmount <= 0)) {
+    return NextResponse.json(
+      { error: 'overageAmount is required when chargeImmediately is true' },
       { status: 400 }
     );
   }
@@ -220,6 +286,51 @@ export async function POST(
         { error: 'Failed to set payment method as default' },
         { status: 500 }
       );
+    }
+
+    // Handle immediate charge for overage users
+    let immediateChargeResult: { success: boolean; invoiceId?: string; error?: string } | null =
+      null;
+
+    if (chargeImmediately && overageAmount && overageAmount > 0) {
+      immediateChargeResult = await chargeOverageImmediately(
+        customerId,
+        overageAmount,
+        overageMtu || 0
+      );
+
+      if (!immediateChargeResult.success) {
+        // Log the failure but continue with setup
+        // The subscription will still be created for future billing
+        console.error(
+          '[Complete Setup] Immediate charge failed:',
+          immediateChargeResult.error
+        );
+
+        // Log the failed charge event
+        await logBillingEvent(
+          workspaceId,
+          'immediate_charge_failed',
+          {
+            error: immediateChargeResult.error,
+            overage_amount_cents: overageAmount,
+            overage_mtu: overageMtu,
+          },
+          supabase
+        );
+      } else {
+        // Log the successful immediate charge
+        await logBillingEvent(
+          workspaceId,
+          'immediate_charge_success',
+          {
+            invoice_id: immediateChargeResult.invoiceId,
+            overage_amount_cents: overageAmount,
+            overage_mtu: overageMtu,
+          },
+          supabase
+        );
+      }
     }
 
     // Create a subscription for the metered billing
@@ -254,19 +365,31 @@ export async function POST(
         setup_intent_id: setupIntentId,
         subscription_id: subscriptionId,
         free_tier_mtu_limit: BILLING_CONFIG.FREE_TIER_MTU_LIMIT,
+        charged_immediately: chargeImmediately || false,
+        immediate_charge_amount: overageAmount || 0,
       },
       supabase
     );
 
     console.log(
       `[Complete Setup] Successfully completed setup for workspace ${workspaceId}, ` +
-        `payment method: ${paymentMethodId}, subscription: ${subscriptionId}`
+        `payment method: ${paymentMethodId}, subscription: ${subscriptionId}` +
+        (immediateChargeResult?.success
+          ? `, immediate charge: $${((overageAmount || 0) / 100).toFixed(2)}`
+          : '')
     );
 
     return NextResponse.json({
       success: true,
       subscriptionId: subscriptionId || undefined,
       billingStatus: subscriptionId ? 'active' : 'card_required',
+      immediateCharge: immediateChargeResult
+        ? {
+            charged: immediateChargeResult.success,
+            invoiceId: immediateChargeResult.invoiceId,
+            error: immediateChargeResult.error,
+          }
+        : undefined,
     });
   } catch (error) {
     if (error instanceof StripeBillingDisabledError) {

@@ -17,6 +17,12 @@ Use this skill to commit changes, push to the current branch, and verify the Ver
 
 > **Note**: All feature branch previews use the **staging** Supabase database. Only the `main` branch connects to the production Supabase project.
 
+> **⛔ CRITICAL: DO NOT CREATE SUPABASE DATABASE BRANCHES**
+>
+> Never use `mcp__supabase__create_branch` or create new database branches for testing.
+> Google OAuth clients are configured for specific Supabase projects - creating a new DB branch
+> will break authentication entirely. Always use the existing staging database for all preview deployments.
+
 > **IMPORTANT: NO AUTO-MERGE**
 >
 > This skill creates PRs but **NEVER merges them automatically**.
@@ -128,6 +134,21 @@ gh pr checks
 # Beton engineers will review and merge manually
 ```
 
+#### Step 7: Generate Documentation (for epic branches)
+
+**IMPORTANT:** If this is a PR for an epic (branch name contains epic ID like `BETON-XX`), generate product documentation:
+
+```
+/document-epic <EPIC-ID>
+```
+
+This will:
+- Analyze all changes in the feature branch
+- Generate comprehensive documentation (architecture, API, database, etc.)
+- Publish to Plane's wiki for team reference
+
+The documentation helps reviewers understand the full scope of changes and serves as living documentation for the feature.
+
 ### Staging → Production
 
 **When**: Staging is tested and ready for production.
@@ -218,3 +239,11 @@ gh pr create --base staging --title "feat: description"
 # Check PR status
 gh pr checks
 ```
+
+## Related Skills
+
+| Skill | When to Use |
+|-------|-------------|
+| `/document-epic <ID>` | Generate product documentation for an epic when opening PR to staging |
+| `/implement-epic <ID>` | Implement a complete epic from Plane |
+| `/troubleshoot` | Debug deployment or build issues |

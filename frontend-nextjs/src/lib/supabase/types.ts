@@ -349,6 +349,7 @@ export interface Database {
           workspace_id: string
           integration_name: string
           api_key_encrypted: string
+          project_id_encrypted: string | null
           config_json: Json
           status: IntegrationStatus
           last_validated_at: string | null
@@ -361,6 +362,7 @@ export interface Database {
           workspace_id: string
           integration_name: string
           api_key_encrypted: string
+          project_id_encrypted?: string | null
           config_json?: Json
           status?: IntegrationStatus
           last_validated_at?: string | null
@@ -373,6 +375,7 @@ export interface Database {
           workspace_id?: string
           integration_name?: string
           api_key_encrypted?: string
+          project_id_encrypted?: string | null
           config_json?: Json
           status?: IntegrationStatus
           last_validated_at?: string | null

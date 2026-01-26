@@ -77,13 +77,19 @@ Create a dependency order. Example:
 
 ### Phase 2: Branch Setup
 
+> **⛔ CRITICAL: DO NOT CREATE SUPABASE DATABASE BRANCHES**
+>
+> Never use `mcp__supabase__create_branch` or create new database branches.
+> Google OAuth clients are configured for specific Supabase projects - creating a new DB branch
+> will break authentication entirely. All feature branches use the existing **staging** database.
+
 #### Step 2.1: Fetch Latest Staging
 
 ```bash
 git fetch origin staging
 ```
 
-#### Step 2.2: Create Feature Branch
+#### Step 2.2: Create Feature Branch (Git Only)
 
 Branch naming: `feature/<task-id>-<short-name>`
 
@@ -246,11 +252,27 @@ Implements epic <EPIC-ID>: <Epic title>
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
-#### Step 4.3: Report Completion
+#### Step 4.3: Generate Product Documentation
+
+**IMPORTANT:** After creating the PR, use the `/document-epic` skill to generate comprehensive product documentation:
+
+```
+/document-epic <EPIC-ID>
+```
+
+This will:
+- Analyze all code changes in the feature branch
+- Generate structured documentation with architecture, API reference, etc.
+- Publish the documentation to Plane's wiki
+
+The documentation helps reviewers understand the implementation and serves as a reference for future development.
+
+#### Step 4.4: Report Completion
 
 Tell the user:
 - PR URL
 - Summary of what was implemented
+- Documentation page created in Plane wiki
 - Any follow-up items or notes for review
 
 > **STOP HERE** - Do NOT merge the PR.
@@ -271,7 +293,8 @@ Tell the user:
   - [ ] Built locally (must pass)
   - [ ] Used /deploy to commit and push
 - [ ] Created PR to staging (via /deploy)
-- [ ] Reported PR URL to user
+- [ ] Generated documentation (via /document-epic)
+- [ ] Reported PR URL and documentation link to user
 - [ ] **Did NOT merge** - left for human review
 
 ---

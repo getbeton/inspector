@@ -106,6 +106,17 @@ export class PostHogClient {
       )
     }
 
+    // Check content type to avoid JSON parse errors on HTML responses
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      throw createIntegrationError(
+        'Invalid response from PostHog. Please verify your region and project ID.',
+        'API_ERROR',
+        response.status,
+        false
+      )
+    }
+
     return response.json()
   }
 
@@ -400,14 +411,16 @@ export class PostHogClient {
 
   /**
    * Test the PostHog API connection
+   * Returns success/error details instead of swallowing errors
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
       // Simple request to verify credentials
       await this.fetch<unknown>('/persons?limit=1')
-      return true
-    } catch {
-      return false
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
     }
   }
 

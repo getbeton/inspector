@@ -16,6 +16,13 @@ import { ApolloClient, createApolloClient } from './apollo/client'
 // Types
 export * from './types'
 
+// Credentials retrieval
+export {
+  getIntegrationCredentials,
+  isIntegrationConfigured,
+  type IntegrationCredentials
+} from './credentials'
+
 // PostHog
 export { PostHogClient, createPostHogClient, type PostHogClientConfig } from './posthog/client'
 

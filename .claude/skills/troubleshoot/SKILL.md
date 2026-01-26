@@ -80,6 +80,12 @@ ALTER TABLE <table_name> DISABLE ROW LEVEL SECURITY;
 
 **Symptoms**: Login redirects to error, "invalid_grant", cookies not set
 
+> **⛔ Common Cause: Wrong Database Branch**
+>
+> If you created a Supabase database branch (via `mcp__supabase__create_branch`), authentication
+> will NOT work. Google OAuth clients are only configured for the main staging/production projects.
+> **Solution**: Delete the DB branch and use the staging database directly.
+
 **Checklist**:
 
 1. **Supabase Dashboard** (Authentication → URL Configuration):
