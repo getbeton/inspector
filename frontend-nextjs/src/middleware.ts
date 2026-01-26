@@ -62,8 +62,10 @@ export async function middleware(request: NextRequest) {
   const isHome = pathname === '/'
 
   // Redirect to login if accessing protected route without auth
+  // Use 301 (permanent) for root URL to avoid crawl budget waste from 307 chains
   if ((isProtected || isHome) && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl, { status: isHome ? 301 : 307 })
   }
 
   // Redirect to home if accessing login while authenticated
