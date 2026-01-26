@@ -111,27 +111,80 @@ async function calculateMTUDirect(
       }
     }
 
-    // Fallback: count persons via API
-    const persons = await client.getPersons({ limit: 1 })
-    // This gives us a sample, not the real count - but it's better than 0
-    // The real count would require pagination which is slow
-    return {
-      mtuCount: persons.results.length > 0 ? 100 : 0, // Minimum estimate
-      source: 'posthog_api_estimate',
-    }
+    // HogQL returned empty results - try counting via API
+    // This is slower but more accurate than returning a hardcoded estimate
+    console.warn('[calculate-mtu] HogQL returned empty results, falling back to API count')
+    return await countPersonsViaAPI(client)
   } catch (error) {
     console.warn('[calculate-mtu] HogQL query failed, trying persons count:', error)
 
     // Try persons endpoint as fallback
     try {
-      const persons = await client.getPersons({ limit: 100 })
-      return {
-        mtuCount: persons.results.length,
-        source: 'posthog_api_sample',
-      }
-    } catch {
-      throw new Error('Failed to calculate MTU from PostHog')
+      return await countPersonsViaAPI(client)
+    } catch (apiError) {
+      console.error('[calculate-mtu] API fallback also failed:', apiError)
+      throw new Error('Failed to calculate MTU from PostHog. Please try again later.')
     }
+  }
+}
+
+/**
+ * Count persons with email via paginated API calls.
+ * More accurate than hardcoded estimates but slower.
+ * Includes a safety limit to prevent Vercel timeout.
+ */
+async function countPersonsViaAPI(
+  client: PostHogClient
+): Promise<{ mtuCount: number; source: string }> {
+  const MAX_PAGES = 100 // Safety limit: 100 pages * 100 per page = 10,000 max
+  const PER_PAGE = 100
+  let totalCount = 0
+  let pageCount = 0
+  let cursor: string | undefined
+
+  try {
+    do {
+      const response = await client.getPersons({ limit: PER_PAGE, cursor })
+
+      // Count only identified users (those with email property)
+      const identifiedPersons = response.results.filter(
+        (person: { properties?: { email?: string } }) =>
+          person.properties?.email && person.properties.email.trim() !== ''
+      )
+      totalCount += identifiedPersons.length
+      pageCount++
+
+      // Get next page cursor
+      cursor = response.next
+
+      // Safety: stop if we've hit the page limit to avoid timeout
+      if (pageCount >= MAX_PAGES) {
+        console.warn(
+          `[calculate-mtu] Reached page limit (${MAX_PAGES}), counted ${totalCount} persons so far`
+        )
+        return {
+          mtuCount: totalCount,
+          source: 'posthog_api_partial', // Indicate partial count
+        }
+      }
+    } while (cursor)
+
+    return {
+      mtuCount: totalCount,
+      source: 'posthog_api_complete',
+    }
+  } catch (error) {
+    // If we've counted some, return what we have
+    if (totalCount > 0) {
+      console.warn(
+        `[calculate-mtu] API pagination failed after ${pageCount} pages, returning partial count: ${totalCount}`
+      )
+      return {
+        mtuCount: totalCount,
+        source: 'posthog_api_partial',
+      }
+    }
+    throw error
   }
 }
 
