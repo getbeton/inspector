@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import {
   createSetupIntent,
@@ -109,9 +110,10 @@ async function getOrCreateStripeCustomer(
   }
 
   // Update workspace_billing with the new customer ID
-  // Type cast to bypass Supabase type checking for new billing tables
+  // Use admin client to bypass RLS - workspace_billing has no INSERT policy (by design)
+  const adminClient = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
+  const { error: updateError } = await (adminClient as any)
     .from('workspace_billing')
     .upsert(
       {
