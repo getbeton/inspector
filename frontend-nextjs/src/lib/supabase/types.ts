@@ -19,7 +19,7 @@ export type StatTestStatus = 'pending' | 'running' | 'completed' | 'failed'
 // Billing enums
 export type BillingStatus = 'free' | 'card_required' | 'active' | 'past_due' | 'cancelled'
 export type ThresholdNotificationType = 'threshold_90' | 'threshold_95' | 'threshold_exceeded' | 'card_linked' | 'payment_failed' | 'payment_success'
-export type BillingEventType = 'mtu_recorded' | 'threshold_reached' | 'card_linked' | 'card_removed' | 'subscription_created' | 'subscription_updated' | 'subscription_cancelled' | 'payment_succeeded' | 'payment_failed' | 'refund_issued' | 'usage_reported'
+export type BillingEventType = 'mtu_recorded' | 'threshold_reached' | 'card_linked' | 'card_removed' | 'subscription_created' | 'subscription_updated' | 'subscription_cancelled' | 'payment_succeeded' | 'payment_failed' | 'refund_issued' | 'usage_reported' | 'immediate_charge_success' | 'immediate_charge_failed'
 
 export interface Database {
   public: {

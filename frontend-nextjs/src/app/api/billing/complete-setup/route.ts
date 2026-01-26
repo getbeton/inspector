@@ -25,7 +25,11 @@ import {
 } from '@/lib/integrations/stripe/billing';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
 import { createModuleLogger } from '@/lib/utils/logger';
-import type { BillingStatus } from '@/lib/supabase/types';
+import type {
+  BillingStatus,
+  WorkspaceBillingUpdate,
+  BillingEventInsert,
+} from '@/lib/supabase/types';
 import type Stripe from 'stripe';
 
 const log = createModuleLogger('[Complete Setup]');
@@ -124,24 +128,23 @@ async function updateWorkspaceBilling(
   const paymentMethods = paymentMethodsResult.data;
   const paymentMethod = paymentMethods.find((pm) => pm.id === paymentMethodId);
 
-  const updates: Record<string, unknown> = {
+  // Build the update payload with explicit type for type safety
+  // Note: The `as WorkspaceBillingUpdate` cast ensures our object matches
+  // the expected schema. The subsequent `as never` is required because
+  // Supabase's type inference doesn't fully recognize all tables.
+  const updates: WorkspaceBillingUpdate = {
     stripe_payment_method_id: paymentMethodId,
     status: subscriptionId ? 'active' : 'card_required',
     card_brand: paymentMethod?.card?.brand || null,
     card_last_four: paymentMethod?.card?.last4 || null,
     card_exp_month: paymentMethod?.card?.expMonth || null,
     card_exp_year: paymentMethod?.card?.expYear || null,
+    ...(subscriptionId && { stripe_subscription_id: subscriptionId }),
   };
 
-  if (subscriptionId) {
-    updates.stripe_subscription_id = subscriptionId;
-  }
-
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
-    .update(updates)
+    .update(updates as never)
     .eq('workspace_id', workspaceId);
 
   if (error) {
@@ -275,19 +278,19 @@ function validateSetupIntentStatus(
  */
 async function logBillingEvent(
   workspaceId: string,
-  eventType: string,
+  eventType: BillingEventInsert['event_type'],
   metadata: Record<string, unknown>,
   supabase: Awaited<ReturnType<typeof createServerClient>>
 ): Promise<void> {
-  const event = {
+  // Build event with proper Json type cast for event_data
+  const event: BillingEventInsert = {
     workspace_id: workspaceId,
     event_type: eventType,
-    event_data: metadata,
+    event_data: metadata as BillingEventInsert['event_data'],
   };
 
-  // Type cast to bypass Supabase type checking
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('billing_events').insert(event);
+  // Note: `as never` needed due to Supabase type inference limitations
+  await supabase.from('billing_events').insert(event as never);
 }
 
 // ============================================
