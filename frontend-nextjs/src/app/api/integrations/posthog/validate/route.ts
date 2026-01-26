@@ -34,6 +34,7 @@ import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { createModuleLogger } from '@/lib/utils/logger'
+import { validatePostHogCredentials } from '@/lib/integrations/validation'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[PostHog Validate]')
@@ -155,26 +156,20 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { api_key, project_id, region, host: providedHost } = body
 
-    if (!api_key || typeof api_key !== 'string') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'invalid_request',
-            message: 'API key is required',
-          },
-        },
-        { status: 400 }
-      )
-    }
+    // Validate credential formats before making API calls
+    const validation = validatePostHogCredentials({
+      apiKey: api_key,
+      projectId: project_id,
+      region,
+    })
 
-    if (!project_id || typeof project_id !== 'string') {
+    if (!validation.valid) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'invalid_request',
-            message: 'Project ID is required',
+            message: validation.error || 'Invalid credentials format',
           },
         },
         { status: 400 }

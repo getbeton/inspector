@@ -30,6 +30,7 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { validateConnection } from '@/lib/integrations/attio/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
+import { validateAttioApiKey } from '@/lib/integrations/validation'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[Attio Validate]')
@@ -125,13 +126,15 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { api_key } = body
 
-    if (!api_key || typeof api_key !== 'string') {
+    // Validate API key format before making API calls
+    const validation = validateAttioApiKey(api_key)
+    if (!validation.valid) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'invalid_request',
-            message: 'API key is required',
+            message: validation.error || 'Invalid API key format',
           },
         },
         { status: 400 }
