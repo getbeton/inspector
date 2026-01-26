@@ -158,20 +158,19 @@ async function queryPostHogMTU(
   const startDateStr = formatDateForHogQL(startDate);
   const endDateStr = formatDateForHogQL(endDate);
 
-  // HogQL query to count distinct identified persons (those with email) in the date range
+  // HogQL query to count ALL distinct identified persons (those with email)
+  // MTU counts all users ever identified, not just those created in the billing cycle
   // This filters out anonymous visitors who haven't been identified via posthog.identify()
   const hogql = `
     SELECT count(distinct id) as mtu_count
     FROM persons
-    WHERE created_at >= toDateTime('${startDateStr}')
-      AND created_at < toDateTime('${endDateStr}')
-      AND properties['email'] IS NOT NULL
+    WHERE properties['email'] IS NOT NULL
       AND properties['email'] != ''
   `;
 
   try {
     console.log(`[MTU Service] Executing HogQL query for MTU count`);
-    const result = await client.query(hogql, { timeoutMs: 30000 });
+    const result = await client.query(hogql, { timeoutMs: 60000 });
 
     // Extract the count from the result
     // Result format: { results: [[count]], columns: ['mtu_count'] }
