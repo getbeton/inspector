@@ -24,7 +24,11 @@ import {
   StripeAuthenticationError,
 } from '@/lib/integrations/stripe/billing';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
+import { createModuleLogger } from '@/lib/utils/logger';
 import type { BillingStatus } from '@/lib/supabase/types';
+import type Stripe from 'stripe';
+
+const log = createModuleLogger('[Complete Setup]');
 
 // ============================================
 // Types
@@ -141,7 +145,7 @@ async function updateWorkspaceBilling(
     .eq('workspace_id', workspaceId);
 
   if (error) {
-    console.error('[Complete Setup] Failed to update billing:', error);
+    log.error('Failed to update billing:', error);
     throw new Error('Failed to update billing information');
   }
 }
@@ -182,18 +186,87 @@ async function chargeOverageImmediately(
       await stripe.invoices.pay(invoice.id);
     }
 
-    console.log(
-      `[Complete Setup] Charged overage: $${(amountCents / 100).toFixed(2)} ` +
-        `for ${overageMtu} MTU, invoice: ${invoice.id}`
+    log.info(
+      `Charged overage: $${(amountCents / 100).toFixed(2)} for ${overageMtu} MTU, invoice: ${invoice.id}`
     );
 
     return { success: true, invoiceId: invoice.id };
   } catch (error) {
-    console.error('[Complete Setup] Failed to charge overage:', error);
+    log.error('Failed to charge overage:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to process payment',
     };
+  }
+}
+
+/**
+ * Validates SetupIntent status and returns appropriate error message.
+ *
+ * SetupIntent statuses:
+ * - 'succeeded': Card saved successfully
+ * - 'processing': Still processing (rare, should retry)
+ * - 'requires_action': Needs 3D Secure or other user action
+ * - 'requires_payment_method': Payment method failed or declined
+ * - 'requires_confirmation': Not yet confirmed (shouldn't happen here)
+ * - 'canceled': Setup was canceled
+ */
+interface SetupIntentValidation {
+  valid: boolean;
+  error?: string;
+  retryable?: boolean;
+}
+
+function validateSetupIntentStatus(
+  status: Stripe.SetupIntent.Status
+): SetupIntentValidation {
+  switch (status) {
+    case 'succeeded':
+      return { valid: true };
+
+    case 'processing':
+      return {
+        valid: false,
+        error: 'Payment is still processing. Please wait a moment and try again.',
+        retryable: true,
+      };
+
+    case 'requires_action':
+      return {
+        valid: false,
+        error: 'Additional authentication required. Please complete the verification in your browser.',
+        retryable: false,
+      };
+
+    case 'requires_payment_method':
+      return {
+        valid: false,
+        error: 'The payment method was declined. Please try a different card.',
+        retryable: false,
+      };
+
+    case 'requires_confirmation':
+      return {
+        valid: false,
+        error: 'Setup was not completed. Please try again.',
+        retryable: true,
+      };
+
+    case 'canceled':
+      return {
+        valid: false,
+        error: 'Setup was canceled. Please start the process again.',
+        retryable: false,
+      };
+
+    default:
+      // Handle any unknown statuses defensively
+      log.warn(`Unknown SetupIntent status: ${status}`);
+      return {
+        valid: false,
+        error: `Unexpected payment status: ${status}. Please contact support.`,
+        retryable: false,
+      };
   }
 }
 
@@ -277,11 +350,57 @@ export async function POST(
       );
     }
 
+    // CRITICAL: Verify the SetupIntent status before proceeding with provisioning
+    // This ensures we don't provision workspaces for failed or incomplete payments
+    const stripe = getStripeClient();
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+
+    log.debug('SetupIntent status:', {
+      id: setupIntentId.substring(0, 12) + '...',
+      status: setupIntent.status,
+      paymentMethod: setupIntent.payment_method ? 'attached' : 'none',
+    });
+
+    const statusValidation = validateSetupIntentStatus(setupIntent.status);
+
+    if (!statusValidation.valid) {
+      log.warn('SetupIntent validation failed:', {
+        status: setupIntent.status,
+        error: statusValidation.error,
+      });
+
+      return NextResponse.json(
+        {
+          error: statusValidation.error || 'Setup incomplete',
+          retryable: statusValidation.retryable,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify the payment method ID matches the SetupIntent
+    const setupIntentPaymentMethod =
+      typeof setupIntent.payment_method === 'string'
+        ? setupIntent.payment_method
+        : setupIntent.payment_method?.id;
+
+    if (setupIntentPaymentMethod && setupIntentPaymentMethod !== paymentMethodId) {
+      log.warn('Payment method mismatch:', {
+        expected: setupIntentPaymentMethod,
+        received: paymentMethodId,
+      });
+
+      return NextResponse.json(
+        { error: 'Payment method does not match the setup intent' },
+        { status: 400 }
+      );
+    }
+
     // Set the payment method as default
     const setDefaultResult = await setDefaultPaymentMethod(customerId, paymentMethodId);
 
     if (!setDefaultResult.success) {
-      console.error('[Complete Setup] Failed to set default payment method:', setDefaultResult);
+      log.error('Failed to set default payment method:', setDefaultResult);
       return NextResponse.json(
         { error: 'Failed to set payment method as default' },
         { status: 500 }
@@ -302,10 +421,7 @@ export async function POST(
       if (!immediateChargeResult.success) {
         // Log the failure but continue with setup
         // The subscription will still be created for future billing
-        console.error(
-          '[Complete Setup] Immediate charge failed:',
-          immediateChargeResult.error
-        );
+        log.error('Immediate charge failed:', immediateChargeResult.error);
 
         // Log the failed charge event
         await logBillingEvent(
@@ -348,7 +464,7 @@ export async function POST(
       // Initialize billing cycle
       await initializeBillingCycle(workspaceId);
     } else {
-      console.error('[Complete Setup] Failed to create subscription:', subscriptionResult);
+      log.error('Failed to create subscription:', subscriptionResult);
       // Continue anyway - card is linked, just no subscription yet
       // This allows the user to try again or support to help
     }
@@ -371,9 +487,9 @@ export async function POST(
       supabase
     );
 
-    console.log(
-      `[Complete Setup] Successfully completed setup for workspace ${workspaceId}, ` +
-        `payment method: ${paymentMethodId}, subscription: ${subscriptionId}` +
+    log.info(
+      `Successfully completed setup for workspace ${workspaceId.substring(0, 8)}..., ` +
+        `subscription: ${subscriptionId}` +
         (immediateChargeResult?.success
           ? `, immediate charge: $${((overageAmount || 0) / 100).toFixed(2)}`
           : '')
@@ -400,7 +516,7 @@ export async function POST(
     }
 
     if (error instanceof StripeInvalidRequestError) {
-      console.error('[Complete Setup] Invalid request:', error.message);
+      log.error('Invalid request:', error.message);
       return NextResponse.json(
         { error: error.message },
         { status: 400 }
@@ -408,14 +524,14 @@ export async function POST(
     }
 
     if (error instanceof StripeAuthenticationError) {
-      console.error('[Complete Setup] Stripe authentication failed');
+      log.error('Stripe authentication failed');
       return NextResponse.json(
         { error: 'Billing service authentication failed' },
         { status: 500 }
       );
     }
 
-    console.error('[Complete Setup] Unexpected error:', error);
+    log.error('Unexpected error:', error);
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }
