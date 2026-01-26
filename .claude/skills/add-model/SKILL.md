@@ -7,6 +7,12 @@ description: Create a new Supabase table with migration. Use when adding a new d
 
 Use this skill to add a new table to the Supabase database and create the corresponding migration.
 
+> **⛔ CRITICAL: DO NOT CREATE SUPABASE DATABASE BRANCHES**
+>
+> Never use `mcp__supabase__create_branch` or create new database branches for testing migrations.
+> Google OAuth clients are configured for specific Supabase projects - creating a new DB branch
+> will break authentication entirely. Apply migrations directly to the **staging** database.
+
 ## Workflow
 
 ### Step 1: Create the migration file

@@ -77,13 +77,19 @@ Create a dependency order. Example:
 
 ### Phase 2: Branch Setup
 
+> **⛔ CRITICAL: DO NOT CREATE SUPABASE DATABASE BRANCHES**
+>
+> Never use `mcp__supabase__create_branch` or create new database branches.
+> Google OAuth clients are configured for specific Supabase projects - creating a new DB branch
+> will break authentication entirely. All feature branches use the existing **staging** database.
+
 #### Step 2.1: Fetch Latest Staging
 
 ```bash
 git fetch origin staging
 ```
 
-#### Step 2.2: Create Feature Branch
+#### Step 2.2: Create Feature Branch (Git Only)
 
 Branch naming: `feature/<task-id>-<short-name>`
 

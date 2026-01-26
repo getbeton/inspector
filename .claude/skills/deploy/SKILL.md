@@ -17,6 +17,12 @@ Use this skill to commit changes, push to the current branch, and verify the Ver
 
 > **Note**: All feature branch previews use the **staging** Supabase database. Only the `main` branch connects to the production Supabase project.
 
+> **⛔ CRITICAL: DO NOT CREATE SUPABASE DATABASE BRANCHES**
+>
+> Never use `mcp__supabase__create_branch` or create new database branches for testing.
+> Google OAuth clients are configured for specific Supabase projects - creating a new DB branch
+> will break authentication entirely. Always use the existing staging database for all preview deployments.
+
 > **IMPORTANT: NO AUTO-MERGE**
 >
 > This skill creates PRs but **NEVER merges them automatically**.
