@@ -21,7 +21,7 @@ venv/
 Thumbs.db
 
 # Documentation
-project_docs/
+docs/
 
 # IDE
 .idea/

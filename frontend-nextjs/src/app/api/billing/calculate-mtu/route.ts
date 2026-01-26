@@ -72,7 +72,7 @@ async function calculateMTUDirect(
   `
 
   try {
-    const result = await client.query(hogqlQuery, { timeoutMs: 30000 })
+    const result = await client.query(hogqlQuery, { timeoutMs: 60000 })
 
     if (result.results && result.results[0] && result.results[0][0] !== undefined) {
       const count = Number(result.results[0][0])
