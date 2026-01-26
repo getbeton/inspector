@@ -68,7 +68,9 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
     }
 
     setIsSubmitting(true);
-    onProcessing(true);
+    // NOTE: Don't call onProcessing(true) here - it unmounts the Stripe elements!
+    // The parent state change causes StripeElementsProvider to unmount before
+    // confirmSetup() completes. We'll notify the parent only after Stripe is done.
 
     try {
       // Confirm the SetupIntent with Stripe
@@ -84,6 +86,9 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
       if (!setupIntent || setupIntent.status !== "succeeded") {
         throw new Error("Card setup did not complete successfully");
       }
+
+      // NOW safe to notify parent - Stripe is done with the element
+      onProcessing(true);
 
       // Extract payment method ID
       const paymentMethodId = setupIntent.payment_method;
@@ -105,7 +110,8 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
       onError(message);
     } finally {
       setIsSubmitting(false);
-      onProcessing(false);
+      // Note: onProcessing(false) removed - we only transition to processing state
+      // on success, and the success handler moves to a different state anyway
     }
   };
 
