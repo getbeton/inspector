@@ -35,6 +35,31 @@ import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 
 /**
+ * Validates and sanitizes a date string for safe use in HogQL queries.
+ * Only allows YYYY-MM-DD format to prevent SQL injection.
+ *
+ * @param date - Date object to convert
+ * @returns Sanitized date string in YYYY-MM-DD format
+ * @throws Error if date is invalid
+ */
+function sanitizeDateForHogQL(date: Date): string {
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    throw new Error('Invalid date provided for HogQL query');
+  }
+
+  const isoString = date.toISOString().split('T')[0];
+
+  // Strict validation: only allow YYYY-MM-DD format
+  // This regex ensures no special characters can be injected
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(isoString)) {
+    throw new Error(`Invalid date format: ${isoString}. Expected YYYY-MM-DD.`);
+  }
+
+  return isoString;
+}
+
+/**
  * Calculate MTU directly from PostHog using provided credentials
  * Used during setup before credentials are stored
  */
@@ -57,13 +82,17 @@ async function calculateMTUDirect(
   const billingCycleStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const billingCycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
+  // Sanitize dates to prevent SQL injection (defense in depth)
+  const startDateStr = sanitizeDateForHogQL(billingCycleStart);
+  const endDateStr = sanitizeDateForHogQL(billingCycleEnd);
+
   // Query for distinct identified users (those with email) in this billing period
   // This filters out anonymous visitors who haven't been identified via posthog.identify()
   const hogqlQuery = `
     SELECT count(DISTINCT person_id) as mtu_count
     FROM events
-    WHERE timestamp >= toDateTime('${billingCycleStart.toISOString().split('T')[0]}')
-      AND timestamp <= toDateTime('${billingCycleEnd.toISOString().split('T')[0]} 23:59:59')
+    WHERE timestamp >= toDateTime('${startDateStr}')
+      AND timestamp <= toDateTime('${endDateStr} 23:59:59')
       AND person_id IN (
         SELECT id FROM persons
         WHERE properties['email'] IS NOT NULL
