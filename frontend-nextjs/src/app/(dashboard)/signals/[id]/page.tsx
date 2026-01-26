@@ -304,8 +304,8 @@ export default function SignalDetailPage() {
       <CollapsibleSection title="Signal Definition">
         <div className="grid grid-cols-2 gap-4 mb-3">
           <div>
-            <p className="text-sm text-muted-foreground">Event: <code className="bg-muted px-1 rounded">{signal.event}</code></p>
-            <p className="text-sm text-muted-foreground mt-1">Condition: <code className="bg-muted px-1 rounded">{signal.condition}</code></p>
+            <p className="text-sm text-muted-foreground">Event: <code className="bg-muted px-1 rounded-sm">{signal.event}</code></p>
+            <p className="text-sm text-muted-foreground mt-1">Condition: <code className="bg-muted px-1 rounded-sm">{signal.condition}</code></p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Source: {signal.source}</p>
@@ -327,16 +327,10 @@ export default function SignalDetailPage() {
       </CollapsibleSection>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border">
-        <Link href="/playbooks">
-          <Button className="w-full">Add to Playbook</Button>
-        </Link>
-        <Button variant="outline" className="w-full">
+      <div className="flex gap-4 pt-4 border-t border-border">
+        <Button variant="outline" className="flex-1">
           Export Users
         </Button>
-        <Link href="/backtest">
-          <Button variant="outline" className="w-full">Run Backtest</Button>
-        </Link>
       </div>
     </div>
   )

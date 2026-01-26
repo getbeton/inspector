@@ -16,6 +16,11 @@ export type OpportunityStage = 'detected' | 'qualified' | 'in_progress' | 'close
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'validating'
 export type StatTestStatus = 'pending' | 'running' | 'completed' | 'failed'
 
+// Billing enums
+export type BillingStatus = 'free' | 'card_required' | 'active' | 'past_due' | 'cancelled'
+export type ThresholdNotificationType = 'threshold_90' | 'threshold_95' | 'threshold_exceeded' | 'card_linked' | 'payment_failed' | 'payment_success'
+export type BillingEventType = 'mtu_recorded' | 'threshold_reached' | 'card_linked' | 'card_removed' | 'subscription_created' | 'subscription_updated' | 'subscription_cancelled' | 'payment_succeeded' | 'payment_failed' | 'refund_issued' | 'usage_reported'
+
 export interface Database {
   public: {
     Tables: {
@@ -344,6 +349,7 @@ export interface Database {
           workspace_id: string
           integration_name: string
           api_key_encrypted: string
+          project_id_encrypted: string | null
           config_json: Json
           status: IntegrationStatus
           last_validated_at: string | null
@@ -356,6 +362,7 @@ export interface Database {
           workspace_id: string
           integration_name: string
           api_key_encrypted: string
+          project_id_encrypted?: string | null
           config_json?: Json
           status?: IntegrationStatus
           last_validated_at?: string | null
@@ -368,6 +375,7 @@ export interface Database {
           workspace_id?: string
           integration_name?: string
           api_key_encrypted?: string
+          project_id_encrypted?: string | null
           config_json?: Json
           status?: IntegrationStatus
           last_validated_at?: string | null
@@ -562,6 +570,236 @@ export interface Database {
           }
         ]
       }
+      workspace_billing: {
+        Row: {
+          id: string
+          workspace_id: string
+          status: BillingStatus
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          stripe_payment_method_id: string | null
+          free_tier_mtu_limit: number
+          billing_cycle_start: string | null
+          billing_cycle_end: string | null
+          current_cycle_mtu: number
+          peak_mtu_this_cycle: number
+          peak_mtu_date: string | null
+          last_90_threshold_sent_at: string | null
+          last_95_threshold_sent_at: string | null
+          last_exceeded_threshold_sent_at: string | null
+          card_last_four: string | null
+          card_brand: string | null
+          card_exp_month: number | null
+          card_exp_year: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          status?: BillingStatus
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_payment_method_id?: string | null
+          free_tier_mtu_limit?: number
+          billing_cycle_start?: string | null
+          billing_cycle_end?: string | null
+          current_cycle_mtu?: number
+          peak_mtu_this_cycle?: number
+          peak_mtu_date?: string | null
+          last_90_threshold_sent_at?: string | null
+          last_95_threshold_sent_at?: string | null
+          last_exceeded_threshold_sent_at?: string | null
+          card_last_four?: string | null
+          card_brand?: string | null
+          card_exp_month?: number | null
+          card_exp_year?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          status?: BillingStatus
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_payment_method_id?: string | null
+          free_tier_mtu_limit?: number
+          billing_cycle_start?: string | null
+          billing_cycle_end?: string | null
+          current_cycle_mtu?: number
+          peak_mtu_this_cycle?: number
+          peak_mtu_date?: string | null
+          last_90_threshold_sent_at?: string | null
+          last_95_threshold_sent_at?: string | null
+          last_exceeded_threshold_sent_at?: string | null
+          card_last_four?: string | null
+          card_brand?: string | null
+          card_exp_month?: number | null
+          card_exp_year?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_billing_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: true
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
+      }
+      mtu_tracking: {
+        Row: {
+          id: string
+          workspace_id: string
+          tracking_date: string
+          mtu_count: number
+          mtu_by_source: Json
+          billing_cycle_start: string | null
+          billing_cycle_end: string | null
+          cycle_total_mtu: number | null
+          reported_to_stripe: boolean
+          reported_at: string | null
+          stripe_usage_record_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          tracking_date: string
+          mtu_count?: number
+          mtu_by_source?: Json
+          billing_cycle_start?: string | null
+          billing_cycle_end?: string | null
+          cycle_total_mtu?: number | null
+          reported_to_stripe?: boolean
+          reported_at?: string | null
+          stripe_usage_record_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          tracking_date?: string
+          mtu_count?: number
+          mtu_by_source?: Json
+          billing_cycle_start?: string | null
+          billing_cycle_end?: string | null
+          cycle_total_mtu?: number | null
+          reported_to_stripe?: boolean
+          reported_at?: string | null
+          stripe_usage_record_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'mtu_tracking_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
+      }
+      billing_events: {
+        Row: {
+          id: string
+          workspace_id: string
+          event_type: BillingEventType
+          event_data: Json
+          stripe_event_id: string | null
+          stripe_object_type: string | null
+          stripe_object_id: string | null
+          user_id: string | null
+          idempotency_key: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          event_type: BillingEventType
+          event_data?: Json
+          stripe_event_id?: string | null
+          stripe_object_type?: string | null
+          stripe_object_id?: string | null
+          user_id?: string | null
+          idempotency_key?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          event_type?: BillingEventType
+          event_data?: Json
+          stripe_event_id?: string | null
+          stripe_object_type?: string | null
+          stripe_object_id?: string | null
+          user_id?: string | null
+          idempotency_key?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'billing_events_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
+      }
+      threshold_notifications: {
+        Row: {
+          id: string
+          workspace_id: string
+          notification_type: ThresholdNotificationType
+          billing_cycle_start: string
+          mtu_at_notification: number | null
+          threshold_percentage: number | null
+          sent_to_email: string | null
+          sent_at: string
+          email_provider_id: string | null
+          delivery_status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          notification_type: ThresholdNotificationType
+          billing_cycle_start: string
+          mtu_at_notification?: number | null
+          threshold_percentage?: number | null
+          sent_to_email?: string | null
+          sent_at?: string
+          email_provider_id?: string | null
+          delivery_status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          notification_type?: ThresholdNotificationType
+          billing_cycle_start?: string
+          mtu_at_notification?: number | null
+          threshold_percentage?: number | null
+          sent_to_email?: string | null
+          sent_at?: string
+          email_provider_id?: string | null
+          delivery_status?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'threshold_notifications_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -655,6 +893,9 @@ export interface Database {
       opportunity_stage: OpportunityStage
       integration_status: IntegrationStatus
       stat_test_status: StatTestStatus
+      billing_status: BillingStatus
+      threshold_notification_type: ThresholdNotificationType
+      billing_event_type: BillingEventType
     }
   }
 }
@@ -679,6 +920,17 @@ export type PosthogWorkspaceConfig = Database['public']['Tables']['posthog_works
 export type ApiKey = Database['public']['Tables']['api_keys']['Row']
 export type ApiKeyInsert = Database['public']['Tables']['api_keys']['Insert']
 export type SignalAggregate = Database['public']['Tables']['signal_aggregates']['Row']
+
+// Billing types
+export type WorkspaceBilling = Database['public']['Tables']['workspace_billing']['Row']
+export type WorkspaceBillingInsert = Database['public']['Tables']['workspace_billing']['Insert']
+export type WorkspaceBillingUpdate = Database['public']['Tables']['workspace_billing']['Update']
+export type MtuTracking = Database['public']['Tables']['mtu_tracking']['Row']
+export type MtuTrackingInsert = Database['public']['Tables']['mtu_tracking']['Insert']
+export type BillingEvent = Database['public']['Tables']['billing_events']['Row']
+export type BillingEventInsert = Database['public']['Tables']['billing_events']['Insert']
+export type ThresholdNotification = Database['public']['Tables']['threshold_notifications']['Row']
+export type ThresholdNotificationInsert = Database['public']['Tables']['threshold_notifications']['Insert']
 
 // Function return types
 export type HealthScoreResult = Database['public']['Functions']['calculate_health_score']['Returns'][0]

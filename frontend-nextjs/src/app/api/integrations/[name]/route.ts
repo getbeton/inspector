@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/supabase/types'
+import { encryptCredentials } from '@/lib/crypto/encryption'
 
 const SUPPORTED_INTEGRATIONS = ['posthog', 'stripe', 'attio', 'apollo']
 
@@ -108,11 +109,17 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { api_key, ...configJson } = body
+    const { api_key, project_id, region, host, ...otherConfig } = body
 
     if (!api_key) {
       return NextResponse.json({ error: 'API key is required' }, { status: 400 })
     }
+
+    // Encrypt sensitive credentials
+    const { apiKeyEncrypted, projectIdEncrypted } = encryptCredentials({
+      apiKey: api_key,
+      projectId: project_id
+    })
 
     // Check if config exists
     const { data: existingData } = await supabase
@@ -124,12 +131,14 @@ export async function POST(
 
     const existing = existingData as { id: string } | null
 
-    // Build configuration payload
+    // Build configuration payload with encrypted credentials
+    // Store only non-sensitive metadata in config_json (region, host)
     const configData: IntegrationConfigInsert = {
       workspace_id: membership.workspaceId,
       integration_name: name,
-      api_key_encrypted: api_key, // Note: In production, encrypt before storing
-      config_json: configJson,
+      api_key_encrypted: apiKeyEncrypted,
+      project_id_encrypted: projectIdEncrypted,
+      config_json: { region, host, ...otherConfig },
       status: 'validating',
       is_active: true
     }

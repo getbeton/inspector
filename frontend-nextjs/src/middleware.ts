@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 const publicRoutes = ['/login', '/auth/callback', '/api/health']
 
 // Routes that require authentication
-const protectedRoutes = ['/signals', '/playbooks', '/settings', '/identities', '/backtest']
+const protectedRoutes = ['/signals', '/settings', '/identities']
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -62,8 +62,10 @@ export async function middleware(request: NextRequest) {
   const isHome = pathname === '/'
 
   // Redirect to login if accessing protected route without auth
+  // Use 301 (permanent) for root URL to avoid crawl budget waste from 307 chains
   if ((isProtected || isHome) && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl, { status: isHome ? 301 : 307 })
   }
 
   // Redirect to home if accessing login while authenticated

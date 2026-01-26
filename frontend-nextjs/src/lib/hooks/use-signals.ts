@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSignals, getSignal, createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, runBacktest, bulkUpdateSignals } from '@/lib/api/signals'
+import { getSignals, getSignal, createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, bulkUpdateSignals } from '@/lib/api/signals'
 import { useDataMode } from '@/lib/store/data-mode'
-import type { Signal, SignalDetail, BacktestRequest, BacktestResponse } from '@/lib/api/signals'
+import type { Signal, SignalDetail } from '@/lib/api/signals'
 
 /**
  * Hook to fetch all signals
@@ -108,18 +108,6 @@ export function useDisableSignal() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['signals'] })
     }
-  })
-}
-
-/**
- * Hook to run backtest
- */
-export function useBacktest() {
-  const { useMockData } = useDataMode()
-
-  return useMutation({
-    mutationFn: (request: BacktestRequest) =>
-      runBacktest(request, useMockData)
   })
 }
 
