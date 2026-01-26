@@ -212,16 +212,6 @@ export async function POST(request: Request) {
       projectId: project_id,
     })
 
-    // Check if config exists
-    const { data: existingData } = await supabase
-      .from('integration_configs')
-      .select('id')
-      .eq('workspace_id', membership.workspaceId)
-      .eq('integration_name', 'posthog')
-      .single()
-
-    const existing = existingData as { id: string } | null
-
     // Build configuration payload
     const configData: IntegrationConfigInsert = {
       workspace_id: membership.workspaceId,
@@ -234,21 +224,16 @@ export async function POST(request: Request) {
       last_validated_at: new Date().toISOString(),
     }
 
-    let result
-    if (existing) {
-      result = await supabase
-        .from('integration_configs')
-        .update(configData as never)
-        .eq('id', existing.id)
-        .select()
-        .single()
-    } else {
-      result = await supabase
-        .from('integration_configs')
-        .insert(configData as never)
-        .select()
-        .single()
-    }
+    // Use upsert to avoid race condition between concurrent requests.
+    // The unique constraint on (workspace_id, integration_name) ensures only one
+    // config per workspace per integration, and upsert handles insert vs update atomically.
+    const result = await supabase
+      .from('integration_configs')
+      .upsert(configData as never, {
+        onConflict: 'workspace_id,integration_name',
+      })
+      .select()
+      .single()
 
     if (result.error) {
       console.error('Error saving PostHog config:', result.error)
