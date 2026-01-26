@@ -33,6 +33,9 @@ import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { calculateMTU, storeMTUTracking } from '@/lib/billing/mtu-service'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
+import { createModuleLogger } from '@/lib/utils/logger'
+
+const log = createModuleLogger('[Calculate MTU]')
 
 /**
  * Validates and sanitizes a date string for safe use in HogQL queries.
@@ -113,16 +116,16 @@ async function calculateMTUDirect(
 
     // HogQL returned empty results - try counting via API
     // This is slower but more accurate than returning a hardcoded estimate
-    console.warn('[calculate-mtu] HogQL returned empty results, falling back to API count')
+    log.warn('HogQL returned empty results, falling back to API count')
     return await countPersonsViaAPI(client)
   } catch (error) {
-    console.warn('[calculate-mtu] HogQL query failed, trying persons count:', error)
+    log.warn('HogQL query failed, trying persons count:', error)
 
     // Try persons endpoint as fallback
     try {
       return await countPersonsViaAPI(client)
     } catch (apiError) {
-      console.error('[calculate-mtu] API fallback also failed:', apiError)
+      log.error('API fallback also failed:', apiError)
       throw new Error('Failed to calculate MTU from PostHog. Please try again later.')
     }
   }
@@ -159,8 +162,8 @@ async function countPersonsViaAPI(
 
       // Safety: stop if we've hit the page limit to avoid timeout
       if (pageCount >= MAX_PAGES) {
-        console.warn(
-          `[calculate-mtu] Reached page limit (${MAX_PAGES}), counted ${totalCount} persons so far`
+        log.warn(
+          `Reached page limit (${MAX_PAGES}), counted ${totalCount} persons so far`
         )
         return {
           mtuCount: totalCount,
@@ -176,8 +179,8 @@ async function countPersonsViaAPI(
   } catch (error) {
     // If we've counted some, return what we have
     if (totalCount > 0) {
-      console.warn(
-        `[calculate-mtu] API pagination failed after ${pageCount} pages, returning partial count: ${totalCount}`
+      log.warn(
+        `API pagination failed after ${pageCount} pages, returning partial count: ${totalCount}`
       )
       return {
         mtuCount: totalCount,
@@ -239,7 +242,7 @@ export async function POST(request: Request) {
             .split('T')[0],
         })
       } catch (error) {
-        console.error('[calculate-mtu] Direct calculation failed:', error)
+        log.error('Direct calculation failed:', error)
         return NextResponse.json(
           {
             error: 'Failed to calculate MTU',
@@ -294,7 +297,7 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
-    console.error('Error in POST /api/billing/calculate-mtu:', error)
+    log.error('Unexpected error:', error)
     return NextResponse.json(
       {
         error: 'Internal server error',

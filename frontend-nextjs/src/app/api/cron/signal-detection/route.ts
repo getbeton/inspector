@@ -10,6 +10,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { processAllAccounts, getDetectorSummary } from '@/lib/heuristics/signals'
+import { createModuleLogger } from '@/lib/utils/logger'
+
+const log = createModuleLogger('[Cron Signal Detection]')
 
 // Maximum execution time for Vercel Pro (5 minutes)
 export const maxDuration = 300
@@ -27,12 +30,12 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    console.error('[Cron] Unauthorized request - invalid CRON_SECRET')
+    log.error('Unauthorized request - invalid CRON_SECRET')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  console.log('[Cron] Signal detection job started')
-  console.log(`[Cron] Available detectors: ${getDetectorSummary().length}`)
+  log.info('Signal detection job started')
+  log.debug(`Available detectors: ${getDetectorSummary().length}`)
 
   try {
     const supabase = await createClient()
@@ -43,14 +46,14 @@ export async function GET(request: Request) {
       .select('id, slug') as { data: Array<{ id: string; slug: string }> | null; error: unknown }
 
     if (workspaceError || !workspaces) {
-      console.error('[Cron] Failed to fetch workspaces:', workspaceError)
+      log.error('Failed to fetch workspaces:', workspaceError)
       return NextResponse.json(
         { error: 'Failed to fetch workspaces', details: String(workspaceError) },
         { status: 500 }
       )
     }
 
-    console.log(`[Cron] Processing ${workspaces.length} workspaces`)
+    log.info(`Processing ${workspaces.length} workspaces`)
 
     const results = {
       workspacesProcessed: 0,
@@ -71,7 +74,7 @@ export async function GET(request: Request) {
     // Process each workspace
     for (const workspace of workspaces) {
       try {
-        console.log(`[Cron] Processing workspace: ${workspace.slug}`)
+        log.debug(`Processing workspace: ${workspace.slug}`)
 
         const workspaceResult = await processAllAccounts(supabase, workspace.id, {
           category: 'all',
@@ -93,18 +96,18 @@ export async function GET(request: Request) {
           errors: workspaceResult.totalErrors,
         })
 
-        console.log(
-          `[Cron] Workspace ${workspace.slug}: ${workspaceResult.processed} accounts, ${workspaceResult.totalDetected} signals detected`
+        log.debug(
+          `Workspace ${workspace.slug}: ${workspaceResult.processed} accounts, ${workspaceResult.totalDetected} signals detected`
         )
       } catch (err) {
-        console.error(`[Cron] Error processing workspace ${workspace.slug}:`, err)
+        log.error(`Error processing workspace ${workspace.slug}:`, err)
         results.totalErrors++
       }
     }
 
     const duration = Date.now() - startTime
-    console.log(`[Cron] Signal detection completed in ${duration}ms`)
-    console.log(`[Cron] Summary: ${results.totalSignalsPersisted} signals persisted across ${results.totalAccountsProcessed} accounts`)
+    log.info(`Signal detection completed in ${duration}ms`)
+    log.info(`Summary: ${results.totalSignalsPersisted} signals persisted across ${results.totalAccountsProcessed} accounts`)
 
     return NextResponse.json({
       success: true,
@@ -120,7 +123,7 @@ export async function GET(request: Request) {
     })
   } catch (err) {
     const duration = Date.now() - startTime
-    console.error('[Cron] Signal detection job failed:', err)
+    log.error('Signal detection job failed:', err)
 
     return NextResponse.json(
       {

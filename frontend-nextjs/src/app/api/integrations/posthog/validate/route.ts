@@ -33,7 +33,10 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
+import { createModuleLogger } from '@/lib/utils/logger'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+
+const log = createModuleLogger('[PostHog Validate]')
 
 /**
  * Error code mapping based on HTTP status and error types
@@ -124,7 +127,7 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    console.log('[posthog/validate] Auth check:', {
+    log.debug('Auth check:', {
       hasUser: !!user,
       userId: user?.id?.substring(0, 8),
     })
@@ -192,7 +195,7 @@ export async function POST(request: Request) {
     const testResult = await client.testConnection()
 
     if (!testResult.success) {
-      console.log('[posthog/validate] Connection test failed:', testResult.error)
+      log.debug('Connection test failed:', testResult.error)
       const mapped = mapError(testResult.error || 'Connection failed')
       return NextResponse.json(
         {
@@ -236,7 +239,7 @@ export async function POST(request: Request) {
       .single()
 
     if (result.error) {
-      console.error('Error saving PostHog config:', result.error)
+      log.error('Error saving config:', result.error)
       return NextResponse.json(
         {
           success: false,
@@ -254,7 +257,7 @@ export async function POST(request: Request) {
       message: 'PostHog connected successfully',
     })
   } catch (error) {
-    console.error('Error in POST /api/integrations/posthog/validate:', error)
+    log.error('Unexpected error:', error)
     const mapped = mapError(error)
     return NextResponse.json(
       {

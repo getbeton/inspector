@@ -29,7 +29,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { validateConnection } from '@/lib/integrations/attio/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
+import { createModuleLogger } from '@/lib/utils/logger'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+
+const log = createModuleLogger('[Attio Validate]')
 
 /**
  * Error code mapping based on HTTP status and error types
@@ -200,7 +203,7 @@ export async function POST(request: Request) {
       .single()
 
     if (result.error) {
-      console.error('Error saving Attio config:', result.error)
+      log.error('Error saving config:', result.error)
       return NextResponse.json(
         {
           success: false,
@@ -219,7 +222,7 @@ export async function POST(request: Request) {
       message: 'Attio connected successfully',
     })
   } catch (error) {
-    console.error('Error in POST /api/integrations/attio/validate:', error)
+    log.error('Unexpected error:', error)
     const mapped = mapError(error)
     return NextResponse.json(
       {

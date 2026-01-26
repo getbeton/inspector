@@ -12,7 +12,10 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { isBillingEnabled, BILLING_CONFIG } from '@/lib/utils/deployment';
+import { createModuleLogger } from '@/lib/utils/logger';
 import type { BillingStatus } from '@/lib/supabase/types';
+
+const log = createModuleLogger('[Billing Enforcement]');
 
 // ============================================
 // Types
@@ -144,8 +147,8 @@ export async function getAccessStatus(workspaceId: string): Promise<AccessStatus
         accessStatus = 'payment_failed';
     }
 
-    console.warn(
-      `[Billing Enforcement] Blocking workspace ${workspaceId}: status=${billingStatus}, cardLinked=${cardLinked}`
+    log.warn(
+      `Blocking workspace ${workspaceId.substring(0, 8)}...: status=${billingStatus}, cardLinked=${cardLinked}`
     );
 
     return {
