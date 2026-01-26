@@ -31,6 +31,7 @@ import { validateConnection } from '@/lib/integrations/attio/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { validateAttioApiKey } from '@/lib/integrations/validation'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[Attio Validate]')
@@ -104,6 +105,10 @@ function mapError(error: unknown): ErrorMapping {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting to prevent credential stuffing attacks
+  const rateLimitResponse = applyRateLimit(request, 'attio-validate', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 

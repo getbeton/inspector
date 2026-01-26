@@ -35,6 +35,7 @@ import { encryptCredentials } from '@/lib/crypto/encryption'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { validatePostHogCredentials } from '@/lib/integrations/validation'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[PostHog Validate]')
@@ -120,6 +121,10 @@ function mapError(error: unknown): ErrorMapping {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting to prevent credential stuffing attacks
+  const rateLimitResponse = applyRateLimit(request, 'posthog-validate', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 

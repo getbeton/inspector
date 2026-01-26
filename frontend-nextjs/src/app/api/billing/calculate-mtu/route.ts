@@ -34,6 +34,7 @@ import { calculateMTU, storeMTUTracking } from '@/lib/billing/mtu-service'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { createModuleLogger } from '@/lib/utils/logger'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 
 const log = createModuleLogger('[Calculate MTU]')
 
@@ -192,6 +193,10 @@ async function countPersonsViaAPI(
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting - more generous limit for MTU calculation
+  const rateLimitResponse = applyRateLimit(request, 'mtu-calculation', RATE_LIMITS.MTU_CALCULATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 
