@@ -220,6 +220,7 @@ interface CachedPrice {
 // Simple in-memory cache with 15-minute TTL
 const priceCache = new Map<string, CachedPrice>();
 const PRICE_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PRICE_CACHE_MAX_SIZE = 50; // Maximum cache entries before forced cleanup
 
 function getCachedPrice(key: string): PriceInfo | null {
   const cached = priceCache.get(key);
@@ -232,10 +233,28 @@ function getCachedPrice(key: string): PriceInfo | null {
 }
 
 function setCachedPrice(key: string, price: PriceInfo): void {
+  // Evict expired entries before adding new ones to prevent unbounded growth
+  if (priceCache.size >= PRICE_CACHE_MAX_SIZE) {
+    evictExpiredPriceCacheEntries();
+  }
+
   priceCache.set(key, {
     price,
     expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
   });
+}
+
+/**
+ * Removes all expired entries from the price cache.
+ * Called automatically when the cache reaches its size limit.
+ */
+function evictExpiredPriceCacheEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of priceCache) {
+    if (now > entry.expiresAt) {
+      priceCache.delete(key);
+    }
+  }
 }
 
 // ============================================
