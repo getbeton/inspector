@@ -12,9 +12,10 @@
  */
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import { recordMeterEvent } from '@/lib/integrations/stripe/billing';
-import type { WorkspaceBilling } from '@/lib/supabase/types';
+import type { Json, WorkspaceBilling } from '@/lib/supabase/types';
 
 // ============================================
 // Types
@@ -126,7 +127,7 @@ export async function initializeBillingCycle(
     return null;
   }
 
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
   const cycleStart = new Date(startDate);
   cycleStart.setHours(0, 0, 0, 0);
@@ -140,9 +141,7 @@ export async function initializeBillingCycle(
     peak_mtu_date: null,
   };
 
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update(updates)
     .eq('workspace_id', workspaceId);
@@ -253,7 +252,7 @@ export async function getDaysRemainingInCycle(workspaceId: string): Promise<numb
  * This should be called when the current cycle ends.
  */
 export async function transitionToNextCycle(workspaceId: string): Promise<CycleTransitionResult> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
   // Get current billing data
   const { data: billing } = await supabase
@@ -324,9 +323,7 @@ export async function transitionToNextCycle(workspaceId: string): Promise<CycleT
     peak_mtu_date: null,
   };
 
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
+  const { error: updateError } = await supabase
     .from('workspace_billing')
     .update(updates)
     .eq('workspace_id', workspaceId);
@@ -420,21 +417,16 @@ export async function getWorkspacesNeedingCycleTransition(): Promise<string[]> {
  * Resets threshold notifications for a workspace (called at cycle transition).
  */
 async function resetThresholdNotifications(workspaceId: string): Promise<void> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
-  // Update workspace_billing to reset notification flags
-  const updates = {
-    threshold_90_notified: false,
-    threshold_95_notified: false,
-    threshold_exceeded_notified: false,
-    last_notification_date: null,
-  };
-
-  // Type cast to bypass Supabase type checking
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  // Reset threshold notification timestamps for the new cycle
+  await supabase
     .from('workspace_billing')
-    .update(updates)
+    .update({
+      last_90_threshold_sent_at: null,
+      last_95_threshold_sent_at: null,
+      last_exceeded_threshold_sent_at: null,
+    })
     .eq('workspace_id', workspaceId);
 
   console.log(`[Cycle Service] Reset threshold notifications for workspace ${workspaceId}`);
@@ -446,9 +438,9 @@ async function resetThresholdNotifications(workspaceId: string): Promise<void> {
 async function logBillingEvent(
   workspaceId: string,
   eventType: string,
-  metadata: Record<string, unknown>
+  metadata: Record<string, Json | undefined>
 ): Promise<void> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
   const event = {
     workspace_id: workspaceId,
@@ -456,7 +448,5 @@ async function logBillingEvent(
     event_data: metadata,
   };
 
-  // Type cast to bypass Supabase type checking
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('billing_events').insert(event);
+  await supabase.from('billing_events').insert(event);
 }

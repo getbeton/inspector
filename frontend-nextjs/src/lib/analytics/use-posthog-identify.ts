@@ -3,6 +3,9 @@
 import { useEffect, useRef } from 'react'
 import { useSession } from '@/components/auth/session-provider'
 import { pushToDataLayer } from './gtm'
+import { createClientLogger } from '@/lib/utils/client-logger'
+
+const log = createClientLogger('[PostHog Identify]')
 
 /**
  * Hook to identify users with PostHog via GTM dataLayer.
@@ -21,10 +24,10 @@ export function usePostHogIdentify() {
 
   useEffect(() => {
     // Debug logging
-    console.log('[PostHog Identify] State:', { loading, hasSession: !!session, error, sub: session?.sub })
+    log.debug('State:', { loading, hasSession: !!session, error, sub: session?.sub })
 
     if (loading) {
-      console.log('[PostHog Identify] Still loading session, waiting...')
+      log.debug('Still loading session, waiting...')
       return
     }
 
@@ -37,18 +40,18 @@ export function usePostHogIdentify() {
     if (session?.sub) {
       // Skip if already identified with same user
       if (identifiedUserId.current === session.sub) {
-        console.log('[PostHog Identify] Already identified this user, skipping')
+        log.debug('Already identified this user, skipping')
         return
       }
 
       // Check PostHog's internal state (if available)
       if (posthog?._isIdentified?.()) {
-        console.log('[PostHog Identify] PostHog says already identified, skipping')
+        log.debug('PostHog says already identified, skipping')
         identifiedUserId.current = session.sub
         return
       }
 
-      console.log('[PostHog Identify] Pushing identify event for user:', session.sub)
+      log.debug('Pushing identify event for user:', session.sub)
 
       // Push identify event to dataLayer → GTM will call posthog.identify()
       pushToDataLayer({
@@ -67,14 +70,14 @@ export function usePostHogIdentify() {
       })
 
       identifiedUserId.current = session.sub
-      console.log('[PostHog Identify] Event pushed successfully')
+      log.debug('Event pushed successfully')
     } else {
-      console.log('[PostHog Identify] No session.sub, user not logged in or session fetch failed')
+      log.debug('No session.sub, user not logged in or session fetch failed')
     }
 
     // User logged out — reset PostHog
     if (!session && identifiedUserId.current) {
-      console.log('[PostHog Identify] User logged out, resetting PostHog')
+      log.debug('User logged out, resetting PostHog')
       pushToDataLayer({ event: 'posthog_reset' })
       identifiedUserId.current = null
     }

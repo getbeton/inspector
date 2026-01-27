@@ -12,6 +12,7 @@
  */
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createPostHogClient, PostHogClient } from '@/lib/integrations/posthog/client';
 import { isBillingEnabled, getMtuLimit, BILLING_CONFIG } from '@/lib/utils/deployment';
 import type { MtuTracking, MtuTrackingInsert, WorkspaceBilling } from '@/lib/supabase/types';
@@ -458,7 +459,7 @@ export async function storeMTUTracking(
   result: MTUResult,
   mtuBySource?: Record<string, number>
 ): Promise<MtuTracking | null> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
   const record: MtuTrackingInsert = {
     workspace_id: workspaceId,
@@ -470,9 +471,7 @@ export async function storeMTUTracking(
     reported_to_stripe: false,
   };
 
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('mtu_tracking')
     .upsert(record, {
       onConflict: 'workspace_id,tracking_date',
@@ -498,7 +497,7 @@ export async function storeMTUTracking(
  * Updates the current_cycle_mtu in workspace_billing.
  */
 async function updateBillingCycleMtu(workspaceId: string, mtuCount: number): Promise<void> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
   // Get the current billing record
   const { data: billing } = await supabase
@@ -522,9 +521,7 @@ async function updateBillingCycleMtu(workspaceId: string, mtuCount: number): Pro
     updates.peak_mtu_date = new Date().toISOString().split('T')[0];
   }
 
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('workspace_billing').update(updates).eq('workspace_id', workspaceId);
+  await supabase.from('workspace_billing').update(updates).eq('workspace_id', workspaceId);
 }
 
 /**
@@ -535,11 +532,9 @@ export async function markMtuAsReportedToStripe(
   trackingDate: string,
   stripeUsageRecordId?: string
 ): Promise<void> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
 
-  // Type cast to bypass Supabase type checking for new billing tables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('mtu_tracking')
     .update({
       reported_to_stripe: true,
@@ -548,6 +543,41 @@ export async function markMtuAsReportedToStripe(
     })
     .eq('workspace_id', workspaceId)
     .eq('tracking_date', trackingDate);
+}
+
+/**
+ * Batch marks multiple MTU tracking records as reported to Stripe.
+ * Replaces N individual UPDATE queries with a single batch update per workspace.
+ */
+export async function batchMarkMtuAsReportedToStripe(
+  records: Array<{ workspaceId: string; trackingDate: string }>
+): Promise<void> {
+  if (records.length === 0) return;
+
+  const supabase = createAdminClient();
+  const reportedAt = new Date().toISOString();
+
+  // Group by workspace to minimize queries
+  const byWorkspace = new Map<string, string[]>();
+  for (const record of records) {
+    const dates = byWorkspace.get(record.workspaceId) || [];
+    dates.push(record.trackingDate);
+    byWorkspace.set(record.workspaceId, dates);
+  }
+
+  // One UPDATE per workspace instead of one per record
+  await Promise.all(
+    Array.from(byWorkspace.entries()).map(([workspaceId, dates]) =>
+      supabase
+        .from('mtu_tracking')
+        .update({
+          reported_to_stripe: true,
+          reported_at: reportedAt,
+        })
+        .eq('workspace_id', workspaceId)
+        .in('tracking_date', dates)
+    )
+  );
 }
 
 /**

@@ -33,7 +33,12 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { getPostHogHost } from '@/lib/integrations/posthog/regions'
+import { createModuleLogger } from '@/lib/utils/logger'
+import { validatePostHogCredentials } from '@/lib/integrations/validation'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+
+const log = createModuleLogger('[PostHog Validate]')
 
 /**
  * Error code mapping based on HTTP status and error types
@@ -116,6 +121,10 @@ function mapError(error: unknown): ErrorMapping {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting to prevent credential stuffing attacks
+  const rateLimitResponse = applyRateLimit(request, 'posthog-validate', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 
@@ -124,7 +133,7 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    console.log('[posthog/validate] Auth check:', {
+    log.debug('Auth check:', {
       hasUser: !!user,
       userId: user?.id?.substring(0, 8),
     })
@@ -152,26 +161,20 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { api_key, project_id, region, host: providedHost } = body
 
-    if (!api_key || typeof api_key !== 'string') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'invalid_request',
-            message: 'API key is required',
-          },
-        },
-        { status: 400 }
-      )
-    }
+    // Validate credential formats before making API calls
+    const validation = validatePostHogCredentials({
+      apiKey: api_key,
+      projectId: project_id,
+      region,
+    })
 
-    if (!project_id || typeof project_id !== 'string') {
+    if (!validation.valid) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'invalid_request',
-            message: 'Project ID is required',
+            message: validation.error || 'Invalid credentials format',
           },
         },
         { status: 400 }
@@ -192,7 +195,7 @@ export async function POST(request: Request) {
     const testResult = await client.testConnection()
 
     if (!testResult.success) {
-      console.log('[posthog/validate] Connection test failed:', testResult.error)
+      log.debug('Connection test failed:', testResult.error)
       const mapped = mapError(testResult.error || 'Connection failed')
       return NextResponse.json(
         {
@@ -206,21 +209,11 @@ export async function POST(request: Request) {
       )
     }
 
-    // Connection successful - encrypt and store credentials
-    const { apiKeyEncrypted, projectIdEncrypted } = encryptCredentials({
+    // Connection successful - encrypt and store credentials (async to avoid blocking)
+    const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
       apiKey: api_key,
       projectId: project_id,
     })
-
-    // Check if config exists
-    const { data: existingData } = await supabase
-      .from('integration_configs')
-      .select('id')
-      .eq('workspace_id', membership.workspaceId)
-      .eq('integration_name', 'posthog')
-      .single()
-
-    const existing = existingData as { id: string } | null
 
     // Build configuration payload
     const configData: IntegrationConfigInsert = {
@@ -234,24 +227,19 @@ export async function POST(request: Request) {
       last_validated_at: new Date().toISOString(),
     }
 
-    let result
-    if (existing) {
-      result = await supabase
-        .from('integration_configs')
-        .update(configData as never)
-        .eq('id', existing.id)
-        .select()
-        .single()
-    } else {
-      result = await supabase
-        .from('integration_configs')
-        .insert(configData as never)
-        .select()
-        .single()
-    }
+    // Use upsert to avoid race condition between concurrent requests.
+    // The unique constraint on (workspace_id, integration_name) ensures only one
+    // config per workspace per integration, and upsert handles insert vs update atomically.
+    const result = await supabase
+      .from('integration_configs')
+      .upsert(configData as never, {
+        onConflict: 'workspace_id,integration_name',
+      })
+      .select()
+      .single()
 
     if (result.error) {
-      console.error('Error saving PostHog config:', result.error)
+      log.error('Error saving config:', result.error)
       return NextResponse.json(
         {
           success: false,
@@ -269,7 +257,7 @@ export async function POST(request: Request) {
       message: 'PostHog connected successfully',
     })
   } catch (error) {
-    console.error('Error in POST /api/integrations/posthog/validate:', error)
+    log.error('Unexpected error:', error)
     const mapped = mapError(error)
     return NextResponse.json(
       {

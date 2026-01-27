@@ -53,8 +53,8 @@ export async function getIntegrationCredentials(
   let projectId: string | null = null
 
   if (isEncrypted(config.api_key_encrypted)) {
-    // New format: decrypt the credentials
-    const decrypted = decryptCredentials({
+    // New format: decrypt the credentials (async to avoid blocking event loop)
+    const decrypted = await decryptCredentials({
       apiKeyEncrypted: config.api_key_encrypted,
       projectIdEncrypted: config.project_id_encrypted
     })

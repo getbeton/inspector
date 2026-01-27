@@ -29,7 +29,12 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { validateConnection } from '@/lib/integrations/attio/client'
 import { encryptCredentials } from '@/lib/crypto/encryption'
+import { createModuleLogger } from '@/lib/utils/logger'
+import { validateAttioApiKey } from '@/lib/integrations/validation'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+
+const log = createModuleLogger('[Attio Validate]')
 
 /**
  * Error code mapping based on HTTP status and error types
@@ -100,6 +105,10 @@ function mapError(error: unknown): ErrorMapping {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting to prevent credential stuffing attacks
+  const rateLimitResponse = applyRateLimit(request, 'attio-validate', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 
@@ -122,13 +131,15 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { api_key } = body
 
-    if (!api_key || typeof api_key !== 'string') {
+    // Validate API key format before making API calls
+    const validation = validateAttioApiKey(api_key)
+    if (!validation.valid) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'invalid_request',
-            message: 'API key is required',
+            message: validation.error || 'Invalid API key format',
           },
         },
         { status: 400 }
@@ -166,21 +177,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // Connection successful - encrypt and store credentials
-    const { apiKeyEncrypted } = encryptCredentials({
+    // Connection successful - encrypt and store credentials (async to avoid blocking)
+    const { apiKeyEncrypted } = await encryptCredentials({
       apiKey: api_key,
     })
 
     // Check if config exists
-    const { data: existingData } = await supabase
-      .from('integration_configs')
-      .select('id')
-      .eq('workspace_id', membership.workspaceId)
-      .eq('integration_name', 'attio')
-      .single()
-
-    const existing = existingData as { id: string } | null
-
     // Build configuration payload
     const configData: IntegrationConfigInsert = {
       workspace_id: membership.workspaceId,
@@ -197,24 +199,19 @@ export async function POST(request: Request) {
       last_validated_at: new Date().toISOString(),
     }
 
-    let result
-    if (existing) {
-      result = await supabase
-        .from('integration_configs')
-        .update(configData as never)
-        .eq('id', existing.id)
-        .select()
-        .single()
-    } else {
-      result = await supabase
-        .from('integration_configs')
-        .insert(configData as never)
-        .select()
-        .single()
-    }
+    // Use upsert to avoid race condition between concurrent requests.
+    // The unique constraint on (workspace_id, integration_name) ensures only one
+    // config per workspace per integration, and upsert handles insert vs update atomically.
+    const result = await supabase
+      .from('integration_configs')
+      .upsert(configData as never, {
+        onConflict: 'workspace_id,integration_name',
+      })
+      .select()
+      .single()
 
     if (result.error) {
-      console.error('Error saving Attio config:', result.error)
+      log.error('Error saving config:', result.error)
       return NextResponse.json(
         {
           success: false,
@@ -233,7 +230,7 @@ export async function POST(request: Request) {
       message: 'Attio connected successfully',
     })
   } catch (error) {
-    console.error('Error in POST /api/integrations/attio/validate:', error)
+    log.error('Unexpected error:', error)
     const mapped = mapError(error)
     return NextResponse.json(
       {

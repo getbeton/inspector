@@ -220,6 +220,7 @@ interface CachedPrice {
 // Simple in-memory cache with 15-minute TTL
 const priceCache = new Map<string, CachedPrice>();
 const PRICE_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PRICE_CACHE_MAX_SIZE = 50; // Maximum cache entries before forced cleanup
 
 function getCachedPrice(key: string): PriceInfo | null {
   const cached = priceCache.get(key);
@@ -232,10 +233,28 @@ function getCachedPrice(key: string): PriceInfo | null {
 }
 
 function setCachedPrice(key: string, price: PriceInfo): void {
+  // Evict expired entries before adding new ones to prevent unbounded growth
+  if (priceCache.size >= PRICE_CACHE_MAX_SIZE) {
+    evictExpiredPriceCacheEntries();
+  }
+
   priceCache.set(key, {
     price,
     expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
   });
+}
+
+/**
+ * Removes all expired entries from the price cache.
+ * Called automatically when the cache reaches its size limit.
+ */
+function evictExpiredPriceCacheEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of priceCache) {
+    if (now > entry.expiresAt) {
+      priceCache.delete(key);
+    }
+  }
 }
 
 // ============================================
@@ -411,6 +430,82 @@ function handleStripeError(error: unknown, context: string): never {
     `${context}: ${error instanceof Error ? error.message : 'Unknown error'}`,
     'unknown_error'
   );
+}
+
+// ============================================
+// MTU Validation
+// ============================================
+
+/**
+ * Maximum MTU count that we'll accept without a warning.
+ * Values above this are logged as warnings but still accepted.
+ * This helps catch calculation bugs early.
+ */
+const MTU_WARNING_THRESHOLD = 10_000_000;
+
+/**
+ * Result of MTU validation.
+ */
+export interface MtuValidationResult {
+  valid: boolean;
+  skip: boolean;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Validates an MTU count before reporting to Stripe.
+ *
+ * Rules:
+ * - Must be an integer (Stripe requires integer values)
+ * - Must be non-negative
+ * - Zero is valid but should be skipped (no billing event needed)
+ * - Very large values trigger a warning but are still valid
+ *
+ * @param mtuCount - The MTU count to validate
+ * @returns Validation result with skip/error/warning flags
+ */
+export function validateMtuCount(mtuCount: number): MtuValidationResult {
+  // Check for non-integer
+  if (!Number.isInteger(mtuCount)) {
+    return {
+      valid: false,
+      skip: true,
+      error: `MTU count must be an integer, got: ${mtuCount}`,
+    };
+  }
+
+  // Check for negative values
+  if (mtuCount < 0) {
+    return {
+      valid: false,
+      skip: true,
+      error: `MTU count cannot be negative, got: ${mtuCount}`,
+    };
+  }
+
+  // Zero is valid but should be skipped (no point recording 0 usage)
+  if (mtuCount === 0) {
+    return {
+      valid: true,
+      skip: true,
+    };
+  }
+
+  // Check for suspiciously large values (warn but don't reject)
+  if (mtuCount > MTU_WARNING_THRESHOLD) {
+    return {
+      valid: true,
+      skip: false,
+      warning: `Unusually high MTU count: ${mtuCount}. This may indicate a calculation bug.`,
+    };
+  }
+
+  // Valid positive integer
+  return {
+    valid: true,
+    skip: false,
+  };
 }
 
 // ============================================
@@ -682,6 +777,11 @@ export async function resumeSubscription(
 /**
  * Records an MTU count to the Stripe billing meter.
  * This is called by the daily MTU tracking cron job.
+ *
+ * Validates the MTU count before sending to Stripe:
+ * - Rejects non-integers and negative values
+ * - Skips zero values (no billing event needed)
+ * - Logs warnings for unusually high values
  */
 export async function recordMeterEvent(
   params: RecordMeterEventParams
@@ -694,6 +794,23 @@ export async function recordMeterEvent(
   const config = getStripeConfig();
   if (!stripe || !config) {
     return { success: false, disabled: true };
+  }
+
+  // Validate MTU count before sending to Stripe
+  const validation = validateMtuCount(params.mtuCount);
+
+  if (!validation.valid) {
+    console.error(`[Stripe Billing] Invalid MTU count: ${validation.error}`);
+    throw new StripeInvalidRequestError(validation.error || 'Invalid MTU count');
+  }
+
+  if (validation.skip) {
+    console.log('[Stripe Billing] Skipping meter event for 0 MTU (no usage to report)');
+    return { success: true, data: { success: true } };
+  }
+
+  if (validation.warning) {
+    console.warn(`[Stripe Billing] ${validation.warning}`);
   }
 
   const meterId = config.mtuMeterId;
