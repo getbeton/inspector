@@ -546,6 +546,41 @@ export async function markMtuAsReportedToStripe(
 }
 
 /**
+ * Batch marks multiple MTU tracking records as reported to Stripe.
+ * Replaces N individual UPDATE queries with a single batch update per workspace.
+ */
+export async function batchMarkMtuAsReportedToStripe(
+  records: Array<{ workspaceId: string; trackingDate: string }>
+): Promise<void> {
+  if (records.length === 0) return;
+
+  const supabase = createAdminClient();
+  const reportedAt = new Date().toISOString();
+
+  // Group by workspace to minimize queries
+  const byWorkspace = new Map<string, string[]>();
+  for (const record of records) {
+    const dates = byWorkspace.get(record.workspaceId) || [];
+    dates.push(record.trackingDate);
+    byWorkspace.set(record.workspaceId, dates);
+  }
+
+  // One UPDATE per workspace instead of one per record
+  await Promise.all(
+    Array.from(byWorkspace.entries()).map(([workspaceId, dates]) =>
+      supabase
+        .from('mtu_tracking')
+        .update({
+          reported_to_stripe: true,
+          reported_at: reportedAt,
+        })
+        .eq('workspace_id', workspaceId)
+        .in('tracking_date', dates)
+    )
+  );
+}
+
+/**
  * Gets unreported MTU tracking records for a workspace.
  */
 export async function getUnreportedMtuRecords(workspaceId: string): Promise<MtuTracking[]> {

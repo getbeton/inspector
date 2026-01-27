@@ -21,7 +21,7 @@ import { withRetry, withRetryBatch } from '@/lib/utils/retry';
 import {
   calculateMTU,
   storeMTUTracking,
-  markMtuAsReportedToStripe,
+  batchMarkMtuAsReportedToStripe,
 } from '@/lib/billing/mtu-service';
 import {
   hasCycleEnded,
@@ -271,7 +271,6 @@ async function reportMtuToStripe(): Promise<{
         throw new Error(errorMsg);
       }
 
-      await markMtuAsReportedToStripe(record.workspace_id, record.tracking_date);
       return { workspaceId: record.workspace_id, trackingDate: record.tracking_date };
     },
     {
@@ -287,10 +286,13 @@ async function reportMtuToStripe(): Promise<{
     }
   );
 
-  // Process batch results
+  // Collect successful records for batch database update
+  const successfulRecords: Array<{ workspaceId: string; trackingDate: string }> = [];
+
   for (const result of batchResults) {
     if (result.success) {
       reported++;
+      successfulRecords.push(result.data);
       if (result.attempts > 1) {
         totalRetries += result.attempts - 1;
       }
@@ -300,6 +302,11 @@ async function reportMtuToStripe(): Promise<{
       );
       totalRetries += result.attempts - 1;
     }
+  }
+
+  // Batch mark all successful records as reported (single UPDATE per workspace instead of N)
+  if (successfulRecords.length > 0) {
+    await batchMarkMtuAsReportedToStripe(successfulRecords);
   }
 
   return { reported, errors, totalRetries };
