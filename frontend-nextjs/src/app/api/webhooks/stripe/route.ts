@@ -12,11 +12,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { constructWebhookEvent, isBillingConfigured } from '@/lib/integrations/stripe/billing';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
-import type { BillingStatus } from '@/lib/supabase/types';
+import type { BillingStatus, Json } from '@/lib/supabase/types';
 
 // ============================================
 // Types
@@ -37,7 +37,7 @@ interface WebhookResult {
  */
 async function handleSubscriptionCreated(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -50,8 +50,7 @@ async function handleSubscriptionCreated(
   }
 
   // Update billing status
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
@@ -72,7 +71,7 @@ async function handleSubscriptionCreated(
  */
 async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -83,8 +82,7 @@ async function handleSubscriptionUpdated(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
@@ -101,7 +99,7 @@ async function handleSubscriptionUpdated(
  */
 async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -112,8 +110,7 @@ async function handleSubscriptionDeleted(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus,
@@ -129,7 +126,7 @@ async function handleSubscriptionDeleted(
  */
 async function handleSubscriptionPaused(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -137,8 +134,7 @@ async function handleSubscriptionPaused(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus, // Treat paused as cancelled for access control
@@ -153,7 +149,7 @@ async function handleSubscriptionPaused(
  */
 async function handleSubscriptionResumed(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -161,8 +157,7 @@ async function handleSubscriptionResumed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
@@ -177,7 +172,7 @@ async function handleSubscriptionResumed(
  */
 async function handleInvoicePaid(
   invoice: Stripe.Invoice,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
@@ -187,8 +182,7 @@ async function handleInvoicePaid(
   if (!workspace) return;
 
   // Update status to active if it was past_due
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
@@ -204,7 +198,7 @@ async function handleInvoicePaid(
  */
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
@@ -213,8 +207,7 @@ async function handleInvoicePaymentFailed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       status: 'past_due' as BillingStatus,
@@ -229,7 +222,7 @@ async function handleInvoicePaymentFailed(
  */
 async function handlePaymentMethodAttached(
   paymentMethod: Stripe.PaymentMethod,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof paymentMethod.customer === 'string'
@@ -250,8 +243,7 @@ async function handlePaymentMethodAttached(
       }
     : { stripe_payment_method_id: paymentMethod.id };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       ...cardInfo,
@@ -267,7 +259,7 @@ async function handlePaymentMethodAttached(
  */
 async function handlePaymentMethodDetached(
   paymentMethod: Stripe.PaymentMethod,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   // Find workspace by payment method ID
   const { data: billing } = await supabase
@@ -279,8 +271,7 @@ async function handlePaymentMethodDetached(
   const typedBilling = billing as { workspace_id: string } | null;
   if (!typedBilling) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workspace_billing')
     .update({
       stripe_payment_method_id: null,
@@ -300,7 +291,7 @@ async function handlePaymentMethodDetached(
  */
 async function handleSetupIntentSucceeded(
   setupIntent: Stripe.SetupIntent,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
@@ -322,7 +313,7 @@ async function handleSetupIntentSucceeded(
  */
 async function findWorkspaceByCustomerId(
   customerId: string,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<{ id: string } | null> {
   const { data } = await supabase
     .from('workspace_billing')
@@ -361,7 +352,7 @@ function mapSubscriptionStatus(stripeStatus: Stripe.Subscription.Status): Billin
  */
 async function isEventProcessed(
   eventId: string,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<boolean> {
   const { data } = await supabase
     .from('billing_events')
@@ -379,8 +370,8 @@ async function logBillingEvent(
   workspaceId: string | null,
   eventType: string,
   stripeEventId: string,
-  eventData: Record<string, unknown>,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  eventData: Json,
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const event = {
     workspace_id: workspaceId,
@@ -389,8 +380,7 @@ async function logBillingEvent(
     event_data: eventData,
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('billing_events').insert(event);
+  await supabase.from('billing_events').insert(event);
 }
 
 // ============================================
@@ -437,8 +427,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Initialize Supabase client
-  const supabase = await createServerClient();
+  // Use admin client for webhook operations (no user session available from Stripe)
+  const supabase = createAdminClient();
 
   // Check idempotency - if already processed, return success
   const alreadyProcessed = await isEventProcessed(event.id, supabase);
@@ -525,7 +515,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Log the event
-    await logBillingEvent(workspaceId, event.type, event.id, event.data.object as unknown as Record<string, unknown>, supabase);
+    await logBillingEvent(workspaceId, event.type, event.id, event.data.object as unknown as Json, supabase);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
@@ -538,8 +528,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       event.id,
       {
         error: error instanceof Error ? error.message : 'Unknown error',
-        eventData: event.data.object,
-      },
+        eventData: event.data.object as unknown as Json,
+      } as unknown as Json,
       supabase
     );
 

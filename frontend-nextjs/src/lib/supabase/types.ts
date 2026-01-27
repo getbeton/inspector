@@ -706,8 +706,8 @@ export interface Database {
       billing_events: {
         Row: {
           id: string
-          workspace_id: string
-          event_type: BillingEventType
+          workspace_id: string | null
+          event_type: string
           event_data: Json
           stripe_event_id: string | null
           stripe_object_type: string | null
@@ -718,8 +718,8 @@ export interface Database {
         }
         Insert: {
           id?: string
-          workspace_id: string
-          event_type: BillingEventType
+          workspace_id?: string | null
+          event_type: string
           event_data?: Json
           stripe_event_id?: string | null
           stripe_object_type?: string | null
@@ -730,8 +730,8 @@ export interface Database {
         }
         Update: {
           id?: string
-          workspace_id?: string
-          event_type?: BillingEventType
+          workspace_id?: string | null
+          event_type?: string
           event_data?: Json
           stripe_event_id?: string | null
           stripe_object_type?: string | null

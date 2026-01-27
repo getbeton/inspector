@@ -15,8 +15,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { isBillingEnabled } from '@/lib/utils/deployment';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { withRetry, withRetryBatch } from '@/lib/utils/retry';
 import {
   calculateMTU,
@@ -76,25 +76,9 @@ function verifyCronAuth(request: NextRequest): boolean {
 // Supabase Admin Client
 // ============================================
 
-/**
- * Creates a Supabase admin client with service role key.
- * This bypasses RLS for batch operations.
- */
-function getAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase configuration missing');
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
+// Uses the shared typed admin client from lib/supabase/admin.ts
+// which includes Database type for full type safety
+const getAdminClient = createAdminClient;
 
 // ============================================
 // Main Cron Logic
@@ -149,14 +133,11 @@ async function processWorkspaceMtu(
       const supabase = getAdminClient();
       const today = new Date().toISOString().split('T')[0];
 
-      // Type cast to bypass Supabase type checking for new billing tables
       // Note: peak_mtu_this_cycle update is handled in a separate query to compare with existing value
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('workspace_billing')
         .update({
           current_cycle_mtu: mtuResult.mtuCount,
-          last_mtu_calculation: today,
         })
         .eq('workspace_id', workspaceId);
 
@@ -166,8 +147,7 @@ async function processWorkspaceMtu(
 
       // Update peak MTU if current is higher (separate query to handle comparison)
       if (mtuResult.mtuCount > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
+        await supabase
           .from('workspace_billing')
           .update({
             peak_mtu_this_cycle: mtuResult.mtuCount,
