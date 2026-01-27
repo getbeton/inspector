@@ -41,11 +41,16 @@ interface CronResult {
   mtuRecordsReported: number;
   errors: string[];
   timestamp: string;
+  timedOut?: boolean;
   retryStats?: {
     totalRetries: number;
     retriedWorkspaces: number;
   };
 }
+
+// Vercel Pro cron limit is 5 minutes; use 4.5 min deadline for safety
+const CRON_DEADLINE_MS = 270_000;
+const MTU_BATCH_SIZE = 5;
 
 // ============================================
 // Cron Authentication
@@ -402,34 +407,65 @@ export async function GET(
       }
     }
 
-    // Step 2: Calculate MTU for all active workspaces
+    // Step 2: Calculate MTU for all active workspaces (batched with deadline)
     const activeWorkspaces = await getActiveWorkspaces();
+    const startTime = Date.now();
+    let timedOut = false;
 
-    for (const workspace of activeWorkspaces) {
-      const result = await processWorkspaceMtu(workspace.workspace_id);
-      if (result.success) {
-        workspacesProcessed++;
-      } else {
-        errors.push(
-          `Workspace ${workspace.workspace_id}: ${result.error}`
+    for (let i = 0; i < activeWorkspaces.length; i += MTU_BATCH_SIZE) {
+      // Check deadline before starting a new batch
+      if (Date.now() - startTime > CRON_DEADLINE_MS) {
+        timedOut = true;
+        console.warn(
+          `[MTU Cron] Approaching timeout after ${workspacesProcessed}/${activeWorkspaces.length} workspaces`
         );
+        errors.push(
+          `Timeout: processed ${workspacesProcessed} of ${activeWorkspaces.length} workspaces`
+        );
+        break;
       }
-      if (result.retries && result.retries > 0) {
-        totalRetries += result.retries;
-        retriedWorkspaces++;
+
+      const batch = activeWorkspaces.slice(i, i + MTU_BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((ws) => processWorkspaceMtu(ws.workspace_id))
+      );
+
+      for (let j = 0; j < batchResults.length; j++) {
+        const settled = batchResults[j];
+        if (settled.status === 'fulfilled') {
+          const result = settled.value;
+          if (result.success) {
+            workspacesProcessed++;
+          } else {
+            errors.push(
+              `Workspace ${batch[j].workspace_id}: ${result.error}`
+            );
+          }
+          if (result.retries && result.retries > 0) {
+            totalRetries += result.retries;
+            retriedWorkspaces++;
+          }
+        } else {
+          errors.push(
+            `Workspace ${batch[j].workspace_id}: ${settled.reason}`
+          );
+        }
       }
     }
 
-    // Step 3: Report unreported MTU records to Stripe
-    const stripeResult = await reportMtuToStripe();
-    mtuRecordsReported = stripeResult.reported;
-    errors.push(...stripeResult.errors);
-    totalRetries += stripeResult.totalRetries;
+    // Step 3: Report unreported MTU records to Stripe (skip if timed out)
+    if (!timedOut) {
+      const stripeResult = await reportMtuToStripe();
+      mtuRecordsReported = stripeResult.reported;
+      errors.push(...stripeResult.errors);
+      totalRetries += stripeResult.totalRetries;
+    }
 
     console.log(
       `[MTU Cron] Completed: ${workspacesProcessed} workspaces processed, ` +
         `${cyclesTransitioned} cycles transitioned, ${mtuRecordsReported} records reported to Stripe, ` +
-        `${totalRetries} total retries, ${errors.length} errors`
+        `${totalRetries} total retries, ${errors.length} errors` +
+        (timedOut ? ' (timed out)' : '')
     );
 
     return NextResponse.json({
@@ -439,6 +475,7 @@ export async function GET(
       mtuRecordsReported,
       errors,
       timestamp,
+      timedOut,
       retryStats: {
         totalRetries,
         retriedWorkspaces,
