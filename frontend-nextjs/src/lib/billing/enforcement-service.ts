@@ -12,7 +12,10 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { isBillingEnabled, BILLING_CONFIG } from '@/lib/utils/deployment';
+import { createModuleLogger } from '@/lib/utils/logger';
 import type { BillingStatus } from '@/lib/supabase/types';
+
+const log = createModuleLogger('[Billing Enforcement]');
 
 // ============================================
 // Types
@@ -55,9 +58,25 @@ const BLOCK_REASONS = {
     'You have exceeded the free tier limit of {threshold} monthly tracked users. Please add a payment method to continue using the product.',
   PAYMENT_FAILED:
     'Your last payment failed. Please update your payment method to restore access.',
+  PAYMENT_PAST_DUE:
+    'Your payment is past due. Please update your payment method to restore access.',
   SUBSCRIPTION_CANCELLED:
     'Your subscription has been cancelled. Please reactivate to continue using the product.',
+  SUBSCRIPTION_PAUSED:
+    'Your subscription is paused. Please contact support to resume.',
 } as const;
+
+/**
+ * Billing statuses that block access regardless of card being linked.
+ * These statuses indicate payment problems that must be resolved.
+ */
+const BLOCKING_STATUSES: BillingStatus[] = ['past_due', 'cancelled'];
+
+/**
+ * Billing statuses that indicate payment collection failures.
+ * Users with these statuses need to update their payment method.
+ */
+const PAYMENT_FAILURE_STATUSES: BillingStatus[] = ['past_due'];
 
 // ============================================
 // Main Enforcement Functions
@@ -104,38 +123,50 @@ export async function getAccessStatus(workspaceId: string): Promise<AccessStatus
   const billingStatus = typedBilling.status;
   const percentUsed = threshold > 0 ? Math.round((mtuCount / threshold) * 100) : 0;
 
-  // Check for payment failure
-  if (billingStatus === 'past_due') {
+  // SECURITY: Check for blocking statuses FIRST, before any card-linked checks.
+  // A workspace with past_due or cancelled status must be blocked regardless of
+  // whether a card is linked. This prevents the billing bypass vulnerability where
+  // a user with a failed payment could still access the product.
+  if (BLOCKING_STATUSES.includes(billingStatus)) {
+    // Determine the specific block reason based on status
+    let blockReason: string;
+    let accessStatus: AccessStatusType = 'payment_failed';
+
+    switch (billingStatus) {
+      case 'past_due':
+        // Past due means payment collection failed - critical block
+        blockReason = BLOCK_REASONS.PAYMENT_PAST_DUE;
+        accessStatus = 'payment_failed';
+        break;
+      case 'cancelled':
+        blockReason = BLOCK_REASONS.SUBSCRIPTION_CANCELLED;
+        accessStatus = 'over_threshold';
+        break;
+      default:
+        blockReason = BLOCK_REASONS.PAYMENT_FAILED;
+        accessStatus = 'payment_failed';
+    }
+
+    log.warn(
+      `Blocking workspace ${workspaceId.substring(0, 8)}...: status=${billingStatus}, cardLinked=${cardLinked}`
+    );
+
     return {
       hasAccess: false,
-      status: 'payment_failed',
+      status: accessStatus,
       mtuCount,
       threshold,
       percentUsed,
       cardLinked,
-      blockReason: BLOCK_REASONS.PAYMENT_FAILED,
-      requiresCardLink: true,
+      blockReason,
+      requiresCardLink: PAYMENT_FAILURE_STATUSES.includes(billingStatus),
       billingStatus,
     };
   }
 
-  // Check for cancelled subscription
-  if (billingStatus === 'cancelled') {
-    return {
-      hasAccess: false,
-      status: 'over_threshold', // Use over_threshold as the status
-      mtuCount,
-      threshold,
-      percentUsed,
-      cardLinked: false,
-      blockReason: BLOCK_REASONS.SUBSCRIPTION_CANCELLED,
-      requiresCardLink: true,
-      billingStatus,
-    };
-  }
-
-  // With card linked: always allow access (they will be charged)
-  if (cardLinked || billingStatus === 'active') {
+  // With card linked AND active/free status: allow access (they will be charged)
+  // Note: We only reach here if billing status is NOT in BLOCKING_STATUSES
+  if (cardLinked && (billingStatus === 'active' || billingStatus === 'free')) {
     return {
       hasAccess: true,
       status: 'active',
@@ -143,6 +174,21 @@ export async function getAccessStatus(workspaceId: string): Promise<AccessStatus
       threshold,
       percentUsed,
       cardLinked: true,
+      blockReason: null,
+      requiresCardLink: false,
+      billingStatus,
+    };
+  }
+
+  // Active status without card (shouldn't normally happen, but handle gracefully)
+  if (billingStatus === 'active') {
+    return {
+      hasAccess: true,
+      status: 'active',
+      mtuCount,
+      threshold,
+      percentUsed,
+      cardLinked,
       blockReason: null,
       requiresCardLink: false,
       billingStatus,

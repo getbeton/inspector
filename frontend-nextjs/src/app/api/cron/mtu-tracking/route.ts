@@ -15,12 +15,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { isBillingEnabled } from '@/lib/utils/deployment';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { withRetry, withRetryBatch } from '@/lib/utils/retry';
 import {
   calculateMTU,
   storeMTUTracking,
-  markMtuAsReportedToStripe,
+  batchMarkMtuAsReportedToStripe,
 } from '@/lib/billing/mtu-service';
 import {
   hasCycleEnded,
@@ -28,6 +29,7 @@ import {
   getWorkspacesNeedingCycleTransition,
 } from '@/lib/billing/cycle-service';
 import { recordMeterEvent } from '@/lib/integrations/stripe/billing';
+import { createAuditLogger } from '@/lib/utils/audit';
 
 // ============================================
 // Types
@@ -40,7 +42,18 @@ interface CronResult {
   mtuRecordsReported: number;
   errors: string[];
   timestamp: string;
+  timedOut?: boolean;
+  retryStats?: {
+    totalRetries: number;
+    retriedWorkspaces: number;
+  };
 }
+
+// Vercel Pro cron limit is 5 minutes; use 4.5 min deadline for safety
+const CRON_DEADLINE_MS = 270_000;
+const MTU_BATCH_SIZE = 5;
+
+const audit = createAuditLogger('mtu-cron');
 
 // ============================================
 // Cron Authentication
@@ -71,25 +84,9 @@ function verifyCronAuth(request: NextRequest): boolean {
 // Supabase Admin Client
 // ============================================
 
-/**
- * Creates a Supabase admin client with service role key.
- * This bypasses RLS for batch operations.
- */
-function getAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase configuration missing');
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
+// Uses the shared typed admin client from lib/supabase/admin.ts
+// which includes Database type for full type safety
+const getAdminClient = createAdminClient;
 
 // ============================================
 // Main Cron Logic
@@ -123,85 +120,96 @@ async function getActiveWorkspaces(): Promise<
 }
 
 /**
- * Processes MTU calculation for a single workspace.
+ * Processes MTU calculation for a single workspace with retry logic.
  */
 async function processWorkspaceMtu(
   workspaceId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Calculate current MTU
-    const mtuResult = await calculateMTU(workspaceId);
+): Promise<{ success: boolean; error?: string; retries?: number }> {
+  const result = await withRetry(
+    async () => {
+      // Calculate current MTU
+      const mtuResult = await calculateMTU(workspaceId);
 
-    if (!mtuResult) {
-      return {
-        success: false,
-        error: 'MTU calculation returned null',
-      };
-    }
+      if (!mtuResult) {
+        throw new Error('MTU calculation returned null');
+      }
 
-    // Store tracking record
-    await storeMTUTracking(workspaceId, mtuResult);
+      // Store tracking record
+      await storeMTUTracking(workspaceId, mtuResult);
 
-    // Update workspace_billing with current MTU
-    const supabase = getAdminClient();
-    const today = new Date().toISOString().split('T')[0];
+      // Update workspace_billing with current MTU
+      const supabase = getAdminClient();
+      const today = new Date().toISOString().split('T')[0];
 
-    // Type cast to bypass Supabase type checking for new billing tables
-    // Note: peak_mtu_this_cycle update is handled in a separate query to compare with existing value
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (supabase as any)
-      .from('workspace_billing')
-      .update({
-        current_cycle_mtu: mtuResult.mtuCount,
-        last_mtu_calculation: today,
-      })
-      .eq('workspace_id', workspaceId);
-
-    // Update peak MTU if current is higher (separate query to handle comparison)
-    if (!updateError && mtuResult.mtuCount > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      // Note: peak_mtu_this_cycle update is handled in a separate query to compare with existing value
+      const { error: updateError } = await supabase
         .from('workspace_billing')
         .update({
-          peak_mtu_this_cycle: mtuResult.mtuCount,
-          peak_mtu_date: today,
+          current_cycle_mtu: mtuResult.mtuCount,
         })
-        .eq('workspace_id', workspaceId)
-        .lt('peak_mtu_this_cycle', mtuResult.mtuCount);
-    }
+        .eq('workspace_id', workspaceId);
 
-    if (updateError) {
-      console.error(
-        `[MTU Cron] Failed to update workspace ${workspaceId}:`,
-        updateError
-      );
-      return {
-        success: false,
-        error: `Database update failed: ${updateError.message}`,
-      };
-    }
+      if (updateError) {
+        throw new Error(`Database update failed: ${updateError.message}`);
+      }
 
+      // Update peak MTU if current is higher (separate query to handle comparison)
+      if (mtuResult.mtuCount > 0) {
+        await supabase
+          .from('workspace_billing')
+          .update({
+            peak_mtu_this_cycle: mtuResult.mtuCount,
+            peak_mtu_date: today,
+          })
+          .eq('workspace_id', workspaceId)
+          .lt('peak_mtu_this_cycle', mtuResult.mtuCount);
+      }
+
+      return mtuResult;
+    },
+    {
+      maxRetries: 3,
+      initialDelayMs: 1000,
+      onRetry: (attempt, error, delayMs) => {
+        console.warn(
+          `[MTU Cron] Retry ${attempt} for workspace ${workspaceId} after ${delayMs}ms:`,
+          error instanceof Error ? error.message : error
+        );
+      },
+    }
+  );
+
+  if (result.success) {
     console.log(
-      `[MTU Cron] Processed workspace ${workspaceId}: MTU = ${mtuResult.mtuCount}`
+      `[MTU Cron] Processed workspace ${workspaceId}: MTU = ${result.data.mtuCount}` +
+        (result.attempts > 1 ? ` (after ${result.attempts} attempts)` : '')
     );
-    return { success: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
+    return {
+      success: true,
+      retries: result.attempts > 1 ? result.attempts - 1 : 0,
+    };
+  } else {
+    return {
+      success: false,
+      error: result.error.message,
+      retries: result.attempts - 1,
+    };
   }
 }
 
 /**
- * Reports unreported MTU records to Stripe.
+ * Reports unreported MTU records to Stripe with retry logic.
  * Queries all unreported records across all workspaces.
  */
 async function reportMtuToStripe(): Promise<{
   reported: number;
   errors: string[];
+  totalRetries: number;
 }> {
   const supabase = getAdminClient();
   let reported = 0;
   const errors: string[] = [];
+  let totalRetries = 0;
 
   // Get all unreported MTU records with their workspace's Stripe customer ID
   const { data: unreportedRecords, error: fetchError } = await supabase
@@ -220,7 +228,7 @@ async function reportMtuToStripe(): Promise<{
 
   if (fetchError) {
     console.error('[MTU Cron] Failed to fetch unreported MTU records:', fetchError);
-    return { reported: 0, errors: [fetchError.message] };
+    return { reported: 0, errors: [fetchError.message], totalRetries: 0 };
   }
 
   // Type assertion for joined query
@@ -233,40 +241,83 @@ async function reportMtuToStripe(): Promise<{
   }> | null;
 
   if (!records || records.length === 0) {
-    return { reported: 0, errors: [] };
+    return { reported: 0, errors: [], totalRetries: 0 };
   }
 
-  for (const record of records) {
-    // Skip if no Stripe customer ID
-    // Handle both array and object formats from Supabase join
-    const billingData = Array.isArray(record.workspace_billing)
-      ? record.workspace_billing[0]
-      : record.workspace_billing;
-    const stripeCustomerId = billingData?.stripe_customer_id;
-    if (!stripeCustomerId) {
-      continue;
+  // Process records in parallel batches with retry logic
+  const batchResults = await withRetryBatch(
+    records.filter((record) => {
+      // Pre-filter records without Stripe customer ID
+      const billingData = Array.isArray(record.workspace_billing)
+        ? record.workspace_billing[0]
+        : record.workspace_billing;
+      return !!billingData?.stripe_customer_id;
+    }),
+    async (record) => {
+      const billingData = Array.isArray(record.workspace_billing)
+        ? record.workspace_billing[0]
+        : record.workspace_billing;
+      const stripeCustomerId = billingData?.stripe_customer_id;
+
+      if (!stripeCustomerId) {
+        throw new Error('No Stripe customer ID');
+      }
+
+      // Record meter event to Stripe
+      const trackingDate = new Date(record.tracking_date);
+      const result = await recordMeterEvent({
+        customerId: stripeCustomerId,
+        mtuCount: record.mtu_count,
+        timestamp: Math.floor(trackingDate.getTime() / 1000),
+        idempotencyKey: `mtu-${record.workspace_id}-${record.tracking_date}`,
+      });
+
+      if (!result.success) {
+        const errorMsg = 'error' in result && result.error
+          ? result.error.message
+          : 'Unknown Stripe error';
+        throw new Error(errorMsg);
+      }
+
+      return { workspaceId: record.workspace_id, trackingDate: record.tracking_date };
+    },
+    {
+      batchSize: 10,
+      maxRetries: 3,
+      initialDelayMs: 1000,
+      onRetry: (attempt, error, delayMs) => {
+        console.warn(
+          `[MTU Cron] Stripe reporting retry ${attempt} after ${delayMs}ms:`,
+          error instanceof Error ? error.message : error
+        );
+      },
     }
+  );
 
-    // Record meter event to Stripe
-    const trackingDate = new Date(record.tracking_date);
-    const result = await recordMeterEvent({
-      customerId: stripeCustomerId,
-      mtuCount: record.mtu_count,
-      timestamp: Math.floor(trackingDate.getTime() / 1000),
-      idempotencyKey: `mtu-${record.workspace_id}-${record.tracking_date}`,
-    });
+  // Collect successful records for batch database update
+  const successfulRecords: Array<{ workspaceId: string; trackingDate: string }> = [];
 
+  for (const result of batchResults) {
     if (result.success) {
-      await markMtuAsReportedToStripe(record.workspace_id, record.tracking_date);
       reported++;
+      successfulRecords.push(result.data);
+      if (result.attempts > 1) {
+        totalRetries += result.attempts - 1;
+      }
     } else {
       errors.push(
-        `Failed to report MTU for workspace ${record.workspace_id}: ${'error' in result ? result.error : 'Unknown error'}`
+        `Failed to report MTU for workspace ${result.item.workspace_id}: ${result.error.message}`
       );
+      totalRetries += result.attempts - 1;
     }
   }
 
-  return { reported, errors };
+  // Batch mark all successful records as reported (single UPDATE per workspace instead of N)
+  if (successfulRecords.length > 0) {
+    await batchMarkMtuAsReportedToStripe(successfulRecords);
+  }
+
+  return { reported, errors, totalRetries };
 }
 
 // ============================================
@@ -311,56 +362,130 @@ export async function GET(
   let workspacesProcessed = 0;
   let cyclesTransitioned = 0;
   let mtuRecordsReported = 0;
+  let totalRetries = 0;
+  let retriedWorkspaces = 0;
 
   try {
-    // Step 1: Handle billing cycle transitions
+    // Step 1: Handle billing cycle transitions with retry logic
     const workspacesNeedingTransition = await getWorkspacesNeedingCycleTransition();
 
     for (const workspaceId of workspacesNeedingTransition) {
-      try {
-        const cycleEnded = await hasCycleEnded(workspaceId);
-        if (cycleEnded) {
-          const result = await transitionToNextCycle(workspaceId);
-          if (result.success) {
-            cyclesTransitioned++;
-            console.log(
-              `[MTU Cron] Transitioned billing cycle for workspace ${workspaceId}`
+      const transitionResult = await withRetry(
+        async () => {
+          const cycleEnded = await hasCycleEnded(workspaceId);
+          if (cycleEnded) {
+            const result = await transitionToNextCycle(workspaceId);
+            if (!result.success) {
+              throw new Error(result.error);
+            }
+            return true;
+          }
+          return false;
+        },
+        {
+          maxRetries: 2,
+          initialDelayMs: 500,
+          onRetry: (attempt, error, delayMs) => {
+            console.warn(
+              `[MTU Cron] Cycle transition retry ${attempt} for ${workspaceId} after ${delayMs}ms:`,
+              error instanceof Error ? error.message : error
             );
+          },
+        }
+      );
+
+      if (transitionResult.success && transitionResult.data) {
+        cyclesTransitioned++;
+        console.log(
+          `[MTU Cron] Transitioned billing cycle for workspace ${workspaceId}`
+        );
+        if (transitionResult.attempts > 1) {
+          totalRetries += transitionResult.attempts - 1;
+        }
+      } else if (!transitionResult.success) {
+        errors.push(
+          `Cycle transition failed for ${workspaceId}: ${transitionResult.error.message}`
+        );
+        totalRetries += transitionResult.attempts - 1;
+      }
+    }
+
+    // Step 2: Calculate MTU for all active workspaces (batched with deadline)
+    const activeWorkspaces = await getActiveWorkspaces();
+    const startTime = Date.now();
+    let timedOut = false;
+
+    for (let i = 0; i < activeWorkspaces.length; i += MTU_BATCH_SIZE) {
+      // Check deadline before starting a new batch
+      if (Date.now() - startTime > CRON_DEADLINE_MS) {
+        timedOut = true;
+        console.warn(
+          `[MTU Cron] Approaching timeout after ${workspacesProcessed}/${activeWorkspaces.length} workspaces`
+        );
+        errors.push(
+          `Timeout: processed ${workspacesProcessed} of ${activeWorkspaces.length} workspaces`
+        );
+        break;
+      }
+
+      const batch = activeWorkspaces.slice(i, i + MTU_BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map((ws) => processWorkspaceMtu(ws.workspace_id))
+      );
+
+      for (let j = 0; j < batchResults.length; j++) {
+        const settled = batchResults[j];
+        if (settled.status === 'fulfilled') {
+          const result = settled.value;
+          if (result.success) {
+            workspacesProcessed++;
           } else {
             errors.push(
-              `Cycle transition failed for ${workspaceId}: ${result.error}`
+              `Workspace ${batch[j].workspace_id}: ${result.error}`
             );
           }
+          if (result.retries && result.retries > 0) {
+            totalRetries += result.retries;
+            retriedWorkspaces++;
+          }
+        } else {
+          errors.push(
+            `Workspace ${batch[j].workspace_id}: ${settled.reason}`
+          );
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`Cycle transition error for ${workspaceId}: ${message}`);
       }
     }
 
-    // Step 2: Calculate MTU for all active workspaces
-    const activeWorkspaces = await getActiveWorkspaces();
-
-    for (const workspace of activeWorkspaces) {
-      const result = await processWorkspaceMtu(workspace.workspace_id);
-      if (result.success) {
-        workspacesProcessed++;
-      } else {
-        errors.push(
-          `Workspace ${workspace.workspace_id}: ${result.error}`
-        );
-      }
+    // Step 3: Report unreported MTU records to Stripe (skip if timed out)
+    if (!timedOut) {
+      const stripeResult = await reportMtuToStripe();
+      mtuRecordsReported = stripeResult.reported;
+      errors.push(...stripeResult.errors);
+      totalRetries += stripeResult.totalRetries;
     }
 
-    // Step 3: Report unreported MTU records to Stripe
-    const stripeResult = await reportMtuToStripe();
-    mtuRecordsReported = stripeResult.reported;
-    errors.push(...stripeResult.errors);
+    // Audit log the cron run summary
+    await audit({
+      operation: 'daily_mtu_tracking',
+      table: 'workspace_billing',
+      action: 'update',
+      recordCount: workspacesProcessed,
+      success: errors.length === 0,
+      error: errors.length > 0 ? `${errors.length} errors` : undefined,
+      metadata: {
+        workspacesProcessed,
+        cyclesTransitioned,
+        mtuRecordsReported,
+        totalRetries,
+        timedOut: timedOut || false,
+      },
+    });
 
     console.log(
       `[MTU Cron] Completed: ${workspacesProcessed} workspaces processed, ` +
         `${cyclesTransitioned} cycles transitioned, ${mtuRecordsReported} records reported to Stripe, ` +
-        `${errors.length} errors`
+        `${totalRetries} total retries, ${errors.length} errors` +
+        (timedOut ? ' (timed out)' : '')
     );
 
     return NextResponse.json({
@@ -370,6 +495,11 @@ export async function GET(
       mtuRecordsReported,
       errors,
       timestamp,
+      timedOut,
+      retryStats: {
+        totalRetries,
+        retriedWorkspaces,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

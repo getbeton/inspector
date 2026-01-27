@@ -115,8 +115,8 @@ export async function POST(
       return NextResponse.json({ error: 'API key is required' }, { status: 400 })
     }
 
-    // Encrypt sensitive credentials
-    const { apiKeyEncrypted, projectIdEncrypted } = encryptCredentials({
+    // Encrypt sensitive credentials (async to avoid blocking event loop)
+    const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
       apiKey: api_key,
       projectId: project_id
     })

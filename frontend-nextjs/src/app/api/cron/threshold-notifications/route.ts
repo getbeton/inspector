@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isBillingEnabled, BILLING_CONFIG } from '@/lib/utils/deployment';
+import { withRetry } from '@/lib/utils/retry';
 import { sendThresholdNotification } from '@/lib/email';
 
 // ============================================
@@ -34,6 +35,10 @@ interface ThresholdNotificationResult {
   };
   errors: string[];
   timestamp: string;
+  retryStats?: {
+    totalRetries: number;
+    retriedNotifications: number;
+  };
 }
 
 interface WorkspaceBillingData {
@@ -198,7 +203,7 @@ function getAdminEmails(workspace: WorkspaceBillingData): string[] {
 }
 
 /**
- * Queues a notification email for a workspace.
+ * Queues a notification email for a workspace with retry logic.
  * In production, this would send to a queue (e.g., Resend, SQS).
  * For now, we log and store the notification event.
  */
@@ -209,82 +214,98 @@ async function queueNotification(
   emails: string[],
   mtuCount: number,
   threshold: number
-): Promise<boolean> {
-  const supabase = getAdminClient();
+): Promise<{ success: boolean; retries: number }> {
+  const result = await withRetry(
+    async () => {
+      const supabase = getAdminClient();
 
-  // Log the notification event
-  const notificationData = {
-    workspace_id: workspaceId,
-    event_type: `threshold_notification_${level}`,
-    event_data: {
-      workspace_name: workspaceName,
-      notification_level: level,
-      mtu_count: mtuCount,
-      threshold,
-      percent_used: Math.round((mtuCount / threshold) * 100),
-      recipient_emails: emails,
-      queued_at: new Date().toISOString(),
+      // Log the notification event
+      const notificationData = {
+        workspace_id: workspaceId,
+        event_type: `threshold_notification_${level}`,
+        event_data: {
+          workspace_name: workspaceName,
+          notification_level: level,
+          mtu_count: mtuCount,
+          threshold,
+          percent_used: Math.round((mtuCount / threshold) * 100),
+          recipient_emails: emails,
+          queued_at: new Date().toISOString(),
+        },
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: eventError } = await (supabase as any)
+        .from('billing_events')
+        .insert(notificationData);
+
+      if (eventError) {
+        throw new Error(`Failed to log notification event: ${eventError.message}`);
+      }
+
+      // Update the notification flags
+      const updateField =
+        level === 'warning_90'
+          ? { threshold_90_notified: true }
+          : level === 'warning_95'
+            ? { threshold_95_notified: true }
+            : { threshold_exceeded_notified: true };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any)
+        .from('workspace_billing')
+        .update({
+          ...updateField,
+          last_notification_date: new Date().toISOString(),
+        })
+        .eq('workspace_id', workspaceId);
+
+      if (updateError) {
+        throw new Error(`Failed to update notification flags: ${updateError.message}`);
+      }
+
+      // Send email notification via Resend
+      const emailResult = await sendThresholdNotification({
+        workspaceId,
+        workspaceName,
+        recipientEmails: emails,
+        notificationLevel: level,
+        mtuCount,
+        threshold,
+        settingsUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.betoninspector.com'}/settings/billing`,
+      });
+
+      if (!emailResult.success) {
+        // Log but don't fail - notification flag is already set
+        console.warn(
+          `[Threshold Cron] Email send failed for workspace ${workspaceId}:`,
+          emailResult.error
+        );
+      } else {
+        console.log(
+          `[Threshold Cron] Sent ${level} notification to workspace ${workspaceId} ` +
+            `(${workspaceName}): ${mtuCount}/${threshold} MTUs, emails: ${emails.join(', ')}`
+        );
+      }
+
+      return true;
     },
+    {
+      maxRetries: 3,
+      initialDelayMs: 1000,
+      onRetry: (attempt, error, delayMs) => {
+        console.warn(
+          `[Threshold Cron] Retry ${attempt} for workspace ${workspaceId} notification after ${delayMs}ms:`,
+          error instanceof Error ? error.message : error
+        );
+      },
+    }
+  );
+
+  return {
+    success: result.success,
+    retries: result.attempts > 1 ? result.attempts - 1 : 0,
   };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: eventError } = await (supabase as any)
-    .from('billing_events')
-    .insert(notificationData);
-
-  if (eventError) {
-    console.error('[Threshold Cron] Failed to log notification event:', eventError);
-    return false;
-  }
-
-  // Update the notification flags
-  const updateField =
-    level === 'warning_90'
-      ? { threshold_90_notified: true }
-      : level === 'warning_95'
-        ? { threshold_95_notified: true }
-        : { threshold_exceeded_notified: true };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
-    .from('workspace_billing')
-    .update({
-      ...updateField,
-      last_notification_date: new Date().toISOString(),
-    })
-    .eq('workspace_id', workspaceId);
-
-  if (updateError) {
-    console.error('[Threshold Cron] Failed to update notification flags:', updateError);
-    return false;
-  }
-
-  // Send email notification via Resend
-  const emailResult = await sendThresholdNotification({
-    workspaceId,
-    workspaceName,
-    recipientEmails: emails,
-    notificationLevel: level,
-    mtuCount,
-    threshold,
-    settingsUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.betoninspector.com'}/settings/billing`,
-  });
-
-  if (!emailResult.success) {
-    console.error(
-      `[Threshold Cron] Failed to send ${level} email for workspace ${workspaceId}:`,
-      emailResult.error
-    );
-    // Note: We don't return false here because the notification flag is already set
-    // The email service logs in dev mode, so this is expected behavior
-  } else {
-    console.log(
-      `[Threshold Cron] Sent ${level} notification to workspace ${workspaceId} ` +
-        `(${workspaceName}): ${mtuCount}/${threshold} MTUs, emails: ${emails.join(', ')}`
-    );
-  }
-
-  return true;
 }
 
 // ============================================
@@ -329,6 +350,8 @@ export async function GET(
     warning95: 0,
     exceeded: 0,
   };
+  let totalRetries = 0;
+  let retriedNotifications = 0;
 
   try {
     // Get workspaces to check
@@ -363,9 +386,9 @@ export async function GET(
           continue;
         }
 
-        // Queue notification
+        // Queue notification with retry logic
         const workspaceName = workspace.workspaces?.name || 'Unknown Workspace';
-        const success = await queueNotification(
+        const result = await queueNotification(
           workspace.workspace_id,
           workspaceName,
           level,
@@ -374,7 +397,12 @@ export async function GET(
           threshold
         );
 
-        if (success) {
+        if (result.retries > 0) {
+          totalRetries += result.retries;
+          retriedNotifications++;
+        }
+
+        if (result.success) {
           switch (level) {
             case 'warning_90':
               notificationsQueued.warning90++;
@@ -406,7 +434,7 @@ export async function GET(
       `[Threshold Cron] Completed: ${workspaces.length} workspaces checked, ` +
         `${totalQueued} notifications queued (90%: ${notificationsQueued.warning90}, ` +
         `95%: ${notificationsQueued.warning95}, exceeded: ${notificationsQueued.exceeded}), ` +
-        `${errors.length} errors`
+        `${totalRetries} total retries, ${errors.length} errors`
     );
 
     return NextResponse.json({
@@ -415,6 +443,10 @@ export async function GET(
       notificationsQueued,
       errors,
       timestamp,
+      retryStats: {
+        totalRetries,
+        retriedNotifications,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

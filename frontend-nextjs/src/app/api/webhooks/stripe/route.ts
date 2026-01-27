@@ -6,17 +6,19 @@
  *
  * Security:
  * - Verifies webhook signatures using STRIPE_WEBHOOK_SECRET
+ * - Rate limited to 200 req/min per IP to protect against abuse
  * - No authentication middleware (Stripe can't authenticate)
  * - Idempotent event handling via stripe_event_id
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { constructWebhookEvent, isBillingConfigured } from '@/lib/integrations/stripe/billing';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
-import type { BillingStatus } from '@/lib/supabase/types';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit';
+import type { BillingStatus, Json } from '@/lib/supabase/types';
 
 // ============================================
 // Types
@@ -37,7 +39,7 @@ interface WebhookResult {
  */
 async function handleSubscriptionCreated(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -49,9 +51,8 @@ async function handleSubscriptionCreated(
     return;
   }
 
-  // Update billing status
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  // Step 1: Update billing status (must succeed before cycle init)
+  const { error: statusError } = await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
@@ -59,7 +60,12 @@ async function handleSubscriptionCreated(
     })
     .eq('workspace_id', workspace.id);
 
-  // Initialize billing cycle
+  if (statusError) {
+    throw new Error(`Failed to update billing status for workspace ${workspace.id}: ${statusError.message}`);
+  }
+
+  // Step 2: Initialize billing cycle (if this fails, Stripe will retry the event
+  // and step 1 is idempotent — re-applying the same status/subscription_id is safe)
   await initializeBillingCycle(workspace.id, new Date());
 
   console.log(
@@ -72,7 +78,7 @@ async function handleSubscriptionCreated(
  */
 async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -83,13 +89,16 @@ async function handleSubscriptionUpdated(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to update subscription status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(
     `[Webhook] Subscription updated for workspace ${workspace.id}: status=${subscription.status}`
@@ -101,7 +110,7 @@ async function handleSubscriptionUpdated(
  */
 async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -112,14 +121,17 @@ async function handleSubscriptionDeleted(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus,
       stripe_subscription_id: null,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to cancel subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription deleted for workspace ${workspace.id}`);
 }
@@ -129,7 +141,7 @@ async function handleSubscriptionDeleted(
  */
 async function handleSubscriptionPaused(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -137,13 +149,16 @@ async function handleSubscriptionPaused(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus, // Treat paused as cancelled for access control
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to pause subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription paused for workspace ${workspace.id}`);
 }
@@ -153,7 +168,7 @@ async function handleSubscriptionPaused(
  */
 async function handleSubscriptionResumed(
   subscription: Stripe.Subscription,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
@@ -161,13 +176,16 @@ async function handleSubscriptionResumed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to resume subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription resumed for workspace ${workspace.id}`);
 }
@@ -177,7 +195,7 @@ async function handleSubscriptionResumed(
  */
 async function handleInvoicePaid(
   invoice: Stripe.Invoice,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
@@ -187,14 +205,17 @@ async function handleInvoicePaid(
   if (!workspace) return;
 
   // Update status to active if it was past_due
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
     })
     .eq('workspace_id', workspace.id)
     .eq('status', 'past_due');
+
+  if (error) {
+    throw new Error(`Failed to update invoice paid status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Invoice paid for workspace ${workspace.id}: ${invoice.id}`);
 }
@@ -204,7 +225,7 @@ async function handleInvoicePaid(
  */
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
@@ -213,13 +234,16 @@ async function handleInvoicePaymentFailed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'past_due' as BillingStatus,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to update payment failed status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Invoice payment failed for workspace ${workspace.id}: ${invoice.id}`);
 }
@@ -229,7 +253,7 @@ async function handleInvoicePaymentFailed(
  */
 async function handlePaymentMethodAttached(
   paymentMethod: Stripe.PaymentMethod,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof paymentMethod.customer === 'string'
@@ -250,14 +274,17 @@ async function handlePaymentMethodAttached(
       }
     : { stripe_payment_method_id: paymentMethod.id };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       ...cardInfo,
       status: 'active' as BillingStatus, // Linking card activates account
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to attach payment method for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Payment method attached for workspace ${workspace.id}`);
 }
@@ -267,7 +294,7 @@ async function handlePaymentMethodAttached(
  */
 async function handlePaymentMethodDetached(
   paymentMethod: Stripe.PaymentMethod,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   // Find workspace by payment method ID
   const { data: billing } = await supabase
@@ -279,8 +306,7 @@ async function handlePaymentMethodDetached(
   const typedBilling = billing as { workspace_id: string } | null;
   if (!typedBilling) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       stripe_payment_method_id: null,
@@ -292,6 +318,10 @@ async function handlePaymentMethodDetached(
     })
     .eq('workspace_id', typedBilling.workspace_id);
 
+  if (error) {
+    throw new Error(`Failed to detach payment method for workspace ${typedBilling.workspace_id}: ${error.message}`);
+  }
+
   console.log(`[Webhook] Payment method detached for workspace ${typedBilling.workspace_id}`);
 }
 
@@ -300,7 +330,7 @@ async function handlePaymentMethodDetached(
  */
 async function handleSetupIntentSucceeded(
   setupIntent: Stripe.SetupIntent,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const customerId =
     typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
@@ -322,7 +352,7 @@ async function handleSetupIntentSucceeded(
  */
 async function findWorkspaceByCustomerId(
   customerId: string,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<{ id: string } | null> {
   const { data } = await supabase
     .from('workspace_billing')
@@ -361,7 +391,7 @@ function mapSubscriptionStatus(stripeStatus: Stripe.Subscription.Status): Billin
  */
 async function isEventProcessed(
   eventId: string,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<boolean> {
   const { data } = await supabase
     .from('billing_events')
@@ -379,8 +409,8 @@ async function logBillingEvent(
   workspaceId: string | null,
   eventType: string,
   stripeEventId: string,
-  eventData: Record<string, unknown>,
-  supabase: Awaited<ReturnType<typeof createServerClient>>
+  eventData: Json,
+  supabase: ReturnType<typeof createAdminClient>
 ): Promise<void> {
   const event = {
     workspace_id: workspaceId,
@@ -389,8 +419,7 @@ async function logBillingEvent(
     event_data: eventData,
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('billing_events').insert(event);
+  await supabase.from('billing_events').insert(event);
 }
 
 // ============================================
@@ -398,6 +427,13 @@ async function logBillingEvent(
 // ============================================
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Rate limit: 200 requests/min per IP to protect against abuse
+  const rateLimitResponse = applyRateLimit(request, 'stripe-webhook', RATE_LIMITS.WEBHOOK);
+  if (rateLimitResponse) {
+    console.warn('[Webhook] Rate limit exceeded');
+    return rateLimitResponse;
+  }
+
   // Check if billing is enabled
   if (!isBillingEnabled()) {
     return NextResponse.json(
@@ -437,8 +473,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Initialize Supabase client
-  const supabase = await createServerClient();
+  // Use admin client for webhook operations (no user session available from Stripe)
+  const supabase = createAdminClient();
 
   // Check idempotency - if already processed, return success
   const alreadyProcessed = await isEventProcessed(event.id, supabase);
@@ -525,7 +561,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Log the event
-    await logBillingEvent(workspaceId, event.type, event.id, event.data.object as unknown as Record<string, unknown>, supabase);
+    await logBillingEvent(workspaceId, event.type, event.id, event.data.object as unknown as Json, supabase);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
@@ -538,8 +574,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       event.id,
       {
         error: error instanceof Error ? error.message : 'Unknown error',
-        eventData: event.data.object,
-      },
+        eventData: event.data.object as unknown as Json,
+      } as unknown as Json,
       supabase
     );
 
