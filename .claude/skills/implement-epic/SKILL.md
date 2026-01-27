@@ -17,6 +17,32 @@ Example: `/implement-epic BETON-42` or `/implement-epic INSP-15`
 
 ---
 
+## Understanding Epics in Plane
+
+Epics are a **distinct entity type** in Plane, separate from regular work items. This has important implications when using MCP tools:
+
+- **Separate API**: Epics use `/workspaces/{slug}/projects/{id}/epics/`, not the work items endpoint
+- **`is_epic` flag**: Work item types have an `is_epic: boolean` field — types with `is_epic: true` are epic types
+- **No dedicated MCP tools**: The Plane MCP server exposes NO epic-specific tools (no `list_epics`, `retrieve_epic`, etc.)
+- **Shared identifier scheme**: Epics share the same identifier format (e.g., `BETON-42`), so `retrieve_work_item_by_identifier` works for fetching them
+- **Parent-child via `parent` field**: Work items belong to an epic by setting their `parent` field to the epic's UUID
+- **Project setting**: Epics must be enabled per-project in Plane settings
+
+### Working with Epics via MCP Tools
+
+Since there are no dedicated epic MCP tools, use these workarounds:
+
+| Action | MCP Tool to Use | Notes |
+|--------|----------------|-------|
+| Fetch an epic | `retrieve_work_item_by_identifier` | Works because epics share the identifier scheme |
+| Update an epic | `update_work_item` | Works for updating description, status, etc. |
+| List epic subtasks | `list_work_items` with `parent_id` | Pass the epic's UUID as `parent_id` |
+| Verify epic type | `list_work_item_types` | Look for types where `is_epic: true` |
+
+If `retrieve_work_item_by_identifier` fails for an epic, verify that epics are enabled in the project settings and use `list_work_item_types` to confirm the epic type exists.
+
+---
+
 ## Workflow
 
 ### Phase 1: Epic Discovery
@@ -36,9 +62,19 @@ Read and note:
 - Acceptance criteria
 - Any attachments or linked resources
 
+> **Note:** Epics are a separate entity type in Plane, but `retrieve_work_item_by_identifier` works for them because they share the identifier scheme. If this call returns unexpected results or fails, see the [Understanding Epics in Plane](#understanding-epics-in-plane) section for fallback approaches.
+
 #### Step 1.2: Get All Subtasks
 
-Search for subtasks linked to this epic:
+List subtasks that belong to this epic using the `parent_id` filter (primary approach):
+
+```
+mcp__plane__list_work_items:
+  - project_id: <uuid from epic>
+  - parent_id: <epic uuid>
+```
+
+If `list_work_items` with `parent_id` doesn't return results, fall back to searching:
 
 ```
 mcp__plane__search_work_items:
@@ -363,6 +399,7 @@ try {
 | Push rejected | Pull latest staging, resolve conflicts |
 | Task unclear | Ask user with AskUserQuestion |
 | RLS violation | Add `.eq('workspace_id', ...)` filter |
+| Epic not found via MCP | Verify epics are enabled in project settings; use `list_work_item_types` to check for types with `is_epic: true` |
 
 ---
 

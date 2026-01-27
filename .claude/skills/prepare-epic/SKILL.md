@@ -19,6 +19,42 @@ Example: `/prepare-epic BETON-42` or `/prepare-epic INSP-15`
 
 ---
 
+## Understanding Epics in Plane
+
+Epics are a **distinct entity type** in Plane, separate from regular work items. This has important implications when using MCP tools:
+
+- **Separate API**: Epics use `/workspaces/{slug}/projects/{id}/epics/`, not the work items endpoint
+- **`is_epic` flag**: Work item types have an `is_epic: boolean` field — types with `is_epic: true` are epic types
+- **No dedicated MCP tools**: The Plane MCP server exposes NO epic-specific tools (no `list_epics`, `retrieve_epic`, etc.)
+- **Shared identifier scheme**: Epics share the same identifier format (e.g., `BETON-42`), so `retrieve_work_item_by_identifier` works for fetching them
+- **Parent-child via `parent` field**: Work items belong to an epic by setting their `parent` field to the epic's UUID. Each work item can belong to at most one epic.
+- **Project setting**: Epics must be enabled per-project in Plane settings
+- **Convertible**: Epics can be converted to/from work items in the Plane UI
+
+### Working with Epics via MCP Tools
+
+Since there are no dedicated epic MCP tools, use these workarounds:
+
+| Action | MCP Tool to Use | Notes |
+|--------|----------------|-------|
+| Fetch an epic | `retrieve_work_item_by_identifier` | Works because epics share the identifier scheme |
+| Update an epic | `update_work_item` | Works for updating description, status, etc. |
+| List epic subtasks | `list_work_items` with `parent_id` | Pass the epic's UUID as `parent_id` |
+| Verify epic type | `list_work_item_types` | Look for types where `is_epic: true` |
+
+### Recommended First Step
+
+Before fetching the epic, call `list_work_item_types` to identify the epic type ID in the project. This confirms epics are enabled and gives you the type ID for reference:
+
+```
+mcp__plane__list_work_item_types:
+  - project_id: <project uuid>
+```
+
+Look for a type with `is_epic: true` in the response. If none exists, epics may not be enabled for this project.
+
+---
+
 ## Workflow
 
 ### Phase 1: Epic Discovery
@@ -37,6 +73,8 @@ Read and note:
 - Epic title and description
 - Acceptance criteria (if any)
 - Any attachments or linked resources
+
+> **Note:** Epics are a separate entity type in Plane, but `retrieve_work_item_by_identifier` works for them because they share the identifier scheme. If this call returns unexpected results, see the [Understanding Epics in Plane](#understanding-epics-in-plane) section for troubleshooting.
 
 #### Step 1.2: Identify Linked Resources
 
@@ -155,6 +193,8 @@ Enhance the epic description with:
 
 #### Step 3.2: Save to Plane
 
+> **Note:** `update_work_item` works for epics despite them being a separate entity type in Plane. The MCP tool handles them transparently.
+
 Use `mcp__plane__update_work_item` to update the epic:
 
 ```
@@ -226,10 +266,12 @@ mcp__plane__create_work_item:
   - name: <task title>
   - description_html: <structured description - see template below>
   - type: <task type id>
-  - parent: <epic uuid>  # This makes it a subtask of the epic
+  - parent: <epic uuid>  # Links this work item as a child of the epic
 ```
 
-**IMPORTANT:** Set `parent` to the epic's UUID to establish the parent-child relationship.
+**IMPORTANT:** Set `parent` to the epic's UUID to establish the parent-child relationship. This is how work items are associated with epics in Plane.
+
+> **Epic parent constraint:** Each work item can belong to at most one epic via the `parent` field. The parent must be a work item type where `is_epic: true`. If the epic type is not found, verify epics are enabled in the project settings and run `list_work_item_types` to confirm.
 
 #### Step 4.3: Create Task Relations
 
@@ -518,8 +560,9 @@ Use this HTML structure for test tasks:
 | `mcp__plane__create_work_item_relation` | Link tasks: `blocking`, `blocked_by`, `relates_to` |
 | `mcp__plane__create_work_item_link` | Attach documentation URLs |
 | `mcp__plane__create_work_item_comment` | Add notes/decisions to items |
-| `mcp__plane__list_work_items` | List items in a project |
+| `mcp__plane__list_work_items` | List items in a project (use `parent_id` to filter by epic) |
 | `mcp__plane__list_work_item_relations` | List relations for an item |
+| `mcp__plane__list_work_item_types` | List work item types; identify epic types via `is_epic: true` flag |
 
 ---
 
@@ -614,6 +657,7 @@ After running `/prepare-epic BETON-42`, the epic might have:
 | Can't create subtask | Ensure `parent` is set to epic's UUID |
 | Relation not created | Verify both work item UUIDs exist |
 | User not responding to questions | Simplify questions, provide context |
+| Epic type not found | Run `list_work_item_types` and look for `is_epic: true`; verify epics are enabled in project settings |
 
 ---
 
