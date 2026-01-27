@@ -8,13 +8,17 @@
  */
 
 import { isCloudDeployment } from '@/lib/utils/deployment';
-import { validateEncryptionKey, isEncryptionKeyConfigured } from '@/lib/crypto/encryption';
 
 /**
  * Validates required environment variables for cloud deployment mode.
  * In self-hosted mode, these checks are optional.
+ *
+ * Accepts encryption helpers as parameters to avoid top-level imports
+ * of Node.js built-ins (crypto/util) that break the Edge runtime.
  */
-function validateCloudModeEnvironment(): void {
+function validateCloudModeEnvironment(
+  isEncryptionKeyConfigured: () => boolean
+): void {
   const errors: string[] = [];
 
   // Validate ENCRYPTION_KEY is properly configured
@@ -72,21 +76,29 @@ function validateCloudModeEnvironment(): void {
  * Validates environment on startup.
  * In self-hosted mode, validates ENCRYPTION_KEY if set.
  * In cloud mode, validates all required billing environment variables.
+ *
+ * Accepts encryption helpers as parameters to avoid top-level imports
+ * of Node.js built-ins (crypto/util) that break the Edge runtime.
  */
-function validateEnvironment(): void {
+function validateEnvironment(
+  encryptionHelpers: {
+    validateEncryptionKey: () => void;
+    isEncryptionKeyConfigured: () => boolean;
+  }
+): void {
   const mode = isCloudDeployment() ? 'cloud' : 'self-hosted';
   console.log(`[Instrumentation] Starting in ${mode} mode`);
 
   if (isCloudDeployment()) {
     // Cloud mode: strict validation of all required env vars
-    validateCloudModeEnvironment();
+    validateCloudModeEnvironment(encryptionHelpers.isEncryptionKeyConfigured);
     console.log('[Instrumentation] Cloud mode environment validated successfully');
   } else {
     // Self-hosted mode: validate ENCRYPTION_KEY if set (optional but must be valid if present)
     const encryptionKey = process.env.ENCRYPTION_KEY;
     if (encryptionKey) {
       try {
-        validateEncryptionKey();
+        encryptionHelpers.validateEncryptionKey();
         console.log('[Instrumentation] ENCRYPTION_KEY validated successfully');
       } catch (error) {
         console.error(
@@ -121,7 +133,14 @@ export async function register(): Promise<void> {
   }
 
   try {
-    validateEnvironment();
+    // Dynamic import: defers resolution of Node.js built-ins (crypto/util)
+    // to runtime, where register() only runs in the Node.js runtime.
+    // A static import here would break the Edge runtime evaluation.
+    const { validateEncryptionKey, isEncryptionKeyConfigured } = await import(
+      '@/lib/crypto/encryption'
+    );
+
+    validateEnvironment({ validateEncryptionKey, isEncryptionKeyConfigured });
   } catch (error) {
     // In development, log the error but don't crash
     if (process.env.NODE_ENV === 'development') {
