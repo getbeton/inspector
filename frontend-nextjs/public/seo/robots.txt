@@ -1,5 +1,5 @@
-# Robots.txt for inspector.getbeton.ai
-# Beton Inspector - RevOps Intelligence Platform
+# Robots.txt for Beton
+# Shared across getbeton.ai, inspector.getbeton.ai, blog.getbeton.ai
 
 User-agent: *
 Allow: /
@@ -7,44 +7,98 @@ Allow: /llms.txt
 Disallow: /api/
 Disallow: /_next/
 Disallow: /auth/
-Disallow: /signals/
-Disallow: /settings/
-Disallow: /identities/
-Disallow: /playbooks/
-Disallow: /backtest/
 
 # AI Crawlers
 User-agent: GPTBot
+Allow: /
 Allow: /llms.txt
 Disallow: /api/
 Disallow: /_next/
 Disallow: /auth/
-Disallow: /signals/
-Disallow: /settings/
-Disallow: /identities/
-Disallow: /playbooks/
-Disallow: /backtest/
+
+User-agent: ChatGPT-User
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
 
 User-agent: Claude-Web
+Allow: /
 Allow: /llms.txt
 Disallow: /api/
 Disallow: /_next/
 Disallow: /auth/
-Disallow: /signals/
-Disallow: /settings/
-Disallow: /identities/
-Disallow: /playbooks/
-Disallow: /backtest/
+
+User-agent: ClaudeBot
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+
+User-agent: Anthropic-AI
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+
+User-agent: PerplexityBot
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
 
 User-agent: Amazonbot
+Allow: /
 Allow: /llms.txt
 Disallow: /api/
 Disallow: /_next/
 Disallow: /auth/
-Disallow: /signals/
-Disallow: /settings/
-Disallow: /identities/
-Disallow: /playbooks/
-Disallow: /backtest/
 
+User-agent: Google-Extended
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+
+# Search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Social media crawlers
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+# Block bad bots
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+# Sitemaps
+Sitemap: https://getbeton.ai/sitemap.xml
+Sitemap: https://blog.getbeton.ai/sitemap.xml
 Sitemap: https://inspector.getbeton.ai/sitemap.xml

@@ -7,7 +7,7 @@ Beton Inspector is built for B2B SaaS revenue operations teams. It ingests data 
 ## Core Capabilities
 
 - **Signal Detection**: 20 product usage signal detectors — 12 expansion signals and 8 churn risk signals
-- **Account Scoring**: Health, expansion, and churn risk scores (0–100) using the Concrete Grading system
+- **Account Scoring**: Health, expansion, and churn risk scores (0–100)
 - **CRM Routing**: Automatic sync of high-intent signals to Attio CRM
 - **Backtesting**: Test signal configurations against historical data before deploying
 
@@ -37,16 +37,6 @@ Beton Inspector is built for B2B SaaS revenue operations teams. It ingests data 
 - Incomplete Onboarding: User stalled during onboarding
 - Future Cancellation: Cancellation scheduled for a future date
 
-## Concrete Grades
-
-Account health is expressed using concrete-inspired grades:
-
-- **M100** (80–100): Premium Grade — Exceptional account health
-- **M75** (60–79): Good Quality — Healthy account with strong engagement
-- **M50** (40–59): Standard — Moderate health, room for improvement
-- **M25** (20–39): Below Standard — Account at risk
-- **M10** (0–19): Poor Quality — Critical condition, immediate attention needed
-
 ## Integrations
 
 - [PostHog](https://posthog.com): Product analytics — events, persons, group analytics
@@ -58,3 +48,7 @@ Account health is expressed using concrete-inspired grades:
 
 - App: https://inspector.getbeton.ai
 - Marketing Site: https://getbeton.ai
+- GitHub: https://github.com/getbeton/inspector
+- LinkedIn: https://linkedin.com/company/getbeton
+- X (Twitter): https://x.com/getbeton
+- X (Founder): https://x.com/stochasticmacaw
