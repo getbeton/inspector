@@ -21,6 +21,19 @@ Example: `/document-epic BETON-75` or `/document-epic INSP-42`
 
 ---
 
+## Understanding Epics in Plane
+
+Epics are a **distinct entity type** in Plane, separate from regular work items:
+
+- **No dedicated MCP tools**: The Plane MCP server has no epic-specific tools — use `work_item` tools instead
+- **Shared identifiers**: `retrieve_work_item_by_identifier` works for epics because they share the identifier scheme (e.g., `BETON-42`)
+- **`is_epic` flag**: Work item types have an `is_epic: boolean` field to distinguish epic types
+- **Project setting**: Epics must be enabled per-project in Plane settings
+
+If `retrieve_work_item_by_identifier` returns unexpected results for an epic, use `list_work_item_types` to verify the epic type exists (look for `is_epic: true`).
+
+---
+
 ## Workflow
 
 ### Phase 1: Gather Implementation Details
@@ -84,6 +97,10 @@ Note the epic's:
 - Subtasks and their descriptions
 - Acceptance criteria
 - Any linked resources
+
+> **Note:** Epics are a separate entity type in Plane, but `retrieve_work_item_by_identifier` works for them because they share the identifier scheme. Additionally:
+> - Check the work item type's `is_epic` flag to confirm this is an epic (use `list_work_item_types` if needed)
+> - Use `list_work_items` with `parent_id` set to the epic's UUID to find all child work items for comprehensive documentation
 
 ---
 
@@ -324,6 +341,7 @@ Response: { "id": "uuid", "created_at": "timestamp" }
 | HTML rendering issues | Validate HTML structure, escape special chars |
 | Missing files | Use `git diff --stat` to find all changes |
 | Epic not found | Verify project identifier and sequence ID |
+| Epic fetch returns unexpected data | Verify epics are enabled in project settings; use `list_work_item_types` to check for types with `is_epic: true` |
 
 ---
 
