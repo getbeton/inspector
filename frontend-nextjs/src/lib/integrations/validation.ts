@@ -178,11 +178,6 @@ export function validatePostHogCredentials(credentials: {
 // ============================================
 
 /**
- * Attio API keys typically start with specific prefixes.
- */
-const ATTIO_API_KEY_PREFIX = 'attio_';
-
-/**
  * Validates an Attio API key format.
  *
  * @param apiKey - The API key to validate
@@ -202,14 +197,6 @@ export function validateAttioApiKey(apiKey: string): ValidationResult {
     return {
       valid: false,
       error: 'API key cannot be empty',
-    };
-  }
-
-  // Check for valid prefix
-  if (!trimmed.startsWith(ATTIO_API_KEY_PREFIX)) {
-    return {
-      valid: false,
-      error: `Attio API key must start with "${ATTIO_API_KEY_PREFIX}"`,
     };
   }
 
