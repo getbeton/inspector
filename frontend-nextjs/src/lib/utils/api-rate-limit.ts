@@ -172,6 +172,16 @@ export const RATE_LIMITS = {
     limit: 5,
     windowSeconds: 60,
   } as RateLimitConfig,
+
+  /**
+   * Webhook endpoint rate limit
+   * 200 requests per minute per IP - generous to allow Stripe retry bursts
+   * while protecting against abuse if signing secret is compromised
+   */
+  WEBHOOK: {
+    limit: 200,
+    windowSeconds: 60,
+  } as RateLimitConfig,
 } as const
 
 /**

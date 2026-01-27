@@ -6,6 +6,7 @@
  *
  * Security:
  * - Verifies webhook signatures using STRIPE_WEBHOOK_SECRET
+ * - Rate limited to 200 req/min per IP to protect against abuse
  * - No authentication middleware (Stripe can't authenticate)
  * - Idempotent event handling via stripe_event_id
  */
@@ -16,6 +17,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { constructWebhookEvent, isBillingConfigured } from '@/lib/integrations/stripe/billing';
 import { isBillingEnabled } from '@/lib/utils/deployment';
 import { initializeBillingCycle } from '@/lib/billing/cycle-service';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit';
 import type { BillingStatus, Json } from '@/lib/supabase/types';
 
 // ============================================
@@ -425,6 +427,13 @@ async function logBillingEvent(
 // ============================================
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Rate limit: 200 requests/min per IP to protect against abuse
+  const rateLimitResponse = applyRateLimit(request, 'stripe-webhook', RATE_LIMITS.WEBHOOK);
+  if (rateLimitResponse) {
+    console.warn('[Webhook] Rate limit exceeded');
+    return rateLimitResponse;
+  }
+
   // Check if billing is enabled
   if (!isBillingEnabled()) {
     return NextResponse.json(
