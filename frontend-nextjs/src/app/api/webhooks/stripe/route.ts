@@ -49,8 +49,8 @@ async function handleSubscriptionCreated(
     return;
   }
 
-  // Update billing status
-  await supabase
+  // Step 1: Update billing status (must succeed before cycle init)
+  const { error: statusError } = await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
@@ -58,7 +58,12 @@ async function handleSubscriptionCreated(
     })
     .eq('workspace_id', workspace.id);
 
-  // Initialize billing cycle
+  if (statusError) {
+    throw new Error(`Failed to update billing status for workspace ${workspace.id}: ${statusError.message}`);
+  }
+
+  // Step 2: Initialize billing cycle (if this fails, Stripe will retry the event
+  // and step 1 is idempotent — re-applying the same status/subscription_id is safe)
   await initializeBillingCycle(workspace.id, new Date());
 
   console.log(
@@ -82,12 +87,16 @@ async function handleSubscriptionUpdated(
     return;
   }
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: mapSubscriptionStatus(subscription.status),
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to update subscription status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(
     `[Webhook] Subscription updated for workspace ${workspace.id}: status=${subscription.status}`
@@ -110,13 +119,17 @@ async function handleSubscriptionDeleted(
     return;
   }
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus,
       stripe_subscription_id: null,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to cancel subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription deleted for workspace ${workspace.id}`);
 }
@@ -134,12 +147,16 @@ async function handleSubscriptionPaused(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'cancelled' as BillingStatus, // Treat paused as cancelled for access control
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to pause subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription paused for workspace ${workspace.id}`);
 }
@@ -157,12 +174,16 @@ async function handleSubscriptionResumed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to resume subscription for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Subscription resumed for workspace ${workspace.id}`);
 }
@@ -182,13 +203,17 @@ async function handleInvoicePaid(
   if (!workspace) return;
 
   // Update status to active if it was past_due
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'active' as BillingStatus,
     })
     .eq('workspace_id', workspace.id)
     .eq('status', 'past_due');
+
+  if (error) {
+    throw new Error(`Failed to update invoice paid status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Invoice paid for workspace ${workspace.id}: ${invoice.id}`);
 }
@@ -207,12 +232,16 @@ async function handleInvoicePaymentFailed(
   const workspace = await findWorkspaceByCustomerId(customerId, supabase);
   if (!workspace) return;
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       status: 'past_due' as BillingStatus,
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to update payment failed status for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Invoice payment failed for workspace ${workspace.id}: ${invoice.id}`);
 }
@@ -243,13 +272,17 @@ async function handlePaymentMethodAttached(
       }
     : { stripe_payment_method_id: paymentMethod.id };
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       ...cardInfo,
       status: 'active' as BillingStatus, // Linking card activates account
     })
     .eq('workspace_id', workspace.id);
+
+  if (error) {
+    throw new Error(`Failed to attach payment method for workspace ${workspace.id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Payment method attached for workspace ${workspace.id}`);
 }
@@ -271,7 +304,7 @@ async function handlePaymentMethodDetached(
   const typedBilling = billing as { workspace_id: string } | null;
   if (!typedBilling) return;
 
-  await supabase
+  const { error } = await supabase
     .from('workspace_billing')
     .update({
       stripe_payment_method_id: null,
@@ -282,6 +315,10 @@ async function handlePaymentMethodDetached(
       status: 'card_required' as BillingStatus,
     })
     .eq('workspace_id', typedBilling.workspace_id);
+
+  if (error) {
+    throw new Error(`Failed to detach payment method for workspace ${typedBilling.workspace_id}: ${error.message}`);
+  }
 
   console.log(`[Webhook] Payment method detached for workspace ${typedBilling.workspace_id}`);
 }
