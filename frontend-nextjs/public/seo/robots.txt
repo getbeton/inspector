@@ -1,0 +1,50 @@
+# Robots.txt for inspector.getbeton.ai
+# Beton Inspector - RevOps Intelligence Platform
+
+User-agent: *
+Allow: /
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+Disallow: /signals/
+Disallow: /settings/
+Disallow: /identities/
+Disallow: /playbooks/
+Disallow: /backtest/
+
+# AI Crawlers
+User-agent: GPTBot
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+Disallow: /signals/
+Disallow: /settings/
+Disallow: /identities/
+Disallow: /playbooks/
+Disallow: /backtest/
+
+User-agent: Claude-Web
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+Disallow: /signals/
+Disallow: /settings/
+Disallow: /identities/
+Disallow: /playbooks/
+Disallow: /backtest/
+
+User-agent: Amazonbot
+Allow: /llms.txt
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+Disallow: /signals/
+Disallow: /settings/
+Disallow: /identities/
+Disallow: /playbooks/
+Disallow: /backtest/
+
+Sitemap: https://inspector.getbeton.ai/sitemap.xml
