@@ -29,6 +29,7 @@ import {
   getWorkspacesNeedingCycleTransition,
 } from '@/lib/billing/cycle-service';
 import { recordMeterEvent } from '@/lib/integrations/stripe/billing';
+import { createAuditLogger } from '@/lib/utils/audit';
 
 // ============================================
 // Types
@@ -51,6 +52,8 @@ interface CronResult {
 // Vercel Pro cron limit is 5 minutes; use 4.5 min deadline for safety
 const CRON_DEADLINE_MS = 270_000;
 const MTU_BATCH_SIZE = 5;
+
+const audit = createAuditLogger('mtu-cron');
 
 // ============================================
 // Cron Authentication
@@ -460,6 +463,23 @@ export async function GET(
       errors.push(...stripeResult.errors);
       totalRetries += stripeResult.totalRetries;
     }
+
+    // Audit log the cron run summary
+    await audit({
+      operation: 'daily_mtu_tracking',
+      table: 'workspace_billing',
+      action: 'update',
+      recordCount: workspacesProcessed,
+      success: errors.length === 0,
+      error: errors.length > 0 ? `${errors.length} errors` : undefined,
+      metadata: {
+        workspacesProcessed,
+        cyclesTransitioned,
+        mtuRecordsReported,
+        totalRetries,
+        timedOut: timedOut || false,
+      },
+    });
 
     console.log(
       `[MTU Cron] Completed: ${workspacesProcessed} workspaces processed, ` +
