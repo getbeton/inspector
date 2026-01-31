@@ -31,6 +31,8 @@ import type {
   BillingEventInsert,
 } from '@/lib/supabase/types';
 import type Stripe from 'stripe';
+import { AgentService } from '@/lib/agent/agent-service';
+
 
 const log = createModuleLogger('[Complete Setup]');
 
@@ -492,22 +494,28 @@ export async function POST(
 
     log.info(
       `Successfully completed setup for workspace ${workspaceId.substring(0, 8)}..., ` +
-        `subscription: ${subscriptionId}` +
-        (immediateChargeResult?.success
-          ? `, immediate charge: $${((overageAmount || 0) / 100).toFixed(2)}`
-          : '')
+      `subscription: ${subscriptionId}` +
+      (immediateChargeResult?.success
+        ? `, immediate charge: $${((overageAmount || 0) / 100).toFixed(2)}`
+        : '')
     );
 
+    // Trigger Agent Analysis (Fire and forget, but handled inside service)
+    await AgentService.triggerAnalysis(workspaceId).catch(err => {
+      log.error(`Failed to trigger agent analysis: ${err}`);
+    });
+
     return NextResponse.json({
+
       success: true,
       subscriptionId: subscriptionId || undefined,
       billingStatus: subscriptionId ? 'active' : 'card_required',
       immediateCharge: immediateChargeResult
         ? {
-            charged: immediateChargeResult.success,
-            invoiceId: immediateChargeResult.invoiceId,
-            error: immediateChargeResult.error,
-          }
+          charged: immediateChargeResult.success,
+          invoiceId: immediateChargeResult.invoiceId,
+          error: immediateChargeResult.error,
+        }
         : undefined,
     });
   } catch (error) {

@@ -83,7 +83,7 @@ export async function GET() {
         billingStatus = billing.status
         // Billing is configured if there's an active subscription or at least a payment method linked
         billingConfigured = billing.status === 'active' ||
-                          (billing.stripe_customer_id !== null && billing.status !== 'card_required')
+          (billing.stripe_customer_id !== null && billing.status !== 'card_required')
       }
     }
 
@@ -107,6 +107,7 @@ export async function GET() {
         configured: billingConfigured,
         status: billingStatus,
       },
+      workspaceId: membership.workspaceId,
     })
   } catch (error) {
     console.error('Error in GET /api/workspace/setup-status:', error)
