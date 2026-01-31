@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { validateAgentRequest } from '@/lib/agent/auth';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/types';
 
 
 const log = createModuleLogger('[API][Agent][WebsiteExp]');
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
                 product_description,
                 pricing_model,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'workspace_id' });
+            } as never, { onConflict: 'workspace_id' });
 
         if (error) {
             log.error(`Failed to store website results: ${error.message}`);
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
             log.error('Missing Supabase Service Key for Agent request');
             return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
         }
-        supabase = createSupabaseClient(url, serviceKey);
+        supabase = createSupabaseClient<Database>(url, serviceKey);
     } else {
         supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -84,7 +85,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    // Note: `as any` needed because supabase is a union type (SSR client | raw client)
+    // and their `.from()` signatures are incompatible with each other
+    const { data, error } = await (supabase as any)
         .from('website_exploration_results')
         .select('*')
         .eq('workspace_id', workspaceId)

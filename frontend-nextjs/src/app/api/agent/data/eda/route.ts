@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { validateAgentRequest } from '@/lib/agent/auth';
+import type { Database } from '@/lib/supabase/types';
 
 const log = createModuleLogger('[API][Agent][EDA]');
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
                 table_stats,
                 summary_text,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'workspace_id, table_id' });
+            } as never, { onConflict: 'workspace_id, table_id' });
 
         if (error) {
             log.error(`Failed to store EDA results: ${error.message}`);
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
             log.error('Missing Supabase Service Key for Agent request');
             return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
         }
-        supabase = createSupabaseClient(url, serviceKey);
+        supabase = createSupabaseClient<Database>(url, serviceKey);
     } else {
         supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -75,7 +76,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
     }
 
-    let query = supabase.from('eda_results').select('*').eq('workspace_id', workspaceId);
+    // Note: `as any` needed because supabase is a union type (SSR client | raw client)
+    // and their `.from()` signatures are incompatible with each other
+    let query = (supabase as any).from('eda_results').select('*').eq('workspace_id', workspaceId);
     if (tableId) {
         query = query.eq('table_id', tableId);
     }

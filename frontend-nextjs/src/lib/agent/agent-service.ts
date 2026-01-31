@@ -18,11 +18,13 @@ export class AgentService {
         const supabase = await createClient();
 
         // 1. Get Workspace Details (Website URL)
-        const { data: workspace, error: wsError } = await supabase
+        const { data: workspaceRaw, error: wsError } = await supabase
             .from('workspaces')
-            .select('website_url, slug') // slug might be user_id?
+            .select('website_url, slug')
             .eq('id', workspaceId)
             .single();
+
+        const workspace = workspaceRaw as { website_url: string | null; slug: string } | null;
 
         if (wsError || !workspace) {
             log.error(`Failed to fetch workspace: ${wsError?.message}`);
