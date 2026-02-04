@@ -14,3 +14,4 @@ export { ProgressIndicator, type ProgressIndicatorProps } from './ProgressIndica
 export { PostHogStep, type PostHogStepProps } from './steps/PostHogStep';
 export { BillingStep, type BillingStepProps } from './steps/BillingStep';
 export { AttioStep, type AttioStepProps } from './steps/AttioStep';
+export { SetupBanner } from './SetupBanner';

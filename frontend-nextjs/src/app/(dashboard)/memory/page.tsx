@@ -1,40 +1,23 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExplorationStatsCards } from '@/components/exploration/exploration-stats-cards'
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
 import { ExplorationRunsTable } from '@/components/exploration/exploration-runs-table'
 import { ExplorationSheet } from '@/components/exploration/exploration-sheet'
+import { SetupBanner } from '@/components/setup'
+import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useExplorationSessions, useSessionEdaResults } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
-export default function ExplorationsPage() {
+export default function MemoryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [workspaceId, setWorkspaceId] = useState<string | undefined>()
-  const [loading, setLoading] = useState(true)
-  const isDemo = !workspaceId
-
-  // Fetch workspace context — falls through to demo mode if not logged in
-  useEffect(() => {
-    async function fetchWorkspace() {
-      try {
-        const res = await fetch('/api/workspace/setup-status')
-        if (res.ok) {
-          const data = await res.json()
-          if (data.workspaceId) setWorkspaceId(data.workspaceId)
-        }
-      } catch (e) {
-        console.error('Failed to fetch workspace:', e)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchWorkspace()
-  }, [])
+  const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
+  const workspaceId = setupStatus?.workspaceId
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
 
@@ -85,7 +68,7 @@ export default function ExplorationsPage() {
       const params = new URLSearchParams(searchParams.toString())
       params.set('sheet', session.session_id)
       params.set('tab', 'overview')
-      router.push(`/explorations?${params.toString()}`)
+      router.push(`/memory?${params.toString()}`)
     },
     [router, searchParams]
   )
@@ -95,7 +78,7 @@ export default function ExplorationsPage() {
     params.delete('sheet')
     params.delete('tab')
     params.delete('tableId')
-    router.push(`/explorations?${params.toString()}`)
+    router.push(`/memory?${params.toString()}`)
   }, [router, searchParams])
 
   const handleTabChange = useCallback(
@@ -103,12 +86,12 @@ export default function ExplorationsPage() {
       const params = new URLSearchParams(searchParams.toString())
       params.set('tab', tab)
       params.delete('tableId')
-      router.push(`/explorations?${params.toString()}`)
+      router.push(`/memory?${params.toString()}`)
     },
     [router, searchParams]
   )
 
-  if (loading) {
+  if (setupLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
@@ -124,12 +107,15 @@ export default function ExplorationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Explorations</h1>
+          <h1 className="text-2xl font-bold">Memory</h1>
           <p className="text-muted-foreground">
-            Agent-powered data exploration runs
+            What Beton knows about your business
           </p>
         </div>
       </div>
+
+      {/* Setup Banner */}
+      {setupStatus && <SetupBanner setupStatus={setupStatus} />}
 
       {/* Stats Cards */}
       <ExplorationStatsCards sessions={sessions} edaResults={latestEdaResults} />

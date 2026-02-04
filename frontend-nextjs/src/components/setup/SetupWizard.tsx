@@ -31,6 +31,13 @@ export interface SetupWizardProps {
    */
   billingEnabled?: boolean;
   /**
+   * Current setup status — used to skip already-completed steps
+   */
+  setupStatus?: {
+    integrations: { posthog: boolean; attio: boolean };
+    billing: { configured: boolean };
+  };
+  /**
    * Optional CSS class for the container
    */
   className?: string;
@@ -52,12 +59,22 @@ export interface SetupWizardProps {
  */
 export function SetupWizard({
   billingEnabled = false,
+  setupStatus,
   className,
 }: SetupWizardProps) {
   const router = useRouter();
 
+  // Compute the first incomplete step so the wizard resumes where the user left off
+  const getInitialStep = (): WizardStep => {
+    if (!setupStatus) return "posthog";
+    if (!setupStatus.integrations.posthog) return "posthog";
+    if (!setupStatus.integrations.attio) return "attio";
+    if (billingEnabled && !setupStatus.billing.configured) return "billing";
+    return "complete";
+  };
+
   // Current step in the wizard
-  const [currentStep, setCurrentStep] = useState<WizardStep>("posthog");
+  const [currentStep, setCurrentStep] = useState<WizardStep>(getInitialStep);
 
   // Data passed between steps
   const [mtuCount, setMtuCount] = useState<number>(0);
@@ -65,11 +82,11 @@ export function SetupWizard({
   /**
    * Compute the list of steps based on billing mode
    * Self-hosted: PostHog → Attio
-   * Cloud: PostHog → Billing → Attio
+   * Cloud: PostHog → Attio → Billing
    */
   const steps = useMemo(() => {
     if (billingEnabled) {
-      return ["posthog", "billing", "attio"] as WizardStep[];
+      return ["posthog", "attio", "billing"] as WizardStep[];
     }
     return ["posthog", "attio"] as WizardStep[];
   }, [billingEnabled]);
@@ -115,16 +132,25 @@ export function SetupWizard({
    * Handle Billing step completion
    */
   const handleBillingComplete = useCallback(() => {
-    setCurrentStep(getNextStep("billing"));
-  }, [getNextStep]);
+    const next = getNextStep("billing");
+    if (next === "complete") {
+      router.push("/signals");
+    } else {
+      setCurrentStep(next);
+    }
+  }, [getNextStep, router]);
 
   /**
    * Handle Attio step completion
    */
   const handleAttioSuccess = useCallback(() => {
-    // Navigate to signals page on wizard completion
-    router.push("/signals");
-  }, [router]);
+    const next = getNextStep("attio");
+    if (next === "complete") {
+      router.push("/signals");
+    } else {
+      setCurrentStep(next);
+    }
+  }, [getNextStep, router]);
 
   /**
    * Render the current step content

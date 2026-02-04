@@ -100,7 +100,13 @@ export default function DashboardHomePage() {
   // If we're here and not redirecting, setup is not complete
   return (
     <div className="max-w-2xl mx-auto py-8">
-      <SetupWizard billingEnabled={setupStatus?.billing?.required ?? false} />
+      <SetupWizard
+        billingEnabled={setupStatus?.billing?.required ?? false}
+        setupStatus={setupStatus ? {
+          integrations: setupStatus.integrations,
+          billing: { configured: setupStatus.billing.configured },
+        } : undefined}
+      />
     </div>
   )
 }

@@ -38,6 +38,7 @@ test.db
 
 # Local-only Claude config
 .claude/settings.local.json
+.claude/plans/
 .mcp.json
 
 # Vercel
