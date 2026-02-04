@@ -83,9 +83,14 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
     }
 
+    const sessionId = searchParams.get('sessionId');
+
     // Note: `as any` needed because supabase is a union type (SSR client | raw client)
     // and their `.from()` signatures are incompatible with each other
     let query = (supabase as any).from('eda_results').select('*').eq('workspace_id', workspaceId);
+    if (sessionId) {
+        query = query.eq('session_id', sessionId);
+    }
     if (tableId) {
         query = query.eq('table_id', tableId);
     }

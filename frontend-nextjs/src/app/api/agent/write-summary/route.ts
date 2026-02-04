@@ -42,6 +42,14 @@ export async function POST(req: NextRequest) {
         const supabase = createAdminClient();
         const now = new Date().toISOString();
 
+        // Resolve internal session UUID for FK references
+        const { data: sessionRow } = await supabase
+            .from('workspace_agent_sessions')
+            .select('id')
+            .eq('session_id', session_id)
+            .single();
+        const sessionUuid = sessionRow?.id ?? null;
+
         // Upsert EDA results (if provided)
         if (eda_results && eda_results.length > 0) {
             for (const eda of eda_results) {
@@ -54,13 +62,14 @@ export async function POST(req: NextRequest) {
                     .from('eda_results')
                     .upsert({
                         workspace_id: workspaceId,
+                        session_id: sessionUuid,
                         table_id: eda.table_id,
                         join_suggestions: eda.join_suggestions,
                         metrics_discovery: eda.metrics_discovery,
                         table_stats: eda.table_stats,
                         summary_text: eda.summary_text,
                         updated_at: now,
-                    }, { onConflict: 'workspace_id, table_id' });
+                    } as any, { onConflict: 'workspace_id, table_id' });
 
                 if (error) {
                     log.error(`EDA upsert failed for table=${eda.table_id}: ${error.message}`);
@@ -77,6 +86,7 @@ export async function POST(req: NextRequest) {
             // pricing_model is JSONB in Postgres but typed as string in generated types
             const wePayload: Record<string, unknown> = {
                 workspace_id: workspaceId,
+                session_id: sessionUuid,
                 is_b2b: website_exploration.is_b2b,
                 plg_type: website_exploration.plg_type,
                 website_url: website_exploration.website_url,

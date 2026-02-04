@@ -64,6 +64,69 @@ export async function POST(req: NextRequest) {
     }
 }
 
+export async function PUT(req: NextRequest) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const body = await req.json();
+        const { workspaceId, sessionId, ...fields } = body;
+
+        if (!workspaceId) {
+            return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
+        }
+
+        // Verify workspace membership
+        const { data: membership } = await supabase
+            .from('workspace_members')
+            .select('workspace_id')
+            .eq('user_id', user.id)
+            .eq('workspace_id', workspaceId)
+            .single();
+
+        if (!membership) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const admin = createAdminClient();
+
+        // Build update payload with only allowed fields
+        const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        const allowed = ['is_b2b', 'plg_type', 'website_url', 'product_description', 'icp_description', 'product_assumptions', 'pricing_model'];
+        for (const key of allowed) {
+            if (key in fields) {
+                updatePayload[key] = fields[key];
+            }
+        }
+
+        let query = admin
+            .from('website_exploration_results')
+            .update(updatePayload)
+            .eq('workspace_id', workspaceId);
+
+        if (sessionId) {
+            query = query.eq('session_id', sessionId) as typeof query;
+        }
+
+        const { error } = await (query as any);
+
+        if (error) {
+            log.error(`Website exploration update failed: ${error.message}`);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (e) {
+        log.error(`Website exploration PUT failed: ${e}`);
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return NextResponse.json({ error: msg }, { status: 500 });
+    }
+}
+
 export async function GET(req: NextRequest) {
     const isAgent = validateAgentRequest(req);
     let supabase;
@@ -91,13 +154,20 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
     }
 
+    const sessionId = searchParams.get('sessionId');
+
     // Note: `as any` needed because supabase is a union type (SSR client | raw client)
     // and their `.from()` signatures are incompatible with each other
-    const { data, error } = await (supabase as any)
+    let query = (supabase as any)
         .from('website_exploration_results')
         .select('*')
-        .eq('workspace_id', workspaceId)
-        .single();
+        .eq('workspace_id', workspaceId);
+
+    if (sessionId) {
+        query = query.eq('session_id', sessionId);
+    }
+
+    const { data, error } = await query.single();
 
     // It's possible to have no results yet
     if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
