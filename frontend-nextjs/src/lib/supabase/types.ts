@@ -897,6 +897,53 @@ export interface Database {
           }
         ]
       }
+      workspace_agent_sessions: {
+        Row: {
+          id: string
+          session_id: string
+          workspace_id: string
+          status: string
+          agent_app_name: string
+          started_at: string | null
+          completed_at: string | null
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          workspace_id: string
+          status?: string
+          agent_app_name?: string
+          started_at?: string | null
+          completed_at?: string | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          workspace_id?: string
+          status?: string
+          agent_app_name?: string
+          started_at?: string | null
+          completed_at?: string | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_agent_sessions_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -993,6 +1040,7 @@ export interface Database {
       billing_status: BillingStatus
       threshold_notification_type: ThresholdNotificationType
       billing_event_type: BillingEventType
+      agent_session_status: 'created' | 'running' | 'completed' | 'failed' | 'closed'
     }
   }
 }

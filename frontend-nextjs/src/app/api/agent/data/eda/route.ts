@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { validateAgentRequest } from '@/lib/agent/auth';
+import { rateLimitResponse } from '@/lib/agent/rate-limit';
 import type { Database } from '@/lib/supabase/types';
 
 const log = createModuleLogger('[API][Agent][EDA]');
@@ -19,7 +21,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const supabase = await createClient();
+        // Rate limit per workspace
+        const limited = rateLimitResponse(workspace_id);
+        if (limited) return limited;
+
+        const supabase = createAdminClient();
 
         // Upsert EDA Results
         const { error } = await supabase
@@ -32,13 +38,14 @@ export async function POST(req: NextRequest) {
                 table_stats,
                 summary_text,
                 updated_at: new Date().toISOString()
-            } as never, { onConflict: 'workspace_id, table_id' });
+            }, { onConflict: 'workspace_id, table_id' });
 
         if (error) {
             log.error(`Failed to store EDA results: ${error.message}`);
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
+        log.warn(`[AUDIT] EDA upsert workspace=${workspace_id} table=${table_id}`);
         return NextResponse.json({ success: true });
     } catch (e) {
         log.error(`Error processing EDA results: ${e}`);

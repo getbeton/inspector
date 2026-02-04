@@ -1,16 +1,25 @@
 import { createClient } from '@/lib/supabase/server';
 import { getIntegrationCredentials } from '@/lib/integrations/credentials';
 import { createModuleLogger } from '@/lib/utils/logger';
+import { createSession, updateSessionStatus } from '@/lib/agent/session';
+import { randomUUID } from 'crypto';
 
 const log = createModuleLogger('[AgentService]');
 
-const AGENT_API_URL = process.env.AGENT_API_URL || 'https://inspector-ml-backend-production.up.railway.app';
+const DEFAULT_AGENT_API_URL = 'https://inspector-ml-backend-production.up.railway.app';
 const APP_NAME = 'upsell_agent';
+
+function getAgentApiUrl(): string {
+    return process.env.AGENT_API_URL || DEFAULT_AGENT_API_URL;
+}
 
 export class AgentService {
     /**
      * Triggers the Agent to start analysis for a workspace.
      * Assumes PostHog integration and Website URL are present.
+     *
+     * Credentials are passed in a separate `context` object in the payload
+     * rather than embedded in the prompt text to avoid exposure in agent logs.
      */
     static async triggerAnalysis(workspaceId: string) {
         log.info(`Triggering agent analysis for workspace: ${workspaceId}`);
@@ -33,7 +42,6 @@ export class AgentService {
 
         if (!workspace.website_url) {
             log.warn(`No website_url for workspace ${workspaceId}. Agent might fail.`);
-            // potentially update website_url from other sources?
         }
 
         // 2. Get PostHog Credentials
@@ -44,63 +52,58 @@ export class AgentService {
         }
 
         // 3. Construct Payload
-        // Prompt: USER_ID="u_123", SESSION_ID="s_123"
-        // We'll use workspaceId as USER_ID (or slug?) and generate a generic session ID.
-        // The prompt says "Agent should not mix data... ensuring each customer has their own agentic session".
-        // "Every POST request... should include workspace_id in payload... MCP tools... will use this workspace_id".
+        // Use workspace ID as unique user identifier for Agent session isolation
+        const userId = workspaceId;
+        // Use cryptographic random UUID instead of timestamp for unpredictable session IDs
+        const sessionId = `s_${randomUUID()}`;
 
-        // The prompt script uses:
-        // USER_ID, SESSION_ID in URL params: /apps/$APP_NAME/users/$USER_ID/sessions/$SESSION_ID
-        // And JSON payload with Message.
-
-        const userId = workspaceId; // Use workspace ID as the unique user identifier for Agent
-        const sessionId = `s_${Date.now()}`; // Unique session ID
-
-        const promptText = `Analyze website: '${workspace.website_url}' and use PostHog token '${posthog.apiKey}' with host '${posthog.host || 'https://us.posthog.com'}' and project '${posthog.projectId}'. Return JSON only.`;
-
-        // 4. Create User/Session on Agent (from script curl 1)
-        // curl -X POST "$API_URL/apps/$APP_NAME/users/$USER_ID/sessions/$SESSION_ID" -d '{"created_by": "mvp_demo"}'
+        // 3b. Persist session to DB for lifecycle tracking
         try {
-            const sessionUrl = `${AGENT_API_URL}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`;
+            await createSession(sessionId, workspaceId);
+        } catch (e) {
+            log.error(`Failed to persist session ${sessionId}: ${e}`);
+            // Non-blocking: continue even if DB write fails
+        }
+
+        // Keep the prompt text clean — no credentials embedded
+        const promptText = `Analyze website: '${workspace.website_url}'. Use the PostHog credentials provided in the context object. Return JSON only.`;
+
+        // 4. Create User/Session on Agent
+        try {
+            const sessionUrl = `${getAgentApiUrl()}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`;
             await fetch(sessionUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ created_by: 'inspector_mvp' })
             });
 
-            // 5. Run Agent
-            // curl -X POST "$API_URL/run" ...
-            const runUrl = `${AGENT_API_URL}/run`;
+            // 5. Run Agent — credentials passed as structured context, not in prompt
+            const runUrl = `${getAgentApiUrl()}/run`;
             const runPayload = {
                 appName: APP_NAME,
                 userId: userId,
                 sessionId: sessionId,
+                context: {
+                    workspace_id: workspaceId,
+                    session_id: sessionId,
+                    posthog: {
+                        token: posthog.apiKey,
+                        host: posthog.host || 'https://us.posthog.com',
+                        project_id: posthog.projectId,
+                    },
+                    inspector_callback_url: process.env.NEXT_PUBLIC_VERCEL_URL
+                        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+                        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                },
                 newMessage: {
                     role: 'user',
                     parts: [{ text: promptText }]
                 }
             };
 
-            // Note: We are NOT waiting for the full response here if it takes too long.
-            // But the script implies it returns the result.
-            // If we want Fire-and-Forget, we verify if the Agent API supports async or if we just default to not awaiting?
-            // But Next.js API generic timeout is short. 
-            // For MVP, if it timeouts, we might not get result.
-            // BUT, the prompt requirement: "Make stub in Inspector for API call FROM agent".
-            // This implies the agent can call us back. 
-            // So we trigger, and if it times out, the agent proceeds? 
-            // Actually, 'fetch' without await might be terminated by Vercel when response closes.
-            // We'll await for a reasonable time or use `waitUntil` (Next.js 15+ has after/waitUntil).
-            // This codebase is Next.js 16. `import { after } from 'next/server'`?
-            // Or just await and hope it's fast (unlikely for "dwh_analyst" + "upsell_agent" chain).
-
-            // Strategy: We await. If it takes long, we rely on the Agent *calling us back* to store data.
-            // We do NOT rely on the response of this POST /run for the data, because of the callback architecture requested ("Inspector stub for API call from Agent").
-
-            // We'll log the start.
             log.info(`Agent run triggered for ${userId}/${sessionId}`);
 
-            // Fire properly
+            // Fire-and-forget: Agent calls back to /api/agent/data/* to store results
             fetch(runUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -109,20 +112,19 @@ export class AgentService {
                 if (!res.ok) {
                     const text = await res.text();
                     log.error(`Agent run failed: ${res.status} ${text}`);
+                    updateSessionStatus(sessionId, 'failed', `Agent run failed: ${res.status}`).catch(() => {});
                 } else {
-                    const data = await res.json();
-                    // If we get data back immediately, we could store it here too.
-                    // But we prefer the callback route for robustness.
-                    log.info(`Agent run initiated successfully: ${JSON.stringify(data).substring(0, 100)}...`);
+                    log.info(`Agent run initiated successfully for workspace ${workspaceId}`);
+                    updateSessionStatus(sessionId, 'running').catch(() => {});
                 }
             }).catch(err => {
                 log.error(`Agent trigger error: ${err}`);
+                updateSessionStatus(sessionId, 'failed', String(err)).catch(() => {});
             });
 
         } catch (e) {
             log.error(`Failed to communicate with Agent: ${e}`);
-            // Don't block the user flow? 
-            // "Inspector triggers Agent ... " -> shouldn't fail the card link if agent is down.
+            // Don't block the user flow — billing setup should succeed even if agent is down
         }
     }
 }

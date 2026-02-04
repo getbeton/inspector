@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { validateAgentRequest } from '@/lib/agent/auth';
-import { getIntegrationCredentials } from '@/lib/integrations/credentials';
+import { rateLimitResponse } from '@/lib/agent/rate-limit';
+import { resolveSession } from '@/lib/agent/session';
+import { getIntegrationCredentialsAdmin } from '@/lib/integrations/credentials';
 import { createPostHogClient } from '@/lib/integrations/posthog/client';
 
 const log = createModuleLogger('[API][Agent][SQLProxy]');
@@ -13,14 +15,35 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { workspace_id, query } = body;
+        const { query, session_id } = body;
+        let { workspace_id } = body;
 
-        if (!workspace_id || !query) {
-            return NextResponse.json({ error: 'Missing workspace_id or query' }, { status: 400 });
+        if (!query) {
+            return NextResponse.json({ error: 'Missing query' }, { status: 400 });
         }
 
-        // Get PostHog Creds
-        const credentials = await getIntegrationCredentials(workspace_id, 'posthog');
+        // Support session_id-based workspace resolution (new)
+        // Falls back to direct workspace_id (backward compatible)
+        if (!workspace_id && session_id) {
+            try {
+                const session = await resolveSession(session_id);
+                workspace_id = session.workspaceId;
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : 'Invalid session';
+                return NextResponse.json({ error: msg }, { status: 404 });
+            }
+        }
+
+        if (!workspace_id) {
+            return NextResponse.json({ error: 'Missing workspace_id or session_id' }, { status: 400 });
+        }
+
+        // Rate limit per workspace (tighter for SQL proxy)
+        const limited = rateLimitResponse(workspace_id, { maxRequests: 20 });
+        if (limited) return limited;
+
+        // Use admin credentials (no cookies in agent requests)
+        const credentials = await getIntegrationCredentialsAdmin(workspace_id, 'posthog');
         if (!credentials || !credentials.apiKey || !credentials.projectId) {
             return NextResponse.json({ error: 'PostHog integration not found' }, { status: 404 });
         }
@@ -31,7 +54,7 @@ export async function POST(req: NextRequest) {
             credentials.host || undefined
         );
 
-        log.info(`Executing Proxy Query for ${workspace_id}: ${query.substring(0, 50)}...`);
+        log.warn(`[AUDIT] SQL proxy query workspace=${workspace_id} query=${query.substring(0, 80)}...`);
 
         // Execute Query
         const result = await client.query(query);
