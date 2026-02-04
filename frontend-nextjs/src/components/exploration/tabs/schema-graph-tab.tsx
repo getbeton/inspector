@@ -17,7 +17,7 @@ import { useSessionEdaResults } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession, JoinPair } from '@/lib/api/explorations'
 
 interface SchemaGraphTabProps {
-  workspaceId: string
+  workspaceId: string | undefined
   session: ExplorationSession
 }
 

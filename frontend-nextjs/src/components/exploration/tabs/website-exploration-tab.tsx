@@ -8,7 +8,7 @@ import { useSessionWebsiteResult, useUpdateWebsiteExploration } from '@/lib/hook
 import type { WebsiteExplorationResult } from '@/lib/agent/types'
 
 interface WebsiteExplorationTabProps {
-  workspaceId: string
+  workspaceId: string | undefined
   sessionId: string
 }
 
@@ -43,7 +43,7 @@ function toEditableFields(data: WebsiteExplorationResult | null): EditableFields
 
 export function WebsiteExplorationTab({ workspaceId, sessionId }: WebsiteExplorationTabProps) {
   const { data: websiteData, isLoading } = useSessionWebsiteResult(workspaceId, sessionId)
-  const updateMutation = useUpdateWebsiteExploration(workspaceId, sessionId)
+  const updateMutation = useUpdateWebsiteExploration(workspaceId ?? '', sessionId)
 
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<EditableFields>(() => toEditableFields(null))

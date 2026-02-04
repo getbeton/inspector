@@ -8,7 +8,7 @@ import { useSessionEdaResults, useSaveConfirmedJoins } from '@/lib/hooks/use-exp
 import type { ExplorationSession, JoinPair } from '@/lib/api/explorations'
 
 interface JoinCandidatesTabProps {
-  workspaceId: string
+  workspaceId: string | undefined
   session: ExplorationSession
 }
 

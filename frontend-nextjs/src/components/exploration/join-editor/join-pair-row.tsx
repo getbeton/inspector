@@ -7,7 +7,7 @@ interface JoinPairRowProps {
   pair: JoinPair
   index: number
   tableIds: string[]
-  workspaceId: string
+  workspaceId: string | undefined
   onChange: (index: number, updated: JoinPair) => void
   onRemove: (index: number) => void
   disabled?: boolean

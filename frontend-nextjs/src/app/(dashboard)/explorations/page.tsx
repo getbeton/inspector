@@ -7,7 +7,7 @@ import { ExplorationStatsCards } from '@/components/exploration/exploration-stat
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
 import { ExplorationRunsTable } from '@/components/exploration/exploration-runs-table'
 import { ExplorationSheet } from '@/components/exploration/exploration-sheet'
-import { useExplorationSessions } from '@/lib/hooks/use-explorations'
+import { useExplorationSessions, useSessionEdaResults } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
 export default function ExplorationsPage() {
@@ -16,8 +16,9 @@ export default function ExplorationsPage() {
 
   const [workspaceId, setWorkspaceId] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
+  const isDemo = !workspaceId
 
-  // Fetch workspace context
+  // Fetch workspace context — falls through to demo mode if not logged in
   useEffect(() => {
     async function fetchWorkspace() {
       try {
@@ -36,6 +37,16 @@ export default function ExplorationsPage() {
   }, [])
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
+
+  // Find latest completed session for aggregate stats (column count)
+  const latestCompletedSession = useMemo(
+    () => sessions.find(s => s.status === 'completed'),
+    [sessions]
+  )
+  const { data: latestEdaResults = [] } = useSessionEdaResults(
+    workspaceId,
+    latestCompletedSession?.session_id,
+  )
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',
@@ -121,7 +132,7 @@ export default function ExplorationsPage() {
       </div>
 
       {/* Stats Cards */}
-      <ExplorationStatsCards sessions={sessions} />
+      <ExplorationStatsCards sessions={sessions} edaResults={latestEdaResults} />
 
       {/* Filters */}
       <ExplorationFiltersBar filters={filters} onFiltersChange={setFilters} />
@@ -155,16 +166,14 @@ export default function ExplorationsPage() {
       )}
 
       {/* Exploration Sheet Overlay */}
-      {workspaceId && (
-        <ExplorationSheet
-          open={!!selectedSession}
-          onOpenChange={(open) => { if (!open) handleSheetClose() }}
-          session={selectedSession}
-          workspaceId={workspaceId}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-        />
-      )}
+      <ExplorationSheet
+        open={!!selectedSession}
+        onOpenChange={(open) => { if (!open) handleSheetClose() }}
+        session={selectedSession}
+        workspaceId={workspaceId}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+      />
     </div>
   )
 }

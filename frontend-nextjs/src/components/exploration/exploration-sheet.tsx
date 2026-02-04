@@ -21,7 +21,7 @@ interface ExplorationSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   session: ExplorationSession | null
-  workspaceId: string
+  workspaceId: string | undefined
   activeTab: string
   onTabChange: (tab: string) => void
 }

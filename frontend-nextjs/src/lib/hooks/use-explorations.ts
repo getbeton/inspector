@@ -10,53 +10,84 @@ import {
   updateWebsiteExploration,
   type JoinPair,
 } from '@/lib/api/explorations'
+import {
+  MOCK_SESSIONS,
+  MOCK_EDA_RESULTS,
+  MOCK_WEBSITE_RESULTS,
+  MOCK_TABLE_COLUMNS,
+} from '@/lib/data/mock-explorations'
 import type { WebsiteExplorationResult } from '@/lib/agent/types'
 
+const DEMO_WORKSPACE = '__demo__'
+
 export function useExplorationSessions(workspaceId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
   const query = useQuery({
-    queryKey: ['explorations', 'sessions', workspaceId],
-    queryFn: () => getSessions(workspaceId!),
-    enabled: !!workspaceId,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    queryKey: ['explorations', 'sessions', workspaceId ?? DEMO_WORKSPACE],
+    queryFn: () => isDemo ? Promise.resolve(MOCK_SESSIONS) : getSessions(workspaceId!),
+    enabled: true,
+    staleTime: isDemo ? Infinity : 30_000,
+    refetchOnWindowFocus: !isDemo,
   })
 
-  // Poll when any session is running
-  const hasRunning = query.data?.some(s => s.status === 'running' || s.status === 'created')
+  // Poll when any session is running (only for real data)
+  const hasRunning = !isDemo && query.data?.some(s => s.status === 'running' || s.status === 'created')
 
   return useQuery({
-    queryKey: ['explorations', 'sessions', workspaceId],
-    queryFn: () => getSessions(workspaceId!),
-    enabled: !!workspaceId,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    queryKey: ['explorations', 'sessions', workspaceId ?? DEMO_WORKSPACE],
+    queryFn: () => isDemo ? Promise.resolve(MOCK_SESSIONS) : getSessions(workspaceId!),
+    enabled: true,
+    staleTime: isDemo ? Infinity : 30_000,
+    refetchOnWindowFocus: !isDemo,
     refetchInterval: hasRunning ? 5_000 : false,
   })
 }
 
 export function useSessionEdaResults(workspaceId: string | undefined, sessionId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
   return useQuery({
-    queryKey: ['explorations', 'eda', workspaceId, sessionId],
-    queryFn: () => getSessionEdaResults(workspaceId!, sessionId!),
-    enabled: !!workspaceId && !!sessionId,
-    staleTime: 60_000,
+    queryKey: ['explorations', 'eda', workspaceId ?? DEMO_WORKSPACE, sessionId],
+    queryFn: () => {
+      if (isDemo && sessionId) {
+        return Promise.resolve(MOCK_EDA_RESULTS[sessionId] ?? [])
+      }
+      return getSessionEdaResults(workspaceId!, sessionId!)
+    },
+    enabled: !!sessionId,
+    staleTime: isDemo ? Infinity : 60_000,
   })
 }
 
 export function useSessionWebsiteResult(workspaceId: string | undefined, sessionId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
   return useQuery({
-    queryKey: ['explorations', 'website', workspaceId, sessionId],
-    queryFn: () => getSessionWebsiteResult(workspaceId!, sessionId!),
-    enabled: !!workspaceId && !!sessionId,
-    staleTime: 60_000,
+    queryKey: ['explorations', 'website', workspaceId ?? DEMO_WORKSPACE, sessionId],
+    queryFn: () => {
+      if (isDemo && sessionId) {
+        return Promise.resolve(MOCK_WEBSITE_RESULTS[sessionId] ?? null)
+      }
+      return getSessionWebsiteResult(workspaceId!, sessionId!)
+    },
+    enabled: !!sessionId,
+    staleTime: isDemo ? Infinity : 60_000,
   })
 }
 
 export function useTableColumns(workspaceId: string | undefined, tableId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
   return useQuery({
-    queryKey: ['explorations', 'columns', workspaceId, tableId],
-    queryFn: () => getTableColumns(workspaceId!, tableId!),
-    enabled: !!workspaceId && !!tableId,
+    queryKey: ['explorations', 'columns', workspaceId ?? DEMO_WORKSPACE, tableId],
+    queryFn: () => {
+      if (isDemo && tableId) {
+        return Promise.resolve(MOCK_TABLE_COLUMNS[tableId] ?? { table_id: tableId, columns: [] })
+      }
+      return getTableColumns(workspaceId!, tableId!)
+    },
+    enabled: !!tableId,
     staleTime: Infinity,
   })
 }

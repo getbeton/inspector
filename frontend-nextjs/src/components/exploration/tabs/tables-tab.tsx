@@ -7,7 +7,7 @@ import { useSessionEdaResults, useTableColumns } from '@/lib/hooks/use-explorati
 import type { EdaResult } from '@/lib/agent/types'
 
 interface TablesTabProps {
-  workspaceId: string
+  workspaceId: string | undefined
   sessionId: string
 }
 
@@ -103,7 +103,7 @@ export function TablesTab({ workspaceId, sessionId }: TablesTabProps) {
 
 interface TableDetailProps {
   edaResult: EdaResult
-  workspaceId: string
+  workspaceId: string | undefined
   onBack: () => void
 }
 
