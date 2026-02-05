@@ -126,7 +126,7 @@ function TableDetail({ edaResult, workspaceId, onBack }: TableDetailProps) {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {stats.total_rows != null && (
             <div className="border rounded-lg p-3 text-center">
               <div className="text-lg font-bold">{Number(stats.total_rows).toLocaleString()}</div>
@@ -137,12 +137,6 @@ function TableDetail({ edaResult, workspaceId, onBack }: TableDetailProps) {
             <div className="border rounded-lg p-3 text-center">
               <div className="text-lg font-bold">{formatBytes(Number(stats.total_bytes))}</div>
               <div className="text-xs text-muted-foreground">Size</div>
-            </div>
-          )}
-          {stats.engine && (
-            <div className="border rounded-lg p-3 text-center">
-              <div className="text-lg font-bold">{stats.engine}</div>
-              <div className="text-xs text-muted-foreground">Engine</div>
             </div>
           )}
         </div>

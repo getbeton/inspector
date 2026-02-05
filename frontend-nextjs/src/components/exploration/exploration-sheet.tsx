@@ -65,7 +65,7 @@ export function ExplorationSheet({
             </Badge>
           </div>
           <SheetDescription>
-            {session.agent_app_name || 'Agent'} · {new Date(session.created_at).toLocaleString()}
+            {new Date(session.created_at).toLocaleString()}
           </SheetDescription>
 
           {/* Tab Navigation */}

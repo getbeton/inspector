@@ -45,10 +45,6 @@ export function OverviewTab({ session }: OverviewTabProps) {
           </Badge>
         </div>
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-1">Agent</h4>
-          <p className="text-sm">{session.agent_app_name || '—'}</p>
-        </div>
-        <div>
           <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
           <p className="text-sm">{formatDate(session.created_at)}</p>
         </div>
