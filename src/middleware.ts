@@ -16,6 +16,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Guard: return a friendly error page when Supabase is not configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return new NextResponse(
+      '<html><body style="font-family:system-ui;padding:2rem"><h1>Configuration Error</h1><p>Supabase is not configured. Check your env vars and redeploy.</p><code>NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required.</code></body></html>',
+      { status: 503, headers: { 'content-type': 'text/html' } }
+    )
+  }
+
+  // Skip all auth checks when AUTH_BYPASS is "true"
+  if (process.env.AUTH_BYPASS === 'true') {
+    return NextResponse.next()
+  }
+
   // Create a response that we can modify
   let response = NextResponse.next({
     request: {
@@ -25,8 +41,8 @@ export async function middleware(request: NextRequest) {
 
   // Create Supabase client with cookie handling
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
