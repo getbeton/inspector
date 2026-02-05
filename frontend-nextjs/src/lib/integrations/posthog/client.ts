@@ -1,6 +1,6 @@
 /**
  * PostHog API client for fetching events, persons, and activity data
- * Extended with query execution, saved queries, and dashboard management
+ * Extended with query execution, saved queries, and dashboard reads
  */
 
 import { PostHogEvent, PostHogPerson, PostHogGroup, createIntegrationError } from '../types'
@@ -27,15 +27,6 @@ export interface QueryResult {
   columns: string[]
 }
 
-export interface PostHogSavedQueryInput {
-  name: string
-  description?: string
-  query: {
-    kind: 'HogQLQuery'
-    query: string
-  }
-}
-
 export interface PostHogSavedQueryResponse {
   id: number | string
   name: string
@@ -46,12 +37,6 @@ export interface PostHogSavedQueryResponse {
   }
   created_at: string
   updated_at: string
-}
-
-export interface PostHogDashboardInput {
-  name: string
-  description?: string
-  filters?: Record<string, unknown>
 }
 
 export interface PostHogDashboardResponse {
@@ -302,40 +287,8 @@ export class PostHogClient {
   }
 
   // ============================================
-  // Saved Queries CRUD
+  // Saved Queries (read-only)
   // ============================================
-
-  /**
-   * Create a saved query in PostHog
-   */
-  async createSavedQuery(input: PostHogSavedQueryInput): Promise<PostHogSavedQueryResponse> {
-    return this.fetch('/saved_queries/', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    })
-  }
-
-  /**
-   * Update a saved query in PostHog
-   */
-  async updateSavedQuery(
-    queryId: string | number,
-    input: Partial<PostHogSavedQueryInput>
-  ): Promise<PostHogSavedQueryResponse> {
-    return this.fetch(`/saved_queries/${queryId}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    })
-  }
-
-  /**
-   * Delete a saved query from PostHog
-   */
-  async deleteSavedQuery(queryId: string | number): Promise<void> {
-    await this.fetch(`/saved_queries/${queryId}/`, {
-      method: 'DELETE',
-    })
-  }
 
   /**
    * Get a saved query by ID
@@ -356,40 +309,8 @@ export class PostHogClient {
   }
 
   // ============================================
-  // Dashboards CRUD
+  // Dashboards (read-only)
   // ============================================
-
-  /**
-   * Create a dashboard in PostHog
-   */
-  async createDashboard(input: PostHogDashboardInput): Promise<PostHogDashboardResponse> {
-    return this.fetch('/dashboards/', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    })
-  }
-
-  /**
-   * Update a dashboard in PostHog
-   */
-  async updateDashboard(
-    dashboardId: string | number,
-    input: Partial<PostHogDashboardInput>
-  ): Promise<PostHogDashboardResponse> {
-    return this.fetch(`/dashboards/${dashboardId}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    })
-  }
-
-  /**
-   * Delete a dashboard from PostHog
-   */
-  async deleteDashboard(dashboardId: string | number): Promise<void> {
-    await this.fetch(`/dashboards/${dashboardId}/`, {
-      method: 'DELETE',
-    })
-  }
 
   /**
    * Get a dashboard by ID
