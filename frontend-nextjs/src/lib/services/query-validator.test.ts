@@ -80,9 +80,56 @@ describe('QueryValidator', () => {
     })
   })
 
+  describe('CTE and parenthesized SELECT', () => {
+    it('accepts CTE (WITH ... AS) queries', () => {
+      expect(() =>
+        validator.validate('WITH cte AS (SELECT 1) SELECT * FROM cte')
+      ).not.toThrow()
+    })
+
+    it('accepts parenthesized SELECT queries', () => {
+      expect(() =>
+        validator.validate('(SELECT * FROM events)')
+      ).not.toThrow()
+    })
+
+    it('accepts nested CTE with multiple common table expressions', () => {
+      const query = `
+        WITH
+          first AS (SELECT event FROM events WHERE timestamp > now() - interval 1 day),
+          second AS (SELECT event, count() as cnt FROM first GROUP BY event)
+        SELECT * FROM second ORDER BY cnt DESC
+      `
+      expect(() => validator.validate(query)).not.toThrow()
+    })
+  })
+
+  describe('dangerous functions', () => {
+    it('rejects ClickHouse table functions (url, remote, file)', () => {
+      expect(() => validator.validate("SELECT * FROM url('http://evil.com', 'CSV')")).toThrow(InvalidQueryError)
+      expect(() => validator.validate("SELECT * FROM remote('host', 'db', 'table')")).toThrow(InvalidQueryError)
+      expect(() => validator.validate("SELECT * FROM file('/etc/hosts', 'CSV')")).toThrow(InvalidQueryError)
+    })
+
+    it('rejects DoS functions (sleep, numbers, generateRandom)', () => {
+      expect(() => validator.validate('SELECT sleep(60)')).toThrow(InvalidQueryError)
+      expect(() => validator.validate('SELECT * FROM numbers(1000000)')).toThrow(InvalidQueryError)
+      expect(() => validator.validate("SELECT * FROM generateRandom('x UInt64')")).toThrow(InvalidQueryError)
+    })
+
+    it('rejects system table access', () => {
+      expect(() => validator.validate('SELECT * FROM system.tables')).toThrow(InvalidQueryError)
+      expect(() => validator.validate('SELECT * FROM system.columns')).toThrow(InvalidQueryError)
+    })
+  })
+
   describe('SQL injection patterns', () => {
     it('rejects UNION SELECT', () => {
       expect(() => validator.validate("SELECT * FROM events UNION SELECT * FROM users")).toThrow(InvalidQueryError)
+    })
+
+    it('rejects UNION ALL SELECT', () => {
+      expect(() => validator.validate("SELECT * FROM events UNION ALL SELECT * FROM users")).toThrow(InvalidQueryError)
     })
 
     it('rejects INTO OUTFILE', () => {
@@ -91,6 +138,10 @@ describe('QueryValidator', () => {
 
     it('rejects LOAD_FILE', () => {
       expect(() => validator.validate("SELECT LOAD_FILE('/etc/passwd')")).toThrow(InvalidQueryError)
+    })
+
+    it('rejects CROSS JOIN', () => {
+      expect(() => validator.validate("SELECT * FROM events CROSS JOIN events AS e2")).toThrow(InvalidQueryError)
     })
   })
 
