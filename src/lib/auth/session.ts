@@ -18,6 +18,18 @@ type WorkspaceMembership = {
  * Returns user info with workspace context
  */
 export async function getSession(): Promise<SessionUser | null> {
+  // Return a stub session when auth is bypassed (test/preview deployments)
+  if (process.env.AUTH_BYPASS === 'true') {
+    return {
+      sub: 'auth-bypass',
+      email: 'bypass@localhost',
+      name: 'Auth Bypass',
+      workspace_id: undefined,
+      workspace_name: undefined,
+      role: undefined,
+    }
+  }
+
   try {
     const supabase = await createClient()
 
