@@ -139,7 +139,7 @@ gh pr checks
 **IMPORTANT:** If this is a PR for an epic (branch name contains epic ID like `BETON-XX`), generate product documentation:
 
 ```
-/document-epic <EPIC-ID>
+/document-task <EPIC-ID>
 ```
 
 This will:
@@ -244,6 +244,6 @@ gh pr checks
 
 | Skill | When to Use |
 |-------|-------------|
-| `/document-epic <ID>` | Generate product documentation for an epic when opening PR to staging |
-| `/implement-epic <ID>` | Implement a complete epic from Plane |
+| `/document-task <ID>` | Generate product documentation for an epic when opening PR to staging |
+| `/implement-task <ID>` | Implement a complete epic from Plane |
 | `/troubleshoot` | Debug deployment or build issues |

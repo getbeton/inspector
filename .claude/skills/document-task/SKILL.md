@@ -1,23 +1,22 @@
 ---
-name: document-epic
+name: document-task
 description: Generate product documentation for an epic and publish to Plane wiki. Use when opening a PR to staging branch or after completing epic implementation.
 ---
 
-# /document-epic - Generate Epic Documentation
+# /document-task - Generate Epic Documentation
 
-Use this skill to automatically generate comprehensive product documentation for a completed epic and publish it to Plane's wiki. This skill should be invoked when:
+Use this skill to automatically generate comprehensive product documentation for a completed task and publish it to Plane's wiki. This skill should be invoked when:
 
 - A PR is opened to the `staging` branch
-- An epic implementation is complete
-- You want to document a feature branch before review
+- The task implementation is complete
 
 ## Usage
 
 ```
-/document-epic <EPIC-ID>
+/document-task <EPIC-ID>
 ```
 
-Example: `/document-epic BETON-75` or `/document-epic INSP-42`
+Example: `/document-task BETON-75` or `/document-task INSP-42`
 
 ---
 
@@ -84,7 +83,7 @@ Use the `Read` tool to examine each key file and understand:
 - Data models and schemas
 - API contracts
 
-#### Step 1.5: Fetch Epic from Plane
+#### Step 1.5: Fetch task from Plane
 
 ```
 mcp__plane__retrieve_work_item_by_identifier:
@@ -92,15 +91,6 @@ mcp__plane__retrieve_work_item_by_identifier:
   - sequence_id: <NUMBER> (e.g., "75")
 ```
 
-Note the epic's:
-- Title and description
-- Subtasks and their descriptions
-- Acceptance criteria
-- Any linked resources
-
-> **Note:** Epics are a separate entity type in Plane, but `retrieve_work_item_by_identifier` works for them because they share the identifier scheme. Additionally:
-> - Check the work item type's `is_epic` flag to confirm this is an epic (use `list_work_item_types` if needed)
-> - Use `list_work_items` with `parent_id` set to the epic's UUID to find all child work items for comprehensive documentation
 
 ---
 
@@ -116,7 +106,7 @@ Create documentation with these sections:
    - Target users/use cases
 
 2. **Architecture**
-   - System diagram (ASCII art)
+   - System diagram (mermaid chart)
    - Component relationships
    - Data flow
 
@@ -218,98 +208,8 @@ Check that the page was created successfully and note the page ID.
 
 Tell the user:
 - Documentation page was created
-- Page name and ID
+- Page name, ID and URL
 - Summary of sections included
-- Link to view in Plane (if available)
-
----
-
-## Documentation Templates
-
-### For API Features
-
-Focus on:
-- Endpoint specifications
-- Authentication flow
-- Request/response examples
-- Error handling
-
-### For UI Features
-
-Focus on:
-- Component hierarchy
-- User interactions
-- State management
-- Accessibility
-
-### For Infrastructure/Backend
-
-Focus on:
-- Service architecture
-- Data models
-- Cron jobs/background tasks
-- Monitoring/logging
-
-### For Integrations
-
-Focus on:
-- Third-party API usage
-- Configuration requirements
-- Webhook handling
-- Error scenarios
-
----
-
-## Example Documentation Sections
-
-### Architecture Diagram (ASCII)
-
-```
-<pre><code>
-┌─────────────────────────────────────────┐
-│              Frontend                    │
-│  ┌─────────────┐  ┌──────────────────┐  │
-│  │ Component A │  │ Component B      │  │
-│  └─────────────┘  └──────────────────┘  │
-└───────────────────────┬─────────────────┘
-                        │
-┌───────────────────────▼─────────────────┐
-│              API Layer                   │
-│  /api/endpoint-a    /api/endpoint-b     │
-└───────────────────────┬─────────────────┘
-                        │
-┌───────────────────────▼─────────────────┐
-│              Database                    │
-│  table_a    table_b    table_c          │
-└─────────────────────────────────────────┘
-</code></pre>
-```
-
-### Database Table
-
-```html
-<table>
-  <thead>
-    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
-  </thead>
-  <tbody>
-    <tr><td><code>id</code></td><td>uuid</td><td>Primary key</td></tr>
-    <tr><td><code>name</code></td><td>varchar</td><td>Display name</td></tr>
-  </tbody>
-</table>
-```
-
-### API Endpoint
-
-```html
-<h3>POST /api/resource</h3>
-<p>Creates a new resource.</p>
-<pre><code>Request: { "name": "string", "value": number }
-Response: { "id": "uuid", "created_at": "timestamp" }
-</code></pre>
-```
-
----
 
 ## Checklist
 
@@ -351,4 +251,4 @@ Response: { "id": "uuid", "created_at": "timestamp" }
 - **Keep it concise** - Focus on information developers need
 - **Include examples** - Code samples and request/response examples help understanding
 - **Update when needed** - Documentation should be updated if implementation changes
-- **Reference the epic** - Always link back to the original Plane epic
+- **Reference the epic** - Always link back to the original Plane work item

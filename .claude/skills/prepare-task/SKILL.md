@@ -1,59 +1,24 @@
 ---
-name: prepare-epic
-description: Prepare a Plane epic for implementation by refining requirements, creating detailed subtasks with relations, and writing test cases. Use before /implement-epic to ensure requirements are clear.
+name: prepare-task
+description: Prepare a Plane epic for implementation by refining requirements, creating detailed subtasks with relations, and writing test cases. Use before /implement-task to ensure requirements are clear.
 ---
 
-# /prepare-epic - Prepare Epic for Implementation
+# /prepare-task - Prepare Epic for Implementation
 
-Use this skill to take a Plane epic and prepare it for implementation. This workflow refines requirements through iterative clarification, creates detailed subtasks with dependencies, writes comprehensive test cases, and enriches everything with API exploration and documentation links.
+Use this skill to take a Plane epic and prepare it for implementation
 
-**Key Differentiator**: Unlike `/implement-epic` (which writes code), this skill produces only **plain English specifications** ready for implementation.
+**Key Differentiator**: Unlike `/implement-task` (which writes code), this skill produces only **plain English specifications** ready for implementation.
 
 ## Usage
 
 ```
-/prepare-epic <EPIC-ID>
+/prepare-task <EPIC-ID>
 ```
 
-Example: `/prepare-epic BETON-42` or `/prepare-epic INSP-15`
+Example: `/prepare-task BETON-42` or `/prepare-task INSP-15`
 
 ---
 
-## Understanding Epics in Plane
-
-Epics are a **distinct entity type** in Plane, separate from regular work items. This has important implications when using MCP tools:
-
-- **Separate API**: Epics use `/workspaces/{slug}/projects/{id}/epics/`, not the work items endpoint
-- **`is_epic` flag**: Work item types have an `is_epic: boolean` field — types with `is_epic: true` are epic types
-- **No dedicated MCP tools**: The Plane MCP server exposes NO epic-specific tools (no `list_epics`, `retrieve_epic`, etc.)
-- **Shared identifier scheme**: Epics share the same identifier format (e.g., `BETON-42`), so `retrieve_work_item_by_identifier` works for fetching them
-- **Parent-child via `parent` field**: Work items belong to an epic by setting their `parent` field to the epic's UUID. Each work item can belong to at most one epic.
-- **Project setting**: Epics must be enabled per-project in Plane settings
-- **Convertible**: Epics can be converted to/from work items in the Plane UI
-
-### Working with Epics via MCP Tools
-
-Since there are no dedicated epic MCP tools, use these workarounds:
-
-| Action | MCP Tool to Use | Notes |
-|--------|----------------|-------|
-| Fetch an epic | `retrieve_work_item_by_identifier` | Works because epics share the identifier scheme |
-| Update an epic | `update_work_item` | Works for updating description, status, etc. |
-| List epic subtasks | `list_work_items` with `parent_id` | Pass the epic's UUID as `parent_id` |
-| Verify epic type | `list_work_item_types` | Look for types where `is_epic: true` |
-
-### Recommended First Step
-
-Before fetching the epic, call `list_work_item_types` to identify the epic type ID in the project. This confirms epics are enabled and gives you the type ID for reference:
-
-```
-mcp__plane__list_work_item_types:
-  - project_id: <project uuid>
-```
-
-Look for a type with `is_epic: true` in the response. If none exists, epics may not be enabled for this project.
-
----
 
 ## Workflow
 
@@ -133,6 +98,8 @@ Review the epic description and identify:
 - What are the fallback behaviors?
 - What are the security considerations?
 
+Do that for both backend and frontend.
+
 #### Step 2.2: Ask Clarifying Questions
 
 Use `AskUserQuestion` to clarify requirements. Group questions by topic:
@@ -167,7 +134,7 @@ Repeat Step 2.2 until:
 
 #### Step 2.4: Document Decisions
 
-Keep a record of all decisions made during clarification:
+Keep a record of all decisions made during clarification, e.g.:
 
 ```
 ## Decisions Made
@@ -328,6 +295,8 @@ mcp__plane__create_work_item_relation:
   - relation_type: "relates_to"
 ```
 
+Make sure that implementation tasks depend on test tasks. This way, you will write the tests firsts and then code that passes it, not the other way around. No cheating!
+
 ---
 
 ### Phase 6: Documentation & Diagrams
@@ -396,22 +365,22 @@ mcp__plane__create_work_item_link:
 - Design files (Figma)
 - Internal architecture docs
 
+
+> Important:
+> If the task or subtask requires external API – link to the docs is mandatory
+> If the task or subtask requires using a new open source tool – link to the repo and docs is mandatory
+
 ---
 
 ### Phase 7: API Exploration
 
-If the epic involves third-party APIs:
+If the tasks or involves third-party APIs:
 
 #### Step 7.1: Identify APIs Involved
 
-List all external APIs the epic requires:
-- PostHog
-- Stripe
-- Apollo
-- Attio
-- Other third-party services
+List all external APIs the task requires
 
-#### Step 7.2: Request Credentials (If Needed)
+#### Step 7.2: Request Credentials
 
 Use `AskUserQuestion` to request:
 - API keys (for testing)
@@ -430,6 +399,8 @@ Use curl to understand API behavior:
 curl -s -H "Authorization: Bearer $API_KEY" \
   "https://api.example.com/v1/resource" | jq
 ```
+
+If you only get 4xx and 5xx – use `AskUserQuestion` again for correct credentials/documentation
 
 Document:
 - Request format (headers, body)
@@ -462,90 +433,6 @@ Body: { "event": "page_view", "distinct_id": "user_123" }
 <pre><code>
 { "detail": "Authentication credentials were not provided." }
 </code></pre>
-```
-
----
-
-## Task Description Template
-
-Use this HTML structure for all subtasks:
-
-```html
-<h2>Overview</h2>
-<p>[1-2 sentences describing what this task accomplishes]</p>
-
-<h2>Acceptance Criteria</h2>
-<ul>
-  <li>[ ] Criterion 1 (specific, testable)</li>
-  <li>[ ] Criterion 2</li>
-  <li>[ ] Criterion 3</li>
-</ul>
-
-<h2>Implementation Hints</h2>
-<p><strong>Files likely involved:</strong></p>
-<ul>
-  <li><code>src/app/api/...</code> - for API routes</li>
-  <li><code>src/lib/...</code> - for business logic</li>
-</ul>
-<p><strong>Patterns to follow:</strong></p>
-<ul>
-  <li>[Reference existing similar code]</li>
-  <li>[Note any architectural decisions]</li>
-</ul>
-
-<h2>Edge Cases</h2>
-<ul>
-  <li>What happens when X is empty/null?</li>
-  <li>What happens when API returns error?</li>
-  <li>What about rate limiting?</li>
-</ul>
-
-<h2>Dependencies</h2>
-<p>Blocked by: [TASK-IDs or "None"]</p>
-<p>Blocks: [TASK-IDs or "None"]</p>
-```
-
----
-
-## Test Task Template
-
-Use this HTML structure for test tasks:
-
-```html
-<h2>Test: [Feature Name]</h2>
-
-<h3>Test Case 1: [Scenario Name]</h3>
-<p><strong>Preconditions:</strong></p>
-<ul>
-  <li>User is authenticated</li>
-  <li>Workspace exists with sample data</li>
-</ul>
-
-<p><strong>Steps:</strong></p>
-<ol>
-  <li><strong>Given</strong> [initial state]</li>
-  <li><strong>When</strong> [action taken]</li>
-  <li><strong>Then</strong> [expected result]</li>
-</ol>
-
-<p><strong>Expected Result:</strong></p>
-<ul>
-  <li>Response status: 200</li>
-  <li>Data contains: [specific fields]</li>
-</ul>
-
-<h3>Test Case 2: Error Handling</h3>
-<p><strong>Given</strong> [error condition]</p>
-<p><strong>When</strong> [action]</p>
-<p><strong>Then</strong> [error response expected]</p>
-
-<h3>Edge Cases to Verify</h3>
-<ul>
-  <li>[ ] Empty input</li>
-  <li>[ ] Invalid ID format</li>
-  <li>[ ] Unauthorized access</li>
-  <li>[ ] Rate limit exceeded</li>
-</ul>
 ```
 
 ---
@@ -611,7 +498,7 @@ Use this HTML structure for test tasks:
 
 ## Example Output
 
-After running `/prepare-epic BETON-42`, the epic might have:
+After running `/prepare-task BETON-42`, the epic might have:
 
 **Updated Epic Description:**
 - Clarified requirements
@@ -663,7 +550,7 @@ After running `/prepare-epic BETON-42`, the epic might have:
 
 ## Notes
 
-- **This skill complements `/implement-epic`** - use `prepare-epic` first, then `implement-epic`
+- **This skill complements `/implement-task`** - use `prepare-task` first, then `implement-task`
 - **All output is plain English** - no code implementations in epic or subtasks
 - **Mermaid diagrams go in task descriptions** - Plane renders them
 - **API exploration uses curl** - not code implementations

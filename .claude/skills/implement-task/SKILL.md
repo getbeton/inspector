@@ -1,51 +1,23 @@
 ---
-name: implement-epic
+name: implement-task
 description: Implement a complete Plane epic by reading tasks, understanding dependencies, and coding sequentially. Use when working on a full epic or multi-task feature.
 ---
 
-# /implement-epic - Implement Plane Epic End-to-End
+# /implement-task - Implement Plane Epic End-to-End
 
-Use this skill to implement a complete epic from Plane. This workflow reads the epic, analyzes dependencies between subtasks, implements them sequentially, and opens a PR when done.
+Use this skill to implement a complete task from Plane. This workflow reads the epic, analyzes dependencies between subtasks, implements them sequentially, and opens a PR when done.
 
 ## Usage
 
 ```
-/implement-epic <EPIC-ID>
+/implement-task <EPIC-ID>
 ```
 
-Example: `/implement-epic BETON-42` or `/implement-epic INSP-15`
-
----
-
-## Understanding Epics in Plane
-
-Epics are a **distinct entity type** in Plane, separate from regular work items. This has important implications when using MCP tools:
-
-- **Separate API**: Epics use `/workspaces/{slug}/projects/{id}/epics/`, not the work items endpoint
-- **`is_epic` flag**: Work item types have an `is_epic: boolean` field — types with `is_epic: true` are epic types
-- **No dedicated MCP tools**: The Plane MCP server exposes NO epic-specific tools (no `list_epics`, `retrieve_epic`, etc.)
-- **Shared identifier scheme**: Epics share the same identifier format (e.g., `BETON-42`), so `retrieve_work_item_by_identifier` works for fetching them
-- **Parent-child via `parent` field**: Work items belong to an epic by setting their `parent` field to the epic's UUID
-- **Project setting**: Epics must be enabled per-project in Plane settings
-
-### Working with Epics via MCP Tools
-
-Since there are no dedicated epic MCP tools, use these workarounds:
-
-| Action | MCP Tool to Use | Notes |
-|--------|----------------|-------|
-| Fetch an epic | `retrieve_work_item_by_identifier` | Works because epics share the identifier scheme |
-| Update an epic | `update_work_item` | Works for updating description, status, etc. |
-| List epic subtasks | `list_work_items` with `parent_id` | Pass the epic's UUID as `parent_id` |
-| Verify epic type | `list_work_item_types` | Look for types where `is_epic: true` |
-
-If `retrieve_work_item_by_identifier` fails for an epic, verify that epics are enabled in the project settings and use `list_work_item_types` to confirm the epic type exists.
-
----
+Example: `/implement-task BETON-42` or `/implement-task INSP-15`
 
 ## Workflow
 
-### Phase 1: Epic Discovery
+### Phase 1: Work Item Discovery
 
 #### Step 1.1: Fetch the Epic
 
@@ -58,11 +30,9 @@ mcp__plane__retrieve_work_item_by_identifier:
 ```
 
 Read and note:
-- Epic title and description
+- Task title and description
 - Acceptance criteria
 - Any attachments or linked resources
-
-> **Note:** Epics are a separate entity type in Plane, but `retrieve_work_item_by_identifier` works for them because they share the identifier scheme. If this call returns unexpected results or fails, see the [Understanding Epics in Plane](#understanding-epics-in-plane) section for fallback approaches.
 
 #### Step 1.2: Get All Subtasks
 
@@ -71,7 +41,7 @@ List subtasks that belong to this epic using the `parent_id` filter (primary app
 ```
 mcp__plane__list_work_items:
   - project_id: <uuid from epic>
-  - parent_id: <epic uuid>
+  - parent_id: <task/epic uuid>
 ```
 
 If `list_work_items` with `parent_id` doesn't return results, fall back to searching:
@@ -91,7 +61,7 @@ mcp__plane__retrieve_work_item_by_identifier for each subtask
 #### Step 1.3: Read Attachments
 
 If the epic or subtasks have descriptions with links, requirements docs, or Figma designs:
-- Use WebFetch to read linked documents
+- Use WebFetch or related MCP o read linked documents
 - Note key requirements, API specs, or design decisions
 
 #### Step 1.4: Identify Dependencies
@@ -188,7 +158,23 @@ Write the code following Beton's patterns:
 
 Follow existing patterns in the codebase.
 
-#### Step 3.4: Test the Implementation
+#### Step 3.4: Build Locally
+
+**MANDATORY before committing:**
+
+```bash
+cd frontend-nextjs && npm run build
+```
+
+If build fails:
+1. Read the error messages carefully
+2. Fix TypeScript errors
+3. Fix import issues
+4. Re-run build until it passes
+
+**Do NOT commit code that fails the build.**
+
+#### Step 3.5: Test the Implementation
 
 **For API endpoints:**
 
@@ -211,25 +197,9 @@ Verify:
 
 **For UI components:**
 
-- Verify the page loads without errors in browser
+- Verify the page loads without errors in browser. Use Chrome Extension MCP for this
 - Check browser console for errors
 - Test key user interactions
-
-#### Step 3.5: Build Locally
-
-**MANDATORY before committing:**
-
-```bash
-cd frontend-nextjs && npm run build
-```
-
-If build fails:
-1. Read the error messages carefully
-2. Fix TypeScript errors
-3. Fix import issues
-4. Re-run build until it passes
-
-**Do NOT commit code that fails the build.**
 
 #### Step 3.6: Commit
 
@@ -263,7 +233,7 @@ cd frontend-nextjs && npm run build
 
 Ensure entire branch builds cleanly.
 
-#### Step 4.2: Create Pull Request
+#### Step 4.2: Create Draft Pull Request
 
 Use the `/deploy` skill's "Feature → Staging" workflow to:
 - Verify Vercel preview deployment
@@ -290,18 +260,13 @@ Implements epic <EPIC-ID>: <Epic title>
 
 #### Step 4.3: Generate Product Documentation
 
-**IMPORTANT:** After creating the PR, use the `/document-epic` skill to generate comprehensive product documentation:
+**IMPORTANT:** After creating the PR, use the `/document-task` skill to generate comprehensive product documentation:
 
 ```
-/document-epic <EPIC-ID>
+/document-task <EPIC-ID>
 ```
 
-This will:
-- Analyze all code changes in the feature branch
-- Generate structured documentation with architecture, API reference, etc.
-- Publish the documentation to Plane's wiki
-
-The documentation helps reviewers understand the implementation and serves as a reference for future development.
+This should happen automatically after you've created a draft PR. Then, attach a page with documentation to the PR + link it to the epic.
 
 #### Step 4.4: Report Completion
 
@@ -329,7 +294,7 @@ Tell the user:
   - [ ] Built locally (must pass)
   - [ ] Used /deploy to commit and push
 - [ ] Created PR to staging (via /deploy)
-- [ ] Generated documentation (via /document-epic)
+- [ ] Generated documentation (via /document-task)
 - [ ] Reported PR URL and documentation link to user
 - [ ] **Did NOT merge** - left for human review
 
