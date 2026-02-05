@@ -81,6 +81,26 @@ export async function saveConfirmedJoins(
   )
 }
 
+// ============================================
+// Latest Changes
+// ============================================
+
+export interface LatestChange {
+  changed_by_email: string
+  created_at: string
+}
+
+export interface LatestChangesResponse {
+  business_model: LatestChange | null
+  join_candidates: LatestChange | null
+}
+
+export async function getLatestChanges(workspaceId: string): Promise<LatestChangesResponse> {
+  return apiClient.get<LatestChangesResponse>(
+    `/api/agent/data/latest-changes?workspaceId=${encodeURIComponent(workspaceId)}`
+  )
+}
+
 export async function updateWebsiteExploration(
   workspaceId: string,
   sessionId: string,

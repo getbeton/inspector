@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardHeader, CardTitle, CardAction, CardContent } from '@/components/ui/card'
+import { useQueryClient } from '@tanstack/react-query'
+import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,25 @@ interface WebsiteSectionProps {
   workspaceId: string | undefined
   sessionId: string | undefined
   isDemo: boolean
+  lastChange: { changed_by_email: string; created_at: string } | null
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60_000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 30) return `${diffDays}d ago`
+
+  return date.toLocaleDateString()
 }
 
 const PLG_OPTIONS = [
@@ -51,7 +71,9 @@ export function WebsiteSection({
   workspaceId,
   sessionId,
   isDemo,
+  lastChange,
 }: WebsiteSectionProps) {
+  const queryClient = useQueryClient()
   const updateMutation = useUpdateWebsiteExploration(workspaceId ?? '', sessionId ?? '')
 
   const [isEditing, setIsEditing] = useState(false)
@@ -74,7 +96,7 @@ export function WebsiteSection({
       // keep as null if invalid JSON
     }
 
-    await updateMutation.mutateAsync({
+    const payload = {
       is_b2b: draft.is_b2b,
       plg_type: draft.plg_type as WebsiteExplorationResult['plg_type'],
       website_url: draft.website_url || null,
@@ -82,7 +104,19 @@ export function WebsiteSection({
       icp_description: draft.icp_description || null,
       product_assumptions: draft.product_assumptions.length > 0 ? draft.product_assumptions : null,
       pricing_model: pricingModel,
-    } as Partial<WebsiteExplorationResult>)
+    } as Partial<WebsiteExplorationResult>
+
+    if (isDemo) {
+      queryClient.setQueryData(
+        ['explorations', 'website', '__demo__', sessionId],
+        (old: any) => ({ ...old, ...payload })
+      )
+      setIsEditing(false)
+      return
+    }
+
+    await updateMutation.mutateAsync(payload)
+    queryClient.invalidateQueries({ queryKey: ['explorations', 'latest-changes'] })
     setIsEditing(false)
   }
 
@@ -108,13 +142,13 @@ export function WebsiteSection({
     }))
   }
 
-  const canEdit = !isDemo && !!sessionId
+  const canEdit = !!sessionId
 
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Website Intelligence</CardTitle>
+          <CardTitle>Business Model</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -129,7 +163,7 @@ export function WebsiteSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Website Intelligence</CardTitle>
+          <CardTitle>Business Model</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground py-4">
@@ -145,7 +179,7 @@ export function WebsiteSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Website Intelligence</CardTitle>
+          <CardTitle>Business Model</CardTitle>
           <CardAction>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleCancel}>
@@ -265,7 +299,17 @@ export function WebsiteSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Website Intelligence</CardTitle>
+        <div>
+          <CardTitle>Business Model</CardTitle>
+          <CardDescription>
+            {lastChange
+              ? `Last updated ${formatRelativeTime(lastChange.created_at)} by ${lastChange.changed_by_email}`
+              : websiteData?.updated_at
+                ? `Last updated ${formatRelativeTime(websiteData.updated_at)} by Beton`
+                : null
+            }
+          </CardDescription>
+        </div>
         {canEdit && (
           <CardAction>
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>

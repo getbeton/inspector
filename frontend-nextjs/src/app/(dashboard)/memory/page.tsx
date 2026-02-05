@@ -11,7 +11,7 @@ import { JoinCandidatesSection } from '@/components/exploration/sections/join-ca
 import { SchemaSection } from '@/components/exploration/sections/schema-section'
 import { SetupBanner } from '@/components/setup'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
-import { useExplorationSessions, useSessionEdaResults, useSessionWebsiteResult } from '@/lib/hooks/use-explorations'
+import { useExplorationSessions, useSessionEdaResults, useSessionWebsiteResult, useLatestChanges } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
 const STATUS_ORDER: Record<string, number> = {
@@ -52,6 +52,7 @@ export default function MemoryPage() {
     workspaceId,
     latestCompletedSession?.session_id,
   )
+  const { data: latestChanges } = useLatestChanges(workspaceId)
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',
@@ -168,7 +169,7 @@ export default function MemoryPage() {
       <div>
         <h1 className="text-2xl font-bold">Memory</h1>
         <p className="text-muted-foreground">
-          What Beton knows about your business
+          What Beton knows about your business based on your website and data model
         </p>
       </div>
 
@@ -181,6 +182,7 @@ export default function MemoryPage() {
         workspaceId={workspaceId}
         sessionId={latestCompletedSession?.session_id}
         isDemo={isDemo}
+        lastChange={latestChanges?.business_model ?? null}
       />
 
       {/* 3. Join Candidates */}
@@ -189,6 +191,7 @@ export default function MemoryPage() {
         edaResults={latestEdaResults}
         workspaceId={workspaceId}
         isDemo={isDemo}
+        lastChange={latestChanges?.join_candidates ?? null}
       />
 
       {/* 4. Schema Graph */}

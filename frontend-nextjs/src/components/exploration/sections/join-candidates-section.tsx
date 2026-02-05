@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Card, CardHeader, CardTitle, CardAction, CardContent } from '@/components/ui/card'
+import { useQueryClient } from '@tanstack/react-query'
+import { Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { JoinPairRow } from '../join-editor/join-pair-row'
@@ -14,6 +15,25 @@ interface JoinCandidatesSectionProps {
   edaResults: EdaResult[]
   workspaceId: string | undefined
   isDemo: boolean
+  lastChange: { changed_by_email: string; created_at: string } | null
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60_000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 30) return `${diffDays}d ago`
+
+  return date.toLocaleDateString()
 }
 
 const EMPTY_PAIR: JoinPair = { table1: '', col1: '', table2: '', col2: '' }
@@ -23,7 +43,9 @@ export function JoinCandidatesSection({
   edaResults,
   workspaceId,
   isDemo,
+  lastChange,
 }: JoinCandidatesSectionProps) {
+  const queryClient = useQueryClient()
   const saveMutation = useSaveConfirmedJoins(session?.session_id ?? '')
 
   const [isEditing, setIsEditing] = useState(false)
@@ -75,7 +97,22 @@ export function JoinCandidatesSection({
     const validPairs = draftPairs.filter(
       p => p.table1 && p.col1 && p.table2 && p.col2
     )
+
+    if (isDemo) {
+      queryClient.setQueryData(
+        ['explorations', 'sessions', '__demo__'],
+        (old: ExplorationSession[] | undefined) =>
+          old?.map(s => s.session_id === session!.session_id
+            ? { ...s, confirmed_joins: validPairs }
+            : s
+          ) ?? []
+      )
+      setIsEditing(false)
+      return
+    }
+
     await saveMutation.mutateAsync(validPairs)
+    queryClient.invalidateQueries({ queryKey: ['explorations', 'latest-changes'] })
     setIsEditing(false)
   }
 
@@ -88,7 +125,7 @@ export function JoinCandidatesSection({
     setIsEditing(false)
   }
 
-  const canEdit = !isDemo && !!session
+  const canEdit = !!session
 
   if (!session) {
     return (
@@ -111,14 +148,24 @@ export function JoinCandidatesSection({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Join Candidates</CardTitle>
-          {hasConfirmed && (
-            <Badge variant="success" size="sm">Confirmed</Badge>
-          )}
-          {!hasConfirmed && suggestedJoins.length > 0 && (
-            <Badge variant="warning" size="sm">Suggested</Badge>
-          )}
+        <div>
+          <div className="flex items-center gap-2">
+            <CardTitle>Join Candidates</CardTitle>
+            {hasConfirmed && (
+              <Badge variant="success" size="sm">Confirmed</Badge>
+            )}
+            {!hasConfirmed && suggestedJoins.length > 0 && (
+              <Badge variant="warning" size="sm">Suggested</Badge>
+            )}
+          </div>
+          <CardDescription>
+            {lastChange
+              ? `Last updated ${formatRelativeTime(lastChange.created_at)} by ${lastChange.changed_by_email}`
+              : session?.updated_at
+                ? `Last updated ${formatRelativeTime(session.updated_at)} by Beton`
+                : null
+            }
+          </CardDescription>
         </div>
         {canEdit && (
           <CardAction>

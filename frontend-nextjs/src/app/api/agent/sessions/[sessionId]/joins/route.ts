@@ -40,9 +40,9 @@ export async function PUT(
         // Look up the session and verify workspace access
         const admin = createAdminClient();
 
-        const { data: session, error: sessionError } = await admin
+        const { data: session, error: sessionError } = await (admin as any)
             .from('workspace_agent_sessions')
-            .select('workspace_id')
+            .select('workspace_id, confirmed_joins')
             .eq('session_id', sessionId)
             .single();
 
@@ -60,6 +60,61 @@ export async function PUT(
 
         if (!membership) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        // Diff old vs new joins and log changes
+        const oldJoins: Array<{ table1: string; col1: string; table2: string; col2: string }> = session.confirmed_joins ?? [];
+        const oldMap = new Map(oldJoins.map((j: any) => [`${j.table1}:${j.table2}`, j]));
+        const newMap = new Map(joins.map((j: any) => [`${j.table1}:${j.table2}`, j]));
+
+        const logEntries: Record<string, unknown>[] = [];
+        // Removed joins
+        for (const [key, old] of oldMap) {
+            if (!newMap.has(key)) {
+                logEntries.push({
+                    workspace_id: session.workspace_id,
+                    change_type: 'remove',
+                    table1: (old as any).table1,
+                    table2: (old as any).table2,
+                    old_col1: (old as any).col1,
+                    old_col2: (old as any).col2,
+                    new_col1: null,
+                    new_col2: null,
+                    changed_by_email: user!.email,
+                });
+            }
+        }
+        // Added or updated joins
+        for (const [key, nj] of newMap) {
+            const old = oldMap.get(key);
+            if (!old) {
+                logEntries.push({
+                    workspace_id: session.workspace_id,
+                    change_type: 'add',
+                    table1: (nj as any).table1,
+                    table2: (nj as any).table2,
+                    old_col1: null,
+                    old_col2: null,
+                    new_col1: (nj as any).col1,
+                    new_col2: (nj as any).col2,
+                    changed_by_email: user!.email,
+                });
+            } else if ((old as any).col1 !== (nj as any).col1 || (old as any).col2 !== (nj as any).col2) {
+                logEntries.push({
+                    workspace_id: session.workspace_id,
+                    change_type: 'update',
+                    table1: (nj as any).table1,
+                    table2: (nj as any).table2,
+                    old_col1: (old as any).col1,
+                    old_col2: (old as any).col2,
+                    new_col1: (nj as any).col1,
+                    new_col2: (nj as any).col2,
+                    changed_by_email: user!.email,
+                });
+            }
+        }
+        if (logEntries.length > 0) {
+            await (admin as any).from('join_candidate_edit_log').insert(logEntries);
         }
 
         // Save confirmed joins (confirmed_joins column added by migration 012, cast as any)

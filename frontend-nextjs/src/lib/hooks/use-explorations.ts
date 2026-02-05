@@ -8,6 +8,7 @@ import {
   getTableColumns,
   saveConfirmedJoins,
   updateWebsiteExploration,
+  getLatestChanges,
   type JoinPair,
 } from '@/lib/api/explorations'
 import {
@@ -89,6 +90,18 @@ export function useTableColumns(workspaceId: string | undefined, tableId: string
     },
     enabled: !!tableId,
     staleTime: Infinity,
+  })
+}
+
+export function useLatestChanges(workspaceId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
+  return useQuery({
+    queryKey: ['explorations', 'latest-changes', workspaceId ?? DEMO_WORKSPACE],
+    queryFn: () => isDemo
+      ? Promise.resolve({ business_model: null, join_candidates: null })
+      : getLatestChanges(workspaceId!),
+    staleTime: isDemo ? Infinity : 30_000,
   })
 }
 

@@ -103,6 +103,34 @@ export async function PUT(req: NextRequest) {
             }
         }
 
+        // Fetch current row to diff for change log
+        const { data: current } = await (admin as any)
+            .from('website_exploration_results')
+            .select('is_b2b, plg_type, website_url, product_description, icp_description, product_assumptions, pricing_model')
+            .eq('workspace_id', workspaceId)
+            .single();
+
+        // Log field-level diffs to change log table
+        const changeEntries: Record<string, unknown>[] = [];
+        for (const key of allowed) {
+            if (key in fields) {
+                const oldVal = current?.[key] ?? null;
+                const newVal = fields[key] ?? null;
+                if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+                    changeEntries.push({
+                        workspace_id: workspaceId,
+                        field_name: key,
+                        old_value: JSON.stringify(oldVal),
+                        new_value: JSON.stringify(newVal),
+                        changed_by_email: user.email,
+                    });
+                }
+            }
+        }
+        if (changeEntries.length > 0) {
+            await (admin as any).from('business_model_edit_log').insert(changeEntries);
+        }
+
         let query = admin
             .from('website_exploration_results')
             .update(updatePayload)
