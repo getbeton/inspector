@@ -1,5 +1,12 @@
 # Dependencies
 node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 # Build outputs
 .next/
@@ -11,7 +18,6 @@ dist/
 .env
 .env.local
 .env.*.local
-venv/
 
 # Docker
 .docker/
@@ -19,9 +25,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
-
-# Documentation
-docs/
 
 # IDE
 .idea/
@@ -32,9 +35,6 @@ docs/
 # Local task logs
 .task_logs/
 task_logs/
-
-# Local test DB
-test.db
 
 # Local-only Claude config
 .claude/settings.local.json
@@ -50,6 +50,16 @@ coverage/
 .coverage
 htmlcov/
 
-# Misc
-*.log
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Debug logs
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Misc
+*.pem
+*.log

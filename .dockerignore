@@ -53,3 +53,14 @@ Thumbs.db
 # Misc
 .eslintcache
 .turbo
+
+# Root-level exclusions (not needed in Docker image)
+supabase/
+.github/
+.claude/
+.mcp.json
+.task_logs/
+task_logs/
+.vercel/
+e2e/
+docs/

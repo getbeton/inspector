@@ -27,7 +27,7 @@ make up
 | State | Zustand + React Query | Client state + server cache |
 | Testing | Vitest + Playwright | Unit + E2E |
 
-All code lives in `frontend-nextjs/src/`. There is no separate backend — business logic runs as Next.js API routes on Vercel serverless functions.
+All code lives in `src/`. There is no separate backend — business logic runs as Next.js API routes on Vercel serverless functions.
 
 ## Key Features
 
@@ -42,7 +42,7 @@ All code lives in `frontend-nextjs/src/`. There is no separate backend — busin
 ## Project Structure
 
 ```
-frontend-nextjs/src/
+src/
 ├── app/
 │   ├── (auth)/              # Login, OAuth callback
 │   ├── (dashboard)/         # Protected pages
@@ -88,7 +88,7 @@ make ci-build    # Full CI build (npm ci + build)
 Build **must** pass before committing:
 
 ```bash
-cd frontend-nextjs && npm run build
+npm run build
 ```
 
 ## Deployment
