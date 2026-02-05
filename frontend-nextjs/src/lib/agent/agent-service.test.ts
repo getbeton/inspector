@@ -3,13 +3,13 @@ import { AgentService } from './agent-service';
 /**
  * Tests for AgentService.triggerAnalysis().
  *
- * The service fetches workspace details and PostHog credentials,
- * then fires two requests to the external Agent API:
+ * The service fetches workspace details, then fires two requests
+ * to the external Agent API:
  * 1. Create session  (POST /apps/.../sessions/...)
  * 2. Start run        (POST /run)
  *
- * Credentials must NOT appear in the prompt text — they are passed
- * in a separate `context` object.
+ * No credentials are sent to the agent — it uses Inspector callback
+ * routes which resolve credentials server-side.
  *
  * Session lifecycle is tracked via createSession() and updateSessionStatus().
  */
@@ -20,10 +20,6 @@ import { AgentService } from './agent-service';
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
-}));
-
-vi.mock('@/lib/integrations/credentials', () => ({
-  getIntegrationCredentials: vi.fn(),
 }));
 
 vi.mock('@/lib/agent/session', () => ({
@@ -41,11 +37,9 @@ vi.mock('@/lib/utils/logger', () => ({
 }));
 
 import { createClient } from '@/lib/supabase/server';
-import { getIntegrationCredentials } from '@/lib/integrations/credentials';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
 
 const mockCreateClient = createClient as ReturnType<typeof vi.fn>;
-const mockGetCreds = getIntegrationCredentials as ReturnType<typeof vi.fn>;
 const mockCreateSession = createSession as ReturnType<typeof vi.fn>;
 const mockUpdateSessionStatus = updateSessionStatus as ReturnType<typeof vi.fn>;
 
@@ -105,26 +99,9 @@ describe('AgentService.triggerAnalysis', () => {
       .rejects.toThrow('Workspace not found');
   });
 
-  it('throws when PostHog integration is not configured', async () => {
-    const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
-    mockCreateClient.mockResolvedValue(mock);
-    mockGetCreds.mockResolvedValue(null);
-
-    await expect(AgentService.triggerAnalysis('ws-no-posthog'))
-      .rejects.toThrow('PostHog integration required');
-  });
-
   it('creates session and triggers run on success', async () => {
     const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test-co' });
     mockCreateClient.mockResolvedValue(mock);
-    mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_test_key',
-      projectId: '12345',
-      host: 'https://us.posthog.com',
-      region: 'us',
-      isActive: true,
-      status: 'active',
-    });
     mockFetchSuccess();
 
     await AgentService.triggerAnalysis('ws-123');
@@ -148,19 +125,15 @@ describe('AgentService.triggerAnalysis', () => {
     const runCall = fetchCalls[1];
     expect(runCall.url).toBe('https://agent.test.com/run');
 
-    // Verify credentials are in context, NOT in the prompt text
+    // Verify context contains workspace info but NO credentials
     const runBody = JSON.parse(runCall.init.body as string);
-    expect(runBody.context.posthog.token).toBe('phx_test_key');
-    expect(runBody.context.posthog.project_id).toBe('12345');
     expect(runBody.context.workspace_id).toBe('ws-123');
-
-    // Verify session_id is in context
     expect(runBody.context.session_id).toMatch(/^s_/);
+    expect(runBody.context.inspector_callback_url).toBeDefined();
+    expect(runBody.context.posthog).toBeUndefined();
 
-    // Prompt should NOT contain the API key
+    // Prompt should contain the website URL
     const promptText = runBody.newMessage.parts[0].text;
-    expect(promptText).not.toContain('phx_test_key');
-    expect(promptText).not.toContain('12345');
     expect(promptText).toContain('https://example.com');
 
     // Session status should be updated to 'running' after successful fire
@@ -173,14 +146,6 @@ describe('AgentService.triggerAnalysis', () => {
   it('does not throw when agent API is unreachable (fire-and-forget)', async () => {
     const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
     mockCreateClient.mockResolvedValue(mock);
-    mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '999',
-      host: null,
-      region: null,
-      isActive: true,
-      status: 'active',
-    });
     mockFetchNetworkError();
 
     // Should not throw — agent errors are caught internally
@@ -194,14 +159,6 @@ describe('AgentService.triggerAnalysis', () => {
     vi.stubEnv('AGENT_API_URL', '');
     const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
     mockCreateClient.mockResolvedValue(mock);
-    mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '999',
-      host: null,
-      region: null,
-      isActive: true,
-      status: 'active',
-    });
     mockFetchSuccess();
 
     await AgentService.triggerAnalysis('ws-default');
@@ -213,14 +170,6 @@ describe('AgentService.triggerAnalysis', () => {
   it('continues even when session DB persistence fails', async () => {
     const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
     mockCreateClient.mockResolvedValue(mock);
-    mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '999',
-      host: null,
-      region: null,
-      isActive: true,
-      status: 'active',
-    });
     mockCreateSession.mockRejectedValue(new Error('DB write failed'));
     mockFetchSuccess();
 

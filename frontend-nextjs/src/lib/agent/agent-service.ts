@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server';
-import { getIntegrationCredentials } from '@/lib/integrations/credentials';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
 import { randomUUID } from 'crypto';
@@ -16,10 +15,9 @@ function getAgentApiUrl(): string {
 export class AgentService {
     /**
      * Triggers the Agent to start analysis for a workspace.
-     * Assumes PostHog integration and Website URL are present.
      *
-     * Credentials are passed in a separate `context` object in the payload
-     * rather than embedded in the prompt text to avoid exposure in agent logs.
+     * The agent calls back to Inspector API routes (sql-proxy, list-tables, etc.)
+     * which resolve credentials server-side — no secrets leave this backend.
      */
     static async triggerAnalysis(workspaceId: string) {
         log.info(`Triggering agent analysis for workspace: ${workspaceId}`);
@@ -44,14 +42,7 @@ export class AgentService {
             log.warn(`No website_url for workspace ${workspaceId}. Agent might fail.`);
         }
 
-        // 2. Get PostHog Credentials
-        const posthog = await getIntegrationCredentials(workspaceId, 'posthog');
-        if (!posthog) {
-            log.error(`PostHog integration not found for workspace ${workspaceId}`);
-            throw new Error('PostHog integration required');
-        }
-
-        // 3. Construct Payload
+        // 2. Construct Payload
         // Use workspace ID as unique user identifier for Agent session isolation
         const userId = workspaceId;
         // Use cryptographic random UUID instead of timestamp for unpredictable session IDs
@@ -65,8 +56,7 @@ export class AgentService {
             // Non-blocking: continue even if DB write fails
         }
 
-        // Keep the prompt text clean — no credentials embedded
-        const promptText = `Analyze website: '${workspace.website_url}'. Use the PostHog credentials provided in the context object. Return JSON only.`;
+        const promptText = `Analyze website: '${workspace.website_url}'. Use the Inspector callback URL to query PostHog data via proxy routes. Return JSON only.`;
 
         // 4. Create User/Session on Agent
         try {
@@ -77,7 +67,7 @@ export class AgentService {
                 body: JSON.stringify({ created_by: 'inspector_mvp' })
             });
 
-            // 5. Run Agent — credentials passed as structured context, not in prompt
+            // 5. Run Agent — no credentials sent; agent uses callback routes
             const runUrl = `${getAgentApiUrl()}/run`;
             const runPayload = {
                 appName: APP_NAME,
@@ -86,11 +76,6 @@ export class AgentService {
                 context: {
                     workspace_id: workspaceId,
                     session_id: sessionId,
-                    posthog: {
-                        token: posthog.apiKey,
-                        host: posthog.host || 'https://us.posthog.com',
-                        project_id: posthog.projectId,
-                    },
                     inspector_callback_url: process.env.NEXT_PUBLIC_VERCEL_URL
                         ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
                         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
