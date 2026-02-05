@@ -13,9 +13,10 @@ import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 
 export default function SignalsPage() {
   const { data: setupStatus } = useSetupStatus()
+  const isDemo = !setupStatus || !setupStatus.setupComplete
 
-  // Demo mode - using mock data (will connect to API in real mode)
-  const [signals] = useState<SignalData[]>(MOCK_SIGNALS)
+  // Show mock data when setup incomplete, empty when complete (real API TBD)
+  const signals: SignalData[] = isDemo ? MOCK_SIGNALS : []
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const [filters, setFilters] = useState<SignalFilters>({

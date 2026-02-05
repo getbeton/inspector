@@ -17,7 +17,8 @@ export default function MemoryPage() {
   const searchParams = useSearchParams()
 
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
-  const workspaceId = setupStatus?.workspaceId
+  const isDemo = !setupStatus || !setupStatus.setupComplete
+  const workspaceId = isDemo ? undefined : setupStatus?.workspaceId
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
 
