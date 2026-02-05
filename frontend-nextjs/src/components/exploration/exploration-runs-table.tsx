@@ -3,9 +3,15 @@
 import { Badge } from '@/components/ui/badge'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
+export type SortColumn = 'status' | 'started' | 'duration' | 'tables'
+export type SortDirection = 'asc' | 'desc'
+
 interface ExplorationRunsTableProps {
   sessions: ExplorationSession[]
   onSessionClick: (session: ExplorationSession) => void
+  sortBy?: SortColumn
+  sortDir?: SortDirection
+  onSortChange?: (column: SortColumn) => void
 }
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'error' | 'warning' | 'secondary'> = {
@@ -51,10 +57,30 @@ function truncateSessionId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 12)}…` : id
 }
 
-export function ExplorationRunsTable({ sessions, onSessionClick }: ExplorationRunsTableProps) {
+function SortIndicator({ column, sortBy, sortDir }: { column: SortColumn; sortBy?: SortColumn; sortDir?: SortDirection }) {
+  if (sortBy !== column) {
+    return <span className="ml-1 text-muted-foreground/40">↕</span>
+  }
+  return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+}
+
+export function ExplorationRunsTable({
+  sessions,
+  onSessionClick,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: ExplorationRunsTableProps) {
   if (sessions.length === 0) {
     return null
   }
+
+  const sortableColumns: { id: SortColumn; label: string }[] = [
+    { id: 'status', label: 'Status' },
+    { id: 'started', label: 'Started' },
+    { id: 'duration', label: 'Duration' },
+    { id: 'tables', label: 'Tables' },
+  ]
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -62,11 +88,22 @@ export function ExplorationRunsTable({ sessions, onSessionClick }: ExplorationRu
         <thead>
           <tr className="bg-muted/50 text-left text-sm text-muted-foreground">
             <th className="px-4 py-3 font-medium">Session</th>
-            <th className="px-4 py-3 font-medium">Status</th>
+            {sortableColumns.map((col) => (
+              <th key={col.id} className="px-4 py-3 font-medium">
+                {onSortChange ? (
+                  <button
+                    onClick={() => onSortChange(col.id)}
+                    className="inline-flex items-center hover:text-foreground transition-colors"
+                  >
+                    {col.label}
+                    <SortIndicator column={col.id} sortBy={sortBy} sortDir={sortDir} />
+                  </button>
+                ) : (
+                  col.label
+                )}
+              </th>
+            ))}
             <th className="px-4 py-3 font-medium">Agent</th>
-            <th className="px-4 py-3 font-medium">Started</th>
-            <th className="px-4 py-3 font-medium">Duration</th>
-            <th className="px-4 py-3 font-medium">Tables</th>
           </tr>
         </thead>
         <tbody>
@@ -87,9 +124,6 @@ export function ExplorationRunsTable({ sessions, onSessionClick }: ExplorationRu
                 </Badge>
               </td>
               <td className="px-4 py-3 text-sm text-muted-foreground">
-                {session.agent_app_name || '—'}
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground">
                 {formatRelativeTime(session.created_at)}
               </td>
               <td className="px-4 py-3 text-sm text-muted-foreground">
@@ -97,6 +131,9 @@ export function ExplorationRunsTable({ sessions, onSessionClick }: ExplorationRu
               </td>
               <td className="px-4 py-3 text-sm text-muted-foreground">
                 {session.eda_count}
+              </td>
+              <td className="px-4 py-3 text-sm text-muted-foreground">
+                {session.agent_app_name || '—'}
               </td>
             </tr>
           ))}

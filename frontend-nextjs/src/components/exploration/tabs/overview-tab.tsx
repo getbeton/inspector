@@ -1,6 +1,5 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
 interface OverviewTabProps {
@@ -25,25 +24,11 @@ function formatDuration(startedAt: string | null, completedAt: string | null): s
   return `${mins}m ${remainingSecs}s`
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'error' | 'warning' | 'secondary'> = {
-  created: 'secondary',
-  running: 'warning',
-  completed: 'success',
-  failed: 'error',
-  closed: 'secondary',
-}
-
 export function OverviewTab({ session }: OverviewTabProps) {
   return (
     <div className="space-y-6">
-      {/* Status & Timing */}
+      {/* Timing */}
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-1">Status</h4>
-          <Badge variant={STATUS_VARIANT[session.status] || 'secondary'} size="lg">
-            {session.status}
-          </Badge>
-        </div>
         <div>
           <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
           <p className="text-sm">{formatDate(session.created_at)}</p>

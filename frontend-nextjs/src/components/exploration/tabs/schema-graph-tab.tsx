@@ -15,10 +15,12 @@ import '@xyflow/react/dist/style.css'
 import { TableNode, type TableNodeData } from '../schema/table-node'
 import { useSessionEdaResults } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession, JoinPair } from '@/lib/api/explorations'
+import type { EdaResult } from '@/lib/agent/types'
 
 interface SchemaGraphTabProps {
   workspaceId: string | undefined
   session: ExplorationSession
+  edaResults?: EdaResult[]
 }
 
 const nodeTypes = { tableNode: TableNode }
@@ -99,8 +101,13 @@ function buildGraph(
   return { nodes, edges }
 }
 
-export function SchemaGraphTab({ workspaceId, session }: SchemaGraphTabProps) {
-  const { data: edaResults = [], isLoading } = useSessionEdaResults(workspaceId, session.session_id)
+export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
+  const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
+    externalEdaResults ? undefined : workspaceId,
+    externalEdaResults ? undefined : session.session_id,
+  )
+  const edaResults = externalEdaResults ?? fetchedEdaResults
+  const isLoading = externalEdaResults ? false : fetchLoading
 
   const { initialNodes, initialEdges } = useMemo(() => {
     const { nodes, edges } = buildGraph(edaResults, session.confirmed_joins)
