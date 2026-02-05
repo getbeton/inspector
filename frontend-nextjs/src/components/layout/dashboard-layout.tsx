@@ -16,6 +16,18 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('sidebar-collapsed') === 'true'
+  })
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('sidebar-collapsed', String(next))
+      return next
+    })
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -27,11 +39,12 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
         />
       )}
 
-      {/* Sidebar - always visible on desktop, slide-in on mobile */}
+      {/* Sidebar - toggle on desktop, slide-in on mobile */}
       <Sidebar
         className={`
-          fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0
+          fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${sidebarCollapsed ? 'lg:hidden' : 'lg:relative lg:translate-x-0'}
         `}
         onClose={() => setSidebarOpen(false)}
       />
@@ -41,7 +54,12 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
         {/* Threshold warning banner (sticky) */}
         <DashboardThresholdBanner />
 
-        <Header user={user} onMenuClick={() => setSidebarOpen(true)} />
+        <Header
+          user={user}
+          onMenuClick={() => setSidebarOpen(true)}
+          onToggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+        />
 
         {/* Page content */}
         <main className="flex-1 overflow-auto p-6">

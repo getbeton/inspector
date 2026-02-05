@@ -37,7 +37,8 @@ task_logs/
 test.db
 
 # Local-only Claude config
-.claude/
+.claude/settings.local.json
+.claude/plans/
 .mcp.json
 CLAUDE.md
 

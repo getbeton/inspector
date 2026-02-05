@@ -14,9 +14,11 @@ interface HeaderProps {
   }
   className?: string
   onMenuClick?: () => void
+  onToggleSidebar?: () => void
+  sidebarCollapsed?: boolean
 }
 
-export function Header({ user, className, onMenuClick }: HeaderProps) {
+export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarCollapsed }: HeaderProps) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -63,10 +65,16 @@ export function Header({ user, className, onMenuClick }: HeaderProps) {
     <header className={cn('h-16 bg-card border-b border-border flex items-center justify-between px-6', className)}>
       {/* Left side - Page title or breadcrumb */}
       <div className="flex items-center gap-4">
-        {/* Mobile menu button - hidden on desktop */}
+        {/* Sidebar toggle button - works on both mobile and desktop */}
         <button
-          onClick={onMenuClick}
-          className="lg:hidden p-2 -ml-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
+          onClick={() => {
+            if (window.matchMedia('(min-width: 1024px)').matches) {
+              onToggleSidebar?.()
+            } else {
+              onMenuClick?.()
+            }
+          }}
+          className="p-2 -ml-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />

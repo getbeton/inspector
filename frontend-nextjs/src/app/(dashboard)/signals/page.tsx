@@ -7,11 +7,16 @@ import { Card, CardContent } from '@/components/ui/card'
 import { SignalFiltersBar, type SignalFilters } from '@/components/signals/signal-filters'
 import { SignalsTable } from '@/components/signals/signals-table'
 import { BulkActions } from '@/components/signals/bulk-actions'
+import { SetupBanner } from '@/components/setup'
+import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 
 export default function SignalsPage() {
-  // Demo mode - using mock data (will connect to API in real mode)
-  const [signals] = useState<SignalData[]>(MOCK_SIGNALS)
+  const { data: setupStatus } = useSetupStatus()
+  const isDemo = !setupStatus || !setupStatus.setupComplete
+
+  // Show mock data when setup incomplete, empty when complete (real API TBD)
+  const signals: SignalData[] = isDemo ? MOCK_SIGNALS : []
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const [filters, setFilters] = useState<SignalFilters>({
@@ -124,6 +129,9 @@ export default function SignalsPage() {
         </Link>
       </div>
 
+      {/* Setup Banner */}
+      {setupStatus && <SetupBanner setupStatus={setupStatus} />}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -150,19 +158,6 @@ export default function SignalsPage() {
             <p className="text-sm text-muted-foreground">Est. ARR</p>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Demo Mode Banner */}
-      <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg flex items-center gap-2">
-        <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span className="text-sm">
-          Demo mode active - Viewing sample signals. Connect your integrations for real data.
-        </span>
-        <Link href="/" className="ml-auto text-sm font-medium hover:underline">
-          Setup Integrations
-        </Link>
       </div>
 
       {/* Filters */}
