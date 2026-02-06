@@ -1,7 +1,26 @@
 {
   "name": "beton-inspector",
   "version": "0.1.0",
-  "private": true,
+  "private": true, 
+  "license": "AGPL-3.0",
+  "author": "PGS Scheben, Inc. <support@getbeton.ai>",
+  "homepage": "https://getbeton.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getbeton/inspector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/getbeton/inspector/issues"
+  },
+  "keywords": [
+    "beton",
+    "inspector",
+    "revops",
+    "revenue intelligence"
+    "product-led sales",
+    "product-led growth",
+    "platform"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
