@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 docker-compose up -d
 
 # Start Next.js dev server
-cd frontend-nextjs && npm run dev
+npm run dev
 
 # View Docker logs
 docker-compose logs -f
@@ -42,7 +42,7 @@ make setup
 **ALWAYS run the local build before creating any commit.** This catches TypeScript errors, import issues, and other problems that CI would catch later.
 
 ```bash
-cd frontend-nextjs && npm run build
+npm run build
 ```
 
 This is a **blocking requirement** - do not commit code that fails the local build. The CI pipeline will reject PRs with build failures, so catching them early saves time and review cycles.
@@ -118,7 +118,7 @@ Tables managed via Supabase migrations:
 
 ### Project Structure
 ```
-frontend-nextjs/src/
+src/
 ├── app/
 │   ├── (auth)/              # Auth pages (login, callback)
 │   ├── (dashboard)/         # Protected app pages
@@ -257,7 +257,6 @@ Database schema is managed via Supabase:
 **Problem**: TypeScript errors or missing dependencies.
 **Solution**:
 ```bash
-cd frontend-nextjs
 npm install
 npm run build
 ```

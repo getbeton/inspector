@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { Suspense, useState, useMemo, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
@@ -30,6 +30,18 @@ function getDurationMs(session: ExplorationSession): number {
 }
 
 export default function MemoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <MemoryPageContent />
+    </Suspense>
+  )
+}
+
+function MemoryPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 

@@ -23,6 +23,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/react-query": "^5.90.12",
+    "@xyflow/react": "^12.10.0",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
