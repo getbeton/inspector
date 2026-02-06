@@ -42,6 +42,9 @@ task_logs/
 .mcp.json
 CLAUDE.md
 
+# Supabase CLI temp files
+supabase/.temp/
+
 # Vercel
 .vercel
 
