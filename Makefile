@@ -19,25 +19,25 @@ logs:
 # Next.js Development
 # -----------------------------------------------------------------------------
 dev:
-	cd frontend-nextjs && npm run dev
+	npm run dev
 
 test:
-	cd frontend-nextjs && npm test
+	npm test
 
 lint:
-	cd frontend-nextjs && npm run lint
+	npm run lint
 
 typecheck:
-	cd frontend-nextjs && npx tsc --noEmit
+	npx tsc --noEmit
 
 # -----------------------------------------------------------------------------
 # Build (CI/CD compatible)
 # -----------------------------------------------------------------------------
 ci-build:
-	cd frontend-nextjs && npm ci && npm run build
+	npm ci && npm run build
 
 # -----------------------------------------------------------------------------
 # Setup
 # -----------------------------------------------------------------------------
 setup:
-	cd frontend-nextjs && npm install
+	npm install

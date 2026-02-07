@@ -5,52 +5,112 @@ RevOps intelligence platform for B2B SaaS. Detects product usage signals, scores
 ## Quick Start
 
 ```bash
-# Local development with Docker
-docker-compose up -d
-# Frontend: http://localhost:3000
-# Backend:  http://localhost:8000
+# Install dependencies
+make setup
+
+# Start Next.js dev server
+make dev
+# → http://localhost:3000
+
+# Or use Docker (includes local PostgreSQL)
+make up
 ```
 
 ## Architecture
 
-| Component | Tech | Location |
-|-----------|------|----------|
-| Frontend | Next.js 16 | `/frontend-nextjs` |
-| Backend | FastAPI | `/backend` |
-| Database | PostgreSQL (Supabase) | - |
-| Auth | Supabase OAuth + Sessions | - |
-| Deployment | Railway | staging/production |
+| Component | Tech | Details |
+|-----------|------|---------|
+| Application | Next.js 16 (TypeScript) | Full-stack — pages + API routes |
+| Database | PostgreSQL (Supabase) | RLS-secured, multi-tenant |
+| Auth | Supabase OAuth (PKCE) | Session cookies, workspace context |
+| Deployment | Vercel | Production, staging, preview envs |
+| State | Zustand + React Query | Client state + server cache |
+| Testing | Vitest + Playwright | Unit + E2E |
+
+All code lives in `src/`. There is no separate backend — business logic runs as Next.js API routes on Vercel serverless functions.
 
 ## Key Features
 
-- **Signal Detection**: 20+ product usage signals (trial intent, power users, etc.)
-- **Account Scoring**: Health, expansion, churn risk (0-100 scale)
-- **Integrations**: PostHog, Stripe, Apollo, Attio
-- **Multi-tenant**: Workspace-based isolation
+- **Signal Detection** — 20+ product usage signal detectors (trial intent, power users, etc.)
+- **Account Scoring** — Health, expansion, and churn risk scores (0–100 scale, concrete grades)
+- **Data sources** — (PostHog DWH)[https://posthog.com]
+- **Integrations** — (Attio)[https://attio.com]
+- **Billing** — Stripe metered billing. Can be turned off with an env variable
+- **Multi-tenant** — Workspace-based isolation with Row Level Security
+- **Cron Jobs** — Signal detection, MTU tracking, threshold notifications (Vercel Cron)
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── (auth)/              # Login, OAuth callback
+│   ├── (dashboard)/         # Protected pages
+│   │   ├── page.tsx         #   Home / Setup
+│   │   ├── signals/         #   Signal list, detail, create
+│   │   ├── identities/      #   Account directory
+│   │   └── settings/        #   Integration config
+│   └── api/                 # ~40 API route handlers
+│       ├── auth/            #   Login, logout, API keys
+│       ├── billing/         #   Stripe setup, portal, MTU
+│       ├── cron/            #   Scheduled jobs
+│       ├── heuristics/      #   Score calculation
+│       ├── integrations/    #   Connection management
+│       ├── signals/         #   Signal CRUD + dashboard
+│       └── webhooks/        #   Stripe webhooks
+├── components/
+│   ├── ui/                  # Base UI primitives (base-ui + CVA)
+│   ├── layout/              # Sidebar, navigation
+│   ├── signals/             # Signal-specific components
+│   ├── billing/             # Stripe / billing UI
+│   ├── charts/              # Recharts visualizations
+│   └── setup/               # Onboarding wizard
+└── lib/
+    ├── api/                 # React Query hooks & API clients
+    ├── heuristics/          # Signal detection & scoring engine
+    │   └── signals/detectors/  # 20+ signal detectors
+    ├── integrations/        # PostHog, Stripe, Apollo, Attio clients
+    ├── supabase/            # Client helpers + auto-generated types
+    ├── store/               # Zustand state management
+    └── services/            # Business logic layer
+```
 
 ## Development
 
 ```bash
-# Run migrations
-docker-compose exec backend alembic upgrade head
+make dev         # Start dev server
+make test        # Run unit tests (Vitest)
+make lint        # ESLint
+make typecheck   # TypeScript check
+make ci-build    # Full CI build (npm ci + build)
+```
 
-# Run tests
-make py-test
+Build **must** pass before committing:
+
+```bash
+npm run build
 ```
 
 ## Deployment
 
 ```
-feature branch → PR → staging → PR → main (production)
+feature/*  →  PR  →  staging  →  PR  →  main
+   │                    │                  │
+Preview env        Staging env       Production env
+(staging DB)       (staging DB)      (production DB)
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full runbook.
-See [CLAUDE.md](CLAUDE.md) for detailed development guide.
+All environments deploy automatically on Vercel. Feature branches and staging share the staging Supabase database; only `main` connects to production.
 
-## Environment
+## Environment Variables
 
-Key variables (see `.env.example`):
-- `DATABASE_URL` - Supabase PostgreSQL
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY` - OAuth
-- `FRONTEND_URL` - For redirects
-- `API_URL` - Backend internal URL (Railway)
+```bash
+# Required
+NEXT_PUBLIC_SUPABASE_URL=     # Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY= # Supabase anon key (client-safe)
+SUPABASE_SERVICE_ROLE_KEY=    # Service role key (server-only)
+# Cron
+CRON_SECRET=                  # Vercel Cron auth
+```
+
+See [CLAUDE.md](CLAUDE.md) for detailed development patterns and architecture docs.
