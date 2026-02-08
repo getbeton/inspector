@@ -9,19 +9,23 @@ import { ProgressIndicator } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
+import { AttioFieldMappingStep } from "./steps/AttioFieldMappingStep";
+import { WebsiteStep } from "./steps/WebsiteStep";
 
 /**
  * Wizard step identifiers
  */
-type WizardStep = "posthog" | "billing" | "attio" | "complete";
+type WizardStep = "posthog" | "attio" | "attio_mapping" | "website" | "billing" | "complete";
 
 /**
  * Step display labels for the progress indicator
  */
 const STEP_LABELS: Record<WizardStep, string> = {
   posthog: "PostHog",
-  billing: "Billing",
   attio: "Attio",
+  attio_mapping: "Field Mapping",
+  website: "Website",
+  billing: "Billing",
   complete: "Complete",
 };
 
@@ -39,6 +43,10 @@ export interface SetupWizardProps {
     billing: { configured: boolean };
   };
   /**
+   * Pre-detected website URL from auth callback domain detection
+   */
+  websiteUrl?: string | null;
+  /**
    * Optional CSS class for the container
    */
   className?: string;
@@ -48,9 +56,11 @@ export interface SetupWizardProps {
  * Main setup wizard container component
  *
  * Orchestrates the multi-step onboarding flow:
- * - PostHog connection (required)
- * - Billing setup (cloud mode only, skipped for self-hosted)
- * - Attio CRM connection (required)
+ * 1. PostHog connection (required)
+ * 2. Attio CRM connection (required)
+ * 3. Attio field mapping (new — maps Beton fields to Attio attributes)
+ * 4. Website confirmation (new — pre-filled from email domain)
+ * 5. Billing setup (cloud mode only)
  *
  * Features:
  * - State machine for step transitions
@@ -61,6 +71,7 @@ export interface SetupWizardProps {
 export function SetupWizard({
   billingEnabled = false,
   setupStatus,
+  websiteUrl,
   className,
 }: SetupWizardProps) {
   const router = useRouter();
@@ -70,6 +81,7 @@ export function SetupWizard({
     if (!setupStatus) return "posthog";
     if (!setupStatus.integrations.posthog) return "posthog";
     if (!setupStatus.integrations.attio) return "attio";
+    // After Attio is connected, proceed to mapping → website → billing
     if (billingEnabled && !setupStatus.billing.configured) return "billing";
     return "complete";
   };
@@ -82,14 +94,15 @@ export function SetupWizard({
 
   /**
    * Compute the list of steps based on billing mode
-   * Self-hosted: PostHog → Attio
-   * Cloud: PostHog → Attio → Billing
+   * Cloud: PostHog → Attio → Field Mapping → Website → Billing
+   * Self-hosted: PostHog → Attio → Field Mapping → Website
    */
   const steps = useMemo(() => {
+    const base: WizardStep[] = ["posthog", "attio", "attio_mapping", "website"];
     if (billingEnabled) {
-      return ["posthog", "attio", "billing"] as WizardStep[];
+      base.push("billing");
     }
-    return ["posthog", "attio"] as WizardStep[];
+    return base;
   }, [billingEnabled]);
 
   /**
@@ -119,44 +132,60 @@ export function SetupWizard({
   );
 
   /**
+   * Advance to next step or finish
+   */
+  const advanceFrom = useCallback(
+    (step: WizardStep) => {
+      trackSetupStepCompleted(step);
+      const next = getNextStep(step);
+      if (next === "complete") {
+        trackOnboardingCompleted();
+        router.push("/signals");
+      } else {
+        setCurrentStep(next);
+      }
+    },
+    [getNextStep, router]
+  );
+
+  /**
    * Handle PostHog step completion
    */
   const handlePostHogSuccess = useCallback(
     (data: { mtuCount: number; region: string }) => {
       setMtuCount(data.mtuCount);
-      trackSetupStepCompleted("posthog");
-      setCurrentStep(getNextStep("posthog"));
+      advanceFrom("posthog");
     },
-    [getNextStep]
+    [advanceFrom]
   );
-
-  /**
-   * Handle Billing step completion
-   */
-  const handleBillingComplete = useCallback(() => {
-    trackSetupStepCompleted("billing");
-    const next = getNextStep("billing");
-    if (next === "complete") {
-      trackOnboardingCompleted();
-      router.push("/signals");
-    } else {
-      setCurrentStep(next);
-    }
-  }, [getNextStep, router]);
 
   /**
    * Handle Attio step completion
    */
   const handleAttioSuccess = useCallback(() => {
-    trackSetupStepCompleted("attio");
-    const next = getNextStep("attio");
-    if (next === "complete") {
-      trackOnboardingCompleted();
-      router.push("/signals");
-    } else {
-      setCurrentStep(next);
-    }
-  }, [getNextStep, router]);
+    advanceFrom("attio");
+  }, [advanceFrom]);
+
+  /**
+   * Handle Attio field mapping completion
+   */
+  const handleFieldMappingSuccess = useCallback(() => {
+    advanceFrom("attio_mapping");
+  }, [advanceFrom]);
+
+  /**
+   * Handle Website step completion
+   */
+  const handleWebsiteSuccess = useCallback(() => {
+    advanceFrom("website");
+  }, [advanceFrom]);
+
+  /**
+   * Handle Billing step completion
+   */
+  const handleBillingComplete = useCallback(() => {
+    advanceFrom("billing");
+  }, [advanceFrom]);
 
   /**
    * Render the current step content
@@ -165,10 +194,14 @@ export function SetupWizard({
     switch (currentStep) {
       case "posthog":
         return <PostHogStep onSuccess={handlePostHogSuccess} />;
-      case "billing":
-        return <BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />;
       case "attio":
         return <AttioStep onSuccess={handleAttioSuccess} />;
+      case "attio_mapping":
+        return <AttioFieldMappingStep onSuccess={handleFieldMappingSuccess} />;
+      case "website":
+        return <WebsiteStep initialUrl={websiteUrl} onSuccess={handleWebsiteSuccess} />;
+      case "billing":
+        return <BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />;
       case "complete":
         return null;
       default:
