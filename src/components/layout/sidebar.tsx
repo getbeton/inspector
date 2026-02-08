@@ -89,9 +89,9 @@ const navEntries: NavEntry[] = [
     icon: icons.memory,
     basePath: '/memory',
     children: [
-      { href: '/memory', label: 'Exploration Logs' },
-      { href: '/memory/assumptions', label: 'Website Assumptions' },
-      { href: '/memory/db-structure', label: 'DB Structure' },
+      { href: '/memory', label: 'Logs' },
+      { href: '/memory/assumptions', label: 'Business Model' },
+      { href: '/memory/db-structure', label: 'DB & Joins' },
     ],
   },
   {
@@ -100,7 +100,6 @@ const navEntries: NavEntry[] = [
     basePath: '/settings',
     children: [
       { href: '/settings', label: 'Integrations' },
-      { href: '/settings/sync', label: 'Sync Status' },
       { href: '/settings/billing', label: 'Billing' },
       { href: '/settings/workspace', label: 'Workspace' },
       { href: '/settings/danger-zone', label: 'Danger Zone' },
@@ -308,7 +307,7 @@ function NavSectionItem({
   )
 
   // Special case: /settings exactly should highlight Integrations (first child)
-  // and /memory exactly should highlight Exploration Logs (first child)
+  // and /memory exactly should highlight Logs (first child)
 
   return (
     <div>

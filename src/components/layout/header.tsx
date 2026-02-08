@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils/cn'
 import { resetIdentity } from '@/lib/analytics'
-import { useAllSyncStatuses, useTriggerSync } from '@/lib/hooks/use-sync-status'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 
 interface HeaderProps {
@@ -24,10 +24,25 @@ interface HeaderProps {
 /**
  * Quick action buttons in header — Sync Data + Add Signal.
  * Only visible when setup is complete. Hidden on mobile.
+ *
+ * "Sync Data" invalidates all mounted React Query caches, causing each
+ * visible page to refetch its own data from Beton's API. This is page-specific
+ * by design — only queries rendered on screen actually refetch.
  */
 function HeaderQuickActions() {
   const { data: setupStatus } = useSetupStatus()
-  const triggerSync = useTriggerSync()
+  const queryClient = useQueryClient()
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const handleSync = useCallback(async () => {
+    setIsSyncing(true)
+    try {
+      await queryClient.invalidateQueries()
+    } finally {
+      // Brief visual feedback so the user sees something happened
+      setTimeout(() => setIsSyncing(false), 600)
+    }
+  }, [queryClient])
 
   if (!setupStatus?.setupComplete) return null
 
@@ -36,12 +51,12 @@ function HeaderQuickActions() {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => triggerSync.mutate({ syncType: 'posthog_events' })}
-        disabled={triggerSync.isPending}
+        onClick={handleSync}
+        disabled={isSyncing}
         className="gap-1.5"
       >
         <svg
-          className={cn('w-3.5 h-3.5', triggerSync.isPending && 'animate-spin')}
+          className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin')}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -49,7 +64,7 @@ function HeaderQuickActions() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        {triggerSync.isPending ? 'Syncing...' : 'Sync Data'}
+        {isSyncing ? 'Syncing...' : 'Sync Data'}
       </Button>
       <Link href="/signals/new">
         <Button size="sm" className="gap-1.5">
@@ -60,42 +75,6 @@ function HeaderQuickActions() {
         </Button>
       </Link>
     </div>
-  )
-}
-
-/**
- * Sync health indicator — green if all syncs are recent, yellow if stale (>24h), red if any failed.
- */
-function SyncHealthDot() {
-  const { data: statuses } = useAllSyncStatuses()
-
-  if (!statuses || statuses.length === 0) return null
-
-  const now = Date.now()
-  const hasFailure = statuses.some(s => s.status === 'failed')
-  const hasStale = statuses.some(s => {
-    const lastTime = s.completed_at || s.started_at
-    if (!lastTime) return true
-    return now - new Date(lastTime).getTime() > 24 * 60 * 60 * 1000
-  })
-
-  const color = hasFailure ? 'bg-destructive' : hasStale ? 'bg-warning' : 'bg-success'
-  const label = hasFailure ? 'Sync error' : hasStale ? 'Sync stale' : 'Syncs healthy'
-
-  return (
-    <Link
-      href="/settings/sync"
-      className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
-      title={label}
-    >
-      <div className="relative">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        <span className={cn('absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card', color)} />
-      </div>
-    </Link>
   )
 }
 
@@ -173,9 +152,6 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
       <div className="flex items-center gap-2">
         {/* Quick actions — only visible post-setup, hidden on mobile */}
         <HeaderQuickActions />
-
-        {/* Sync health indicator */}
-        <SyncHealthDot />
 
         {/* Notifications placeholder */}
         <button className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors">
