@@ -8,11 +8,14 @@ import { SignalFiltersBar, type SignalFilters } from '@/components/signals/signa
 import { SignalsTable } from '@/components/signals/signals-table'
 import { BulkActions } from '@/components/signals/bulk-actions'
 import { SetupBanner } from '@/components/setup'
+import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
+import { useDemoMode } from '@/lib/hooks/use-demo-mode'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 
 export default function SignalsPage() {
   const { data: setupStatus } = useSetupStatus()
+  const { isDemoMode } = useDemoMode()
   const isDemo = !setupStatus || !setupStatus.setupComplete
 
   // Show mock data when setup incomplete, empty when complete (real API TBD)
@@ -129,8 +132,9 @@ export default function SignalsPage() {
         </Link>
       </div>
 
-      {/* Setup Banner */}
-      {setupStatus && <SetupBanner setupStatus={setupStatus} />}
+      {/* Demo / Setup Banner */}
+      {isDemoMode && <DemoBanner />}
+      {setupStatus && !isDemoMode && <SetupBanner setupStatus={setupStatus} />}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

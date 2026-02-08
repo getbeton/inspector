@@ -1,55 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SetupWizard } from '@/components/setup'
-
-interface SetupStatus {
-  setupComplete: boolean
-  integrations: {
-    posthog: boolean
-    attio: boolean
-  }
-  billing: {
-    required: boolean
-    configured: boolean
-    status: string | null
-  }
-}
+import { PreSetupView } from '@/components/home/PreSetupView'
+import { WorkspaceSummary } from '@/components/home/WorkspaceSummary'
+import { useSetupStatus } from '@/lib/hooks/use-setup-status'
+import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { useEffect } from 'react'
 
 export default function DashboardHomePage() {
   const router = useRouter()
-  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: setupStatus, isLoading, error } = useSetupStatus()
+  const { isDemoMode } = useDemoMode()
 
+  // If demo mode is active and setup isn't complete, redirect to signals
   useEffect(() => {
-    async function checkSetupStatus() {
-      try {
-        const response = await fetch('/api/workspace/setup-status')
-
-        if (!response.ok) {
-          throw new Error('Failed to check setup status')
-        }
-
-        const data: SetupStatus = await response.json()
-        setSetupStatus(data)
-
-        // If setup is complete, redirect to signals page
-        if (data.setupComplete) {
-          router.replace('/signals')
-          return
-        }
-      } catch (err) {
-        console.error('Error checking setup status:', err)
-        setError(err instanceof Error ? err.message : 'An error occurred')
-      } finally {
-        setIsLoading(false)
-      }
+    if (!isLoading && isDemoMode && !setupStatus?.setupComplete) {
+      router.replace('/signals')
     }
-
-    checkSetupStatus()
-  }, [router])
+  }, [isLoading, isDemoMode, setupStatus?.setupComplete, router])
 
   // Loading state
   if (isLoading) {
@@ -84,7 +53,7 @@ export default function DashboardHomePage() {
             </svg>
           </div>
           <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
+          <p className="text-muted-foreground mb-4">{error.message}</p>
           <button
             onClick={() => window.location.reload()}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
@@ -96,17 +65,35 @@ export default function DashboardHomePage() {
     )
   }
 
-  // Setup not complete - show wizard
-  // If we're here and not redirecting, setup is not complete
+  // State A: Setup complete → show dashboard
+  if (setupStatus?.setupComplete) {
+    return <WorkspaceSummary />
+  }
+
+  // State B: Demo mode active → redirecting to /signals (handled by useEffect above)
+  if (isDemoMode) {
+    return null
+  }
+
+  // State C: Has started setup (at least one integration connected) → show wizard
+  if (setupStatus?.integrations.posthog || setupStatus?.integrations.attio) {
+    return (
+      <div className="max-w-2xl mx-auto py-8">
+        <SetupWizard
+          billingEnabled={setupStatus?.billing?.required ?? false}
+          setupStatus={setupStatus ? {
+            integrations: setupStatus.integrations,
+            billing: { configured: setupStatus.billing.configured },
+          } : undefined}
+        />
+      </div>
+    )
+  }
+
+  // State D: Brand new user → show pre-setup view
   return (
     <div className="max-w-2xl mx-auto py-8">
-      <SetupWizard
-        billingEnabled={setupStatus?.billing?.required ?? false}
-        setupStatus={setupStatus ? {
-          integrations: setupStatus.integrations,
-          billing: { configured: setupStatus.billing.configured },
-        } : undefined}
-      />
+      <PreSetupView />
     </div>
   )
 }
