@@ -45,12 +45,17 @@ export async function GET(
       })
     }
 
+    // Mask API key — never return full secret to the browser
+    const maskedKey = credentials.apiKey
+      ? `${credentials.apiKey.substring(0, 8)}...${credentials.apiKey.substring(credentials.apiKey.length - 4)}`
+      : null
+
     return NextResponse.json({
       integration: name,
       status: credentials.status,
       isActive: credentials.isActive,
       credentials: {
-        apiKey: credentials.apiKey,
+        apiKey: maskedKey,
         projectId: credentials.projectId,
         region: credentials.region,
         host: credentials.host,

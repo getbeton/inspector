@@ -75,28 +75,26 @@ export async function GET(request: NextRequest) {
     const to = from + limit - 1
     query = query.range(from, to)
 
-    const { data: signals, error, count } = await query
+    // Run both queries in parallel — aggregates don't depend on signal results
+    const [signalsResult, aggregatesResult] = await Promise.all([
+      query,
+      supabase
+        .from('signal_aggregates')
+        .select('*')
+        .eq('workspace_id', membership.workspaceId) as unknown as Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>,
+    ])
+
+    const { data: signals, error, count } = signalsResult
 
     if (error) {
       console.error('Error fetching signals:', error)
       return NextResponse.json({ error: 'Failed to fetch signals' }, { status: 500 })
     }
 
-    // Fetch aggregated metrics for all signal types in this workspace
-    const signalTypes = [...new Set((signals || []).map((s: { type: string }) => s.type))]
-    let aggregatesMap: Record<string, Record<string, unknown>> = {}
-
-    if (signalTypes.length > 0) {
-      const { data: aggregates } = await supabase
-        .from('signal_aggregates')
-        .select('*')
-        .eq('workspace_id', membership.workspaceId)
-        .in('signal_type', signalTypes) as { data: Array<Record<string, unknown>> | null; error: unknown }
-
-      if (aggregates) {
-        for (const agg of aggregates) {
-          aggregatesMap[agg.signal_type as string] = agg
-        }
+    const aggregatesMap: Record<string, Record<string, unknown>> = {}
+    if (aggregatesResult.data) {
+      for (const agg of aggregatesResult.data) {
+        aggregatesMap[agg.signal_type as string] = agg
       }
     }
 

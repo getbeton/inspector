@@ -99,78 +99,39 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Background sync execution
+// ---------------------------------------------------------------------------
+
+const CRON_ENDPOINTS: Record<SyncType, string> = {
+  signal_detection: '/api/cron/signal-detection',
+  mtu_tracking: '/api/cron/mtu-tracking',
+  sync_signals: '/api/cron/sync-signals',
+  posthog_events: '/api/cron/signal-detection',
+}
+
+async function callCronEndpoint(syncType: SyncType): Promise<Record<string, unknown>> {
+  const cronSecret = process.env.CRON_SECRET
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
+  const res = await fetch(`${baseUrl}${CRON_ENDPOINTS[syncType]}`, {
+    method: 'GET',
+    headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
+  })
+  return res.ok ? await res.json() : { error: `Cron returned ${res.status}` }
+}
+
 /**
  * Execute the sync work and update the log entry on completion.
  * This runs asynchronously after the HTTP response is sent.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeSyncInBackground(supabase: any, logId: string, workspaceId: string, syncType: SyncType) {
+async function executeSyncInBackground(supabase: any, logId: string, _workspaceId: string, syncType: SyncType) {
   const startTime = Date.now()
 
   try {
-    let result: Record<string, unknown> = {}
-
-    switch (syncType) {
-      case 'signal_detection': {
-        // Trigger signal detection for this workspace via the internal cron endpoint logic
-        // For now, we call the cron endpoint with the cron secret
-        const cronSecret = process.env.CRON_SECRET
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
-        const res = await fetch(`${baseUrl}/api/cron/signal-detection`, {
-          method: 'GET',
-          headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
-        })
-        result = res.ok ? await res.json() : { error: `Cron returned ${res.status}` }
-        break
-      }
-
-      case 'mtu_tracking': {
-        const cronSecret = process.env.CRON_SECRET
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
-        const res = await fetch(`${baseUrl}/api/cron/mtu-tracking`, {
-          method: 'GET',
-          headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
-        })
-        result = res.ok ? await res.json() : { error: `Cron returned ${res.status}` }
-        break
-      }
-
-      case 'sync_signals': {
-        const cronSecret = process.env.CRON_SECRET
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
-        const res = await fetch(`${baseUrl}/api/cron/sync-signals`, {
-          method: 'GET',
-          headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
-        })
-        result = res.ok ? await res.json() : { error: `Cron returned ${res.status}` }
-        break
-      }
-
-      case 'posthog_events': {
-        // Direct sync: fetch fresh events from PostHog, then run signal detection
-        const cronSecret = process.env.CRON_SECRET
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000'
-
-        const res = await fetch(`${baseUrl}/api/cron/signal-detection`, {
-          method: 'GET',
-          headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
-        })
-        result = res.ok ? await res.json() : { error: `Cron returned ${res.status}` }
-        break
-      }
-    }
-
+    const result = await callCronEndpoint(syncType)
     const durationMs = Date.now() - startTime
 
     await supabase

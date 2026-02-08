@@ -74,6 +74,17 @@ async function handleCreateCustomSignal(
     throw new InvalidQueryError('name and event_name are required')
   }
 
+  // Validate event_name format to prevent injection
+  if (!/^[\w.$\-/:]+$/.test(body.event_name)) {
+    throw new InvalidQueryError('event_name contains invalid characters')
+  }
+  if (body.condition_value !== undefined && (typeof body.condition_value !== 'number' || body.condition_value < 0)) {
+    throw new InvalidQueryError('condition_value must be a non-negative number')
+  }
+  if (body.time_window_days !== undefined && (typeof body.time_window_days !== 'number' || body.time_window_days < 1 || body.time_window_days > 365)) {
+    throw new InvalidQueryError('time_window_days must be between 1 and 365')
+  }
+
   // Get PostHog config
   const posthogConfig = await getPostHogConfig(workspaceId)
   const posthogClient = new PostHogClient({
@@ -82,10 +93,7 @@ async function handleCreateCustomSignal(
     host: posthogConfig.host,
   })
 
-  // Calculate match count synchronously (fast ~1-2s)
-  const matchCount = await calculateMatchCount(posthogClient, body.event_name)
-
-  // Create the signal in the database
+  // Create the signal in the database first — metrics calculated asynchronously
   const signalType = `custom:${body.event_name}`
   const { data: signal, error } = await supabase
     .from('signals')
@@ -95,7 +103,7 @@ async function handleCreateCustomSignal(
       account_id: workspaceId,
       type: signalType,
       source: 'manual',
-      value: matchCount.count_30d,
+      value: null,
       details: {
         name: body.name,
         description: body.description || '',
@@ -104,7 +112,7 @@ async function handleCreateCustomSignal(
         condition_value: body.condition_value || 1,
         time_window_days: body.time_window_days || 7,
         conversion_event: body.conversion_event || null,
-        match_count: matchCount,
+        match_count: null,
       },
     } as never)
     .select()
@@ -115,18 +123,35 @@ async function handleCreateCustomSignal(
     return NextResponse.json({ error: 'Failed to create signal' }, { status: 500 })
   }
 
-  // Store initial match count metrics
-  await upsertSignalMetrics(supabase, workspaceId, signalType, matchCount).catch(err => {
-    console.error('Failed to store initial metrics (non-blocking):', err)
-  })
+  // Fire-and-forget: calculate match count and upsert metrics in the background.
+  // This avoids blocking the response for up to 30s on the HogQL query.
+  calculateMatchCount(posthogClient, body.event_name)
+    .then(async (matchCount) => {
+      // Update the signal with the computed metrics
+      await supabase
+        .from('signals')
+        .update({
+          value: matchCount.count_30d,
+          details: {
+            ...(signal.details as Record<string, unknown>),
+            match_count: matchCount,
+          },
+        } as never)
+        .eq('id', signal.id)
+
+      await upsertSignalMetrics(supabase, workspaceId, signalType, matchCount)
+    })
+    .catch((err) => {
+      console.error('Background metrics calculation failed:', err)
+    })
 
   return NextResponse.json({
     signal,
     metrics: {
-      status: body.conversion_event ? 'calculating' : 'ready',
-      match_count: matchCount,
+      status: 'calculating',
+      match_count: null,
     },
-  }, { status: 201 })
+  }, { status: 202 })
 }
 
 /**

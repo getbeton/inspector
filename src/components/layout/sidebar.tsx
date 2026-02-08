@@ -136,6 +136,20 @@ function saveExpandedSections(state: Record<string, boolean>) {
 // Sidebar component
 // ---------------------------------------------------------------------------
 
+/** Returns section labels that should be auto-expanded based on pathname. */
+function getAutoExpandedSections(pathname: string): Record<string, boolean> {
+  const result: Record<string, boolean> = {}
+  for (const entry of navEntries) {
+    if (isSection(entry)) {
+      const hasActiveChild = entry.children.some(
+        (child) => pathname === child.href || pathname.startsWith(child.href + '/')
+      )
+      if (hasActiveChild) result[entry.label] = true
+    }
+  }
+  return result
+}
+
 interface SidebarProps {
   className?: string
   onClose?: () => void
@@ -145,23 +159,10 @@ export function Sidebar({ className, onClose }: SidebarProps) {
   const pathname = usePathname()
 
   // Expanded sections state — initialised from localStorage + auto-expand for active route
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-    const saved = loadExpandedSections()
-
-    // Auto-expand any section whose child matches the current path
-    for (const entry of navEntries) {
-      if (isSection(entry)) {
-        const hasActiveChild = entry.children.some(
-          (child) => pathname === child.href || pathname.startsWith(child.href + '/')
-        )
-        if (hasActiveChild) {
-          saved[entry.label] = true
-        }
-      }
-    }
-
-    return saved
-  })
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => ({
+    ...loadExpandedSections(),
+    ...getAutoExpandedSections(pathname),
+  }))
 
   // Persist expanded state to localStorage whenever it changes
   useEffect(() => {
@@ -171,17 +172,13 @@ export function Sidebar({ className, onClose }: SidebarProps) {
   // Auto-expand sections when navigating to a sub-item via URL
   useEffect(() => {
     setExpanded((prev) => {
+      const autoExpanded = getAutoExpandedSections(pathname)
       let changed = false
       const next = { ...prev }
-      for (const entry of navEntries) {
-        if (isSection(entry)) {
-          const hasActiveChild = entry.children.some(
-            (child) => pathname === child.href || pathname.startsWith(child.href + '/')
-          )
-          if (hasActiveChild && !prev[entry.label]) {
-            next[entry.label] = true
-            changed = true
-          }
+      for (const [label, shouldExpand] of Object.entries(autoExpanded)) {
+        if (shouldExpand && !prev[label]) {
+          next[label] = true
+          changed = true
         }
       }
       return changed ? next : prev

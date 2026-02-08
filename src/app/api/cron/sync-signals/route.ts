@@ -19,6 +19,7 @@ import {
   upsertPersonRecords,
   syncListEntries,
 } from '@/lib/integrations/attio/client'
+import { verifyCronAuth } from '@/lib/middleware/cron-auth'
 
 export const maxDuration = 300
 
@@ -31,11 +32,8 @@ const OPERATOR_SQL: Record<string, string> = {
 }
 
 export async function GET(request: Request) {
-  // Verify cron secret
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Verify cron secret (fail-closed: rejects if CRON_SECRET is unset)
+  if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -166,5 +166,5 @@ export async function upsertSignalMetrics(
  * Escape single quotes in HogQL strings to prevent injection
  */
 function escapeHogQL(value: string): string {
-  return value.replace(/'/g, "\\'")
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
