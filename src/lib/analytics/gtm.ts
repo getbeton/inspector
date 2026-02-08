@@ -113,6 +113,75 @@ export function trackLogin(
   })
 }
 
+// ---------------------------------------------------------------------------
+// Onboarding & engagement events
+// ---------------------------------------------------------------------------
+
+/**
+ * Track when user starts the demo tour from the pre-setup view.
+ */
+export function trackDemoTourStarted(): void {
+  pushToDataLayer({ event: 'demo_tour_started' })
+}
+
+/**
+ * Track when user exits demo mode (clicks "Connect real data" in banner).
+ */
+export function trackDemoTourCompleted(): void {
+  pushToDataLayer({ event: 'demo_tour_completed' })
+}
+
+/**
+ * Track when user clicks "Connect Your Data" from the pre-setup view.
+ */
+export function trackSetupStarted(): void {
+  pushToDataLayer({ event: 'setup_started' })
+}
+
+/**
+ * Track completion of individual setup wizard steps.
+ */
+export function trackSetupStepCompleted(step: string): void {
+  pushToDataLayer({ event: 'setup_step_completed', step })
+}
+
+/**
+ * Track when an integration is successfully connected during setup.
+ */
+export function trackIntegrationConnected(integration: string): void {
+  pushToDataLayer({ event: 'integration_connected', integration })
+}
+
+/**
+ * Track when a payment card is linked during billing setup.
+ */
+export function trackCardLinked(): void {
+  pushToDataLayer({ event: 'card_linked' })
+}
+
+/**
+ * Track when a user views their first signal detail page.
+ * Uses sessionStorage to deduplicate within a session.
+ */
+export function trackFirstSignalViewed(signalId: string): void {
+  if (typeof window === 'undefined') return
+  const key = 'beton_first_signal_viewed'
+  if (sessionStorage.getItem(key)) return
+  sessionStorage.setItem(key, '1')
+  pushToDataLayer({ event: 'first_signal_viewed', signal_id: signalId })
+}
+
+/**
+ * Track when the full onboarding flow is completed.
+ */
+export function trackOnboardingCompleted(): void {
+  pushToDataLayer({ event: 'onboarding_completed' })
+}
+
+// ---------------------------------------------------------------------------
+// Identity management
+// ---------------------------------------------------------------------------
+
 /**
  * Reset PostHog identity on logout.
  * GTM will call posthog.reset() to clear the identified user.
