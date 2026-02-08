@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   ReactFlow,
   MiniMap,
@@ -23,6 +23,27 @@ import { useSessionEdaResults } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession, JoinPair } from '@/lib/api/explorations'
 import type { EdaResult } from '@/lib/agent/types'
 
+// ---------------------------------------------------------------------------
+// dagre types — we load the library dynamically to avoid CJS/SSR conflicts
+// ---------------------------------------------------------------------------
+
+interface DagreLib {
+  graphlib: { Graph: new () => DagreGraph }
+  layout: (g: DagreGraph) => void
+}
+
+interface DagreGraph {
+  setGraph: (opts: Record<string, unknown>) => void
+  setDefaultEdgeLabel: (fn: () => Record<string, unknown>) => void
+  setNode: (id: string, opts: { width: number; height: number }) => void
+  setEdge: (a: string, b: string) => void
+  node: (id: string) => { x: number; y: number }
+}
+
+// ---------------------------------------------------------------------------
+// Layout helpers
+// ---------------------------------------------------------------------------
+
 interface SchemaGraphTabProps {
   workspaceId: string | undefined
   session: ExplorationSession
@@ -32,28 +53,23 @@ interface SchemaGraphTabProps {
 const nodeTypes = { tableNode: TableNode }
 
 function getNodeHeight(columnCount: number): number {
-  return HEADER_HEIGHT + Math.max(columnCount, 1) * ROW_HEIGHT + 4 // 4px for py-0.5 padding
+  return HEADER_HEIGHT + Math.max(columnCount, 1) * ROW_HEIGHT + 4
 }
 
-interface CollectedData {
-  tableMap: Map<string, TableNodeData>
-  uniqueJoins: JoinPair[]
-}
-
-function collectData(
+function buildGraph(
+  dagre: DagreLib,
   edaResults: Array<{
     table_id: string
     table_stats: Record<string, any> | null
     join_suggestions: Array<{ table1: string; col1: string; table2: string; col2: string }> | null
   }>,
   confirmedJoins: JoinPair[] | null
-): CollectedData {
+): { nodes: Node<Record<string, unknown>>[]; edges: Edge[] } {
   const tableMap = new Map<string, TableNodeData>()
 
   for (const result of edaResults) {
     const stats = result.table_stats as Record<string, any> | null
     const columns = (stats?.columns || []) as Array<{ col_name?: string; name?: string; col_type?: string; type?: string }>
-
     tableMap.set(result.table_id, {
       label: result.table_id,
       columns: columns.map(c => ({
@@ -74,23 +90,13 @@ function collectData(
     if (!seenEdges.has(key)) {
       seenEdges.add(key)
       uniqueJoins.push(j)
-      if (!tableMap.has(j.table1)) {
-        tableMap.set(j.table1, { label: j.table1, columns: [] })
-      }
-      if (!tableMap.has(j.table2)) {
-        tableMap.set(j.table2, { label: j.table2, columns: [] })
-      }
+      if (!tableMap.has(j.table1)) tableMap.set(j.table1, { label: j.table1, columns: [] })
+      if (!tableMap.has(j.table2)) tableMap.set(j.table2, { label: j.table2, columns: [] })
     }
   }
 
-  return { tableMap, uniqueJoins }
-}
-
-function layoutWithDagre(
-  dagreLib: typeof import('@dagrejs/dagre'),
-  { tableMap, uniqueJoins }: CollectedData
-): { nodes: Node<Record<string, unknown>>[]; edges: Edge[] } {
-  const g = new dagreLib.graphlib.Graph()
+  // Dagre layout
+  const g = new dagre.graphlib.Graph()
   g.setGraph({ rankdir: 'LR', ranksep: 100, nodesep: 40 })
   g.setDefaultEdgeLabel(() => ({}))
 
@@ -98,17 +104,13 @@ function layoutWithDagre(
 
   for (const id of tableIds) {
     const data = tableMap.get(id)!
-    g.setNode(id, {
-      width: NODE_WIDTH,
-      height: getNodeHeight(data.columns.length),
-    })
+    g.setNode(id, { width: NODE_WIDTH, height: getNodeHeight(data.columns.length) })
   }
-
   for (const j of uniqueJoins) {
     g.setEdge(j.table1, j.table2)
   }
 
-  dagreLib.layout(g)
+  dagre.layout(g)
 
   const nodes: Node<Record<string, unknown>>[] = tableIds.map((id) => {
     const pos = g.node(id)
@@ -140,50 +142,20 @@ function layoutWithDagre(
   return { nodes, edges }
 }
 
-export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
-  const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
-    externalEdaResults ? undefined : workspaceId,
-    externalEdaResults ? undefined : session.session_id,
-  )
-  const edaResults = externalEdaResults ?? fetchedEdaResults
-  const isLoading = externalEdaResults ? false : fetchLoading
+// ---------------------------------------------------------------------------
+// Inner component — only mounts once dagre + data are ready,
+// so useNodesState initialises with the correct computed values.
+// ---------------------------------------------------------------------------
 
-  // Lazy-load dagre on client only (it uses CommonJS require internally)
-  const dagreRef = useRef<typeof import('@dagrejs/dagre') | null>(null)
-  const [dagreLoaded, setDagreLoaded] = useState(false)
-
-  useEffect(() => {
-    import('@dagrejs/dagre').then((mod) => {
-      dagreRef.current = mod.default as unknown as typeof import('@dagrejs/dagre')
-      setDagreLoaded(true)
-    })
-  }, [])
-
-  const { initialNodes, initialEdges } = useMemo(() => {
-    if (!dagreLoaded || !dagreRef.current) return { initialNodes: [], initialEdges: [] }
-    const data = collectData(edaResults, session.confirmed_joins)
-    const { nodes, edges } = layoutWithDagre(dagreRef.current, data)
-    return { initialNodes: nodes, initialEdges: edges }
-  }, [edaResults, session.confirmed_joins, dagreLoaded])
-
+function SchemaGraphInner({
+  nodes: initialNodes,
+  edges: initialEdges,
+}: {
+  nodes: Node<Record<string, unknown>>[]
+  edges: Edge[]
+}) {
   const [nodes, , onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
-
-  if (isLoading || !dagreLoaded) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  if (nodes.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground text-sm">
-        No schema data available. Complete an exploration to see the graph.
-      </div>
-    )
-  }
 
   return (
     <div className="h-[500px] border rounded-lg overflow-hidden">
@@ -199,13 +171,60 @@ export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaRe
         proOptions={{ hideAttribution: true }}
       >
         <Controls />
-        <MiniMap
-          nodeStrokeWidth={3}
-          zoomable
-          pannable
-        />
+        <MiniMap nodeStrokeWidth={3} zoomable pannable />
         <Background gap={16} size={1} />
       </ReactFlow>
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Outer component — loads dagre, fetches data, renders inner when ready.
+// ---------------------------------------------------------------------------
+
+export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
+  const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
+    externalEdaResults ? undefined : workspaceId,
+    externalEdaResults ? undefined : session.session_id,
+  )
+  const edaResults = externalEdaResults ?? fetchedEdaResults
+  const isLoading = externalEdaResults ? false : fetchLoading
+
+  // Lazy-load dagre on client only (it uses CJS require() internally)
+  const [dagre, setDagre] = useState<DagreLib | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    import('@dagrejs/dagre').then((mod) => {
+      if (cancelled) return
+      // CJS default export: mod.default is the dagre object; fall back to mod itself
+      const lib = (mod.default ?? mod) as unknown as DagreLib
+      setDagre(lib)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const graph = useMemo(() => {
+    if (!dagre) return null
+    return buildGraph(dagre, edaResults, session.confirmed_joins)
+  }, [dagre, edaResults, session.confirmed_joins])
+
+  if (isLoading || !dagre) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!graph || graph.nodes.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground text-sm">
+        No schema data available. Complete an exploration to see the graph.
+      </div>
+    )
+  }
+
+  // Key on node count so SchemaGraphInner remounts if schema data changes
+  return <SchemaGraphInner key={graph.nodes.length} nodes={graph.nodes} edges={graph.edges} />
 }
