@@ -216,12 +216,16 @@ Break the epic into tasks that:
 - Follow a logical dependency order
 
 **Typical task categories:**
-1. Database migrations (if needed)
+1. Database migrations (if needed), use /supabase-postgres-best-practices mandatory
 2. API endpoints (backend logic)
-3. Frontend components/pages
+3. Frontend components/pages, /web-design-guidelines + /vercel-react-best-practices mandatory
 4. Integration wiring
 5. Error handling & edge cases
-6. Polish & UX improvements
+6. Polish & UX improvements /web-design-guidelines mandatory
+7. Adding analytical events that are sent to Posthog and Intercom via Google Tag Manager + their properties + user properties
+8. Tasks for implementing onboarding flow in Intercom – pop-up messages, emails, product tours etc. Should be done in GTM project of Plane
+9. Tasks for marketing to announce launch of feature by adding it to weekly changelog newsletter
+10. If there are any changes to Stripe – tasks in Ops project in Plane to test and reflect them in production
 
 #### Step 4.2: Create Subtasks
 
