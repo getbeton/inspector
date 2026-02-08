@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     if (all) {
       // Return latest entry per known sync type
       const SYNC_TYPES = ['signal_detection', 'mtu_tracking', 'sync_signals', 'posthog_events']
-      const entries = []
+      const entries: unknown[] = []
 
       for (const type of SYNC_TYPES) {
         const { data } = await supabase

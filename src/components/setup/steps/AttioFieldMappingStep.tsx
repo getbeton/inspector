@@ -232,7 +232,7 @@ export function AttioFieldMappingStep({ onSuccess, className }: AttioFieldMappin
         </div>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="error">
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>

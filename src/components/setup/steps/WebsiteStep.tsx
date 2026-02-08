@@ -81,7 +81,7 @@ export function WebsiteStep({ initialUrl, onSuccess, className }: WebsiteStepPro
         </div>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="error">
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>

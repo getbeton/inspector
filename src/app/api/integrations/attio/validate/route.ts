@@ -104,6 +104,54 @@ function mapError(error: unknown): ErrorMapping {
   }
 }
 
+/**
+ * PATCH /api/integrations/attio/validate
+ *
+ * Update Attio integration config (e.g., field_mapping).
+ * Requires existing Attio integration to be configured.
+ */
+export async function PATCH(request: Request) {
+  try {
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const membership = await getWorkspaceMembership()
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    const body = await request.json()
+    const { field_mapping } = body
+
+    if (!field_mapping) {
+      return NextResponse.json({ error: 'Missing field_mapping' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('integration_configs')
+      .update({ field_mapping } as never)
+      .eq('workspace_id', membership.workspaceId)
+      .eq('integration_name', 'attio')
+
+    if (error) {
+      log.error('Error saving field mapping:', error)
+      return NextResponse.json({ error: 'Failed to save field mapping' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    log.error('PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   // Apply rate limiting to prevent credential stuffing attacks
   const rateLimitResponse = applyRateLimit(request, 'attio-validate', RATE_LIMITS.VALIDATION)
