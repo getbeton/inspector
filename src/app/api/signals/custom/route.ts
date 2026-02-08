@@ -3,9 +3,14 @@
  *
  * Create a new manual signal and trigger initial metrics calculation.
  * Match count is calculated synchronously (fast).
- * Conversion and lift are calculated asynchronously (not blocking response).
+ * Optionally creates a sync config for auto-update (PostHog cohorts / Attio lists).
  *
- * Request:
+ * PATCH /api/signals/custom
+ *
+ * Add a sync target (PostHog cohort or Attio list) to an existing signal.
+ * Called after cohort/list creation to link the external resource.
+ *
+ * Request (POST):
  * {
  *   "name": "Pricing page visited 2+ times",
  *   "description": "Users showing pricing interest",
@@ -15,40 +20,32 @@
  *   "time_window_days": 7,
  *   "conversion_event": "subscription_created" (optional)
  * }
+ *
+ * Request (PATCH):
+ * {
+ *   "signal_id": "uuid",
+ *   "event_names": ["pageview"],
+ *   "condition_operator": "gte",
+ *   "condition_value": 2,
+ *   "time_window_days": 7,
+ *   "target": {
+ *     "type": "posthog_cohort" | "attio_list",
+ *     "external_id": "42",
+ *     "external_name": "Signal: Pricing Page Interest",
+ *     "auto_update": true
+ *   }
+ * }
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
-import { getIntegrationCredentials } from '@/lib/integrations/credentials'
-import { getPostHogHost } from '@/lib/integrations/posthog/regions'
-import { ConfigurationError, InvalidQueryError } from '@/lib/errors/query-errors'
+import { getPostHogConfig } from '@/lib/integrations/posthog/config'
+import { InvalidQueryError } from '@/lib/errors/query-errors'
 import { calculateMatchCount, upsertSignalMetrics } from '@/lib/signals/metrics-calculator'
 
-async function getPostHogConfig(
-  workspaceId: string
-): Promise<{ apiKey: string; projectId: string; host?: string }> {
-  const credentials = await getIntegrationCredentials(workspaceId, 'posthog')
-
-  if (!credentials) {
-    throw new ConfigurationError('PostHog integration is not configured.')
-  }
-  if (!credentials.isActive) {
-    throw new ConfigurationError('PostHog integration is disabled.')
-  }
-  if (credentials.status !== 'connected' && credentials.status !== 'validating') {
-    throw new ConfigurationError(`PostHog integration status is "${credentials.status}".`)
-  }
-  if (!credentials.apiKey || !credentials.projectId) {
-    throw new ConfigurationError('PostHog credentials are incomplete.')
-  }
-
-  return {
-    apiKey: credentials.apiKey,
-    projectId: credentials.projectId,
-    host: getPostHogHost(credentials.region),
-  }
-}
+const VALID_OPERATORS = new Set(['gte', 'gt', 'eq', 'lt', 'lte'])
+const VALID_TARGET_TYPES = new Set(['posthog_cohort', 'attio_list'])
 
 interface CreateCustomSignalBody {
   name: string
@@ -132,4 +129,133 @@ async function handleCreateCustomSignal(
   }, { status: 201 })
 }
 
+/**
+ * PATCH handler: add a sync target to an existing signal.
+ * Creates the sync config if it doesn't exist, then adds the target.
+ */
+interface AddSyncTargetBody {
+  signal_id: string
+  event_names: string[]
+  condition_operator: string
+  condition_value: number
+  time_window_days: number
+  target: {
+    type: string
+    external_id: string
+    external_name?: string
+    auto_update: boolean
+  }
+}
+
+async function handleAddSyncTarget(
+  request: NextRequest,
+  context: RLSContext
+): Promise<NextResponse> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = context.supabase as any // New tables not yet in generated types
+  const { workspaceId } = context
+
+  let body: AddSyncTargetBody
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  // Validate
+  if (!body.signal_id || !body.target?.type || !body.target?.external_id) {
+    return NextResponse.json(
+      { error: 'signal_id, target.type, and target.external_id are required' },
+      { status: 400 }
+    )
+  }
+  if (!VALID_TARGET_TYPES.has(body.target.type)) {
+    return NextResponse.json(
+      { error: `Invalid target type. Must be one of: ${[...VALID_TARGET_TYPES].join(', ')}` },
+      { status: 400 }
+    )
+  }
+  if (!VALID_OPERATORS.has(body.condition_operator)) {
+    return NextResponse.json(
+      { error: `Invalid condition_operator. Must be one of: ${[...VALID_OPERATORS].join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  // Verify signal belongs to workspace
+  const { data: signal } = await supabase
+    .from('signals')
+    .select('id')
+    .eq('id', body.signal_id)
+    .eq('workspace_id', workspaceId)
+    .single()
+
+  if (!signal) {
+    return NextResponse.json({ error: 'Signal not found' }, { status: 404 })
+  }
+
+  // Upsert sync config (create if not exists)
+  const { data: existingConfig } = await supabase
+    .from('signal_sync_configs')
+    .select('id')
+    .eq('signal_id', body.signal_id)
+    .single()
+
+  let syncConfigId: string
+
+  if (existingConfig) {
+    syncConfigId = existingConfig.id
+    // Update query params if they changed
+    await supabase
+      .from('signal_sync_configs')
+      .update({
+        event_names: body.event_names,
+        condition_operator: body.condition_operator,
+        condition_value: body.condition_value,
+        time_window_days: body.time_window_days,
+      } as never)
+      .eq('id', syncConfigId)
+  } else {
+    const { data: newConfig, error: configError } = await supabase
+      .from('signal_sync_configs')
+      .insert({
+        signal_id: body.signal_id,
+        workspace_id: workspaceId,
+        event_names: body.event_names,
+        condition_operator: body.condition_operator,
+        condition_value: body.condition_value,
+        time_window_days: body.time_window_days,
+      } as never)
+      .select('id')
+      .single()
+
+    if (configError || !newConfig) {
+      console.error('Failed to create sync config:', configError)
+      return NextResponse.json({ error: 'Failed to create sync config' }, { status: 500 })
+    }
+    syncConfigId = newConfig.id
+  }
+
+  // Add sync target
+  const { data: target, error: targetError } = await supabase
+    .from('signal_sync_targets')
+    .insert({
+      sync_config_id: syncConfigId,
+      target_type: body.target.type,
+      external_id: body.target.external_id,
+      external_name: body.target.external_name || null,
+      auto_update: body.target.auto_update,
+    } as never)
+    .select()
+    .single()
+
+  if (targetError) {
+    console.error('Failed to create sync target:', targetError)
+    return NextResponse.json({ error: 'Failed to create sync target' }, { status: 500 })
+  }
+
+  return NextResponse.json({ sync_target: target }, { status: 201 })
+}
+
 export const POST = withErrorHandler(withRLSContext(handleCreateCustomSignal))
+export const PATCH = withErrorHandler(withRLSContext(handleAddSyncTarget))

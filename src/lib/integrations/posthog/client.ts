@@ -360,6 +360,84 @@ export class PostHogClient {
   ): Promise<{ results: { name: string; property_type: string }[] }> {
     return this.fetch(`/property_definitions?type=${type}`)
   }
+
+  // ============================================
+  // Cohorts (create/update static cohorts)
+  // ============================================
+
+  /**
+   * Create a static cohort from a list of distinct_ids.
+   * Uses multipart/form-data with a CSV file upload.
+   */
+  async createStaticCohort(
+    name: string,
+    distinctIds: string[]
+  ): Promise<{ id: number; name: string }> {
+    const csv = 'distinct_id\n' + distinctIds.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('is_static', 'true')
+    formData.append('csv', blob, 'cohort.csv')
+
+    const url = `${this.baseUrl}/projects/${this.projectId}/cohorts`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        // Do NOT set Content-Type — fetch sets it with the correct boundary for FormData
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      throw createIntegrationError(
+        `Failed to create PostHog cohort: ${response.statusText} ${errorBody}`,
+        'API_ERROR',
+        response.status,
+        response.status >= 500
+      )
+    }
+
+    const data = await response.json()
+    return { id: data.id, name: data.name }
+  }
+
+  /**
+   * Update an existing static cohort's membership by re-uploading CSV.
+   * Uses PATCH to replace the cohort's distinct_ids.
+   */
+  async updateStaticCohort(
+    cohortId: number,
+    distinctIds: string[]
+  ): Promise<void> {
+    const csv = 'distinct_id\n' + distinctIds.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+
+    const formData = new FormData()
+    formData.append('csv', blob, 'cohort.csv')
+
+    const url = `${this.baseUrl}/projects/${this.projectId}/cohorts/${cohortId}`
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      throw createIntegrationError(
+        `Failed to update PostHog cohort: ${response.statusText} ${errorBody}`,
+        'API_ERROR',
+        response.status,
+        response.status >= 500
+      )
+    }
+  }
 }
 
 /**
