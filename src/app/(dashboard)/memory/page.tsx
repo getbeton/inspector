@@ -6,12 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
 import { ExplorationRunsTable, type SortColumn, type SortDirection } from '@/components/exploration/exploration-runs-table'
 import { ExplorationSheet } from '@/components/exploration/exploration-sheet'
-import { WebsiteSection } from '@/components/exploration/sections/website-section'
-import { JoinCandidatesSection } from '@/components/exploration/sections/join-candidates-section'
-import { SchemaSection } from '@/components/exploration/sections/schema-section'
-import { SetupBanner } from '@/components/setup'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
-import { useExplorationSessions, useSessionEdaResults, useSessionWebsiteResult, useLatestChanges } from '@/lib/hooks/use-explorations'
+import { useExplorationSessions } from '@/lib/hooks/use-explorations'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
 const STATUS_ORDER: Record<string, number> = {
@@ -50,21 +46,6 @@ function MemoryPageContent() {
   const workspaceId = isDemo ? undefined : setupStatus?.workspaceId
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
-
-  // Latest completed session = source of "current state"
-  const latestCompletedSession = useMemo(
-    () => sessions.find(s => s.status === 'completed'),
-    [sessions]
-  )
-  const { data: latestEdaResults = [] } = useSessionEdaResults(
-    workspaceId,
-    latestCompletedSession?.session_id,
-  )
-  const { data: websiteData = null, isLoading: websiteLoading } = useSessionWebsiteResult(
-    workspaceId,
-    latestCompletedSession?.session_id,
-  )
-  const { data: latestChanges } = useLatestChanges(workspaceId)
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',
@@ -177,45 +158,16 @@ function MemoryPageContent() {
 
   return (
     <div className="space-y-8">
-      {/* 1. Header */}
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Memory</h1>
+        <h1 className="text-2xl font-bold">Exploration Logs</h1>
         <p className="text-muted-foreground">
-          What Beton knows about your business based on your website and data model
+          History of agent exploration sessions
         </p>
       </div>
 
-      {setupStatus && <SetupBanner setupStatus={setupStatus} />}
-
-      {/* 2. Website Intelligence */}
-      <WebsiteSection
-        websiteData={websiteData}
-        isLoading={websiteLoading}
-        workspaceId={workspaceId}
-        sessionId={latestCompletedSession?.session_id}
-        isDemo={isDemo}
-        lastChange={latestChanges?.business_model ?? null}
-      />
-
-      {/* 3. Join Candidates */}
-      <JoinCandidatesSection
-        session={latestCompletedSession ?? null}
-        edaResults={latestEdaResults}
-        workspaceId={workspaceId}
-        isDemo={isDemo}
-        lastChange={latestChanges?.join_candidates ?? null}
-      />
-
-      {/* 4. Schema Graph */}
-      <SchemaSection
-        workspaceId={workspaceId}
-        session={latestCompletedSession ?? null}
-        edaResults={latestEdaResults}
-      />
-
-      {/* 5. Exploration Logs */}
+      {/* Exploration Logs */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Exploration Logs</h2>
         <ExplorationFiltersBar filters={filters} onFiltersChange={setFilters} />
 
         {sessionsLoading ? (

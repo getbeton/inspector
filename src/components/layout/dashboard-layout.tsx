@@ -5,6 +5,7 @@ import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { TestModeBanner } from './test-mode-banner'
 import { DashboardThresholdBanner, AccessBlockedOverlay } from '@/components/billing'
+import { SetupBanner } from '@/components/setup'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -55,6 +56,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
         {/* Environment banners (sticky, stacked) */}
         <TestModeBanner />
         <DashboardThresholdBanner />
+        <SetupBanner />
 
         <Header
           user={user}

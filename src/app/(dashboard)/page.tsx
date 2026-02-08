@@ -1,7 +1,6 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { SetupWizard } from '@/components/setup'
 import { PreSetupView } from '@/components/home/PreSetupView'
 import { WorkspaceSummary } from '@/components/home/WorkspaceSummary'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
@@ -75,19 +74,10 @@ export default function DashboardHomePage() {
     return null
   }
 
-  // State C: Has started setup (at least one integration connected) → show wizard
+  // State C: Has started setup (at least one integration connected) → redirect to setup wizard
   if (setupStatus?.integrations.posthog || setupStatus?.integrations.attio) {
-    return (
-      <div className="max-w-2xl mx-auto py-8">
-        <SetupWizard
-          billingEnabled={setupStatus?.billing?.required ?? false}
-          setupStatus={setupStatus ? {
-            integrations: setupStatus.integrations,
-            billing: { configured: setupStatus.billing.configured },
-          } : undefined}
-        />
-      </div>
-    )
+    router.replace('/setup')
+    return null
   }
 
   // State D: Brand new user → show pre-setup view

@@ -26,9 +26,7 @@ export function PreSetupView({ className }: PreSetupViewProps) {
 
   const handleConnectData = () => {
     trackSetupStarted()
-    // Navigate to the setup wizard — the home page will show it
-    // We just reload to re-enter the page.tsx logic which renders SetupWizard
-    router.refresh()
+    router.push('/setup')
   }
 
   return (

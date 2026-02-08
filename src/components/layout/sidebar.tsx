@@ -101,7 +101,6 @@ const navEntries: NavEntry[] = [
     children: [
       { href: '/settings', label: 'Integrations' },
       { href: '/settings/billing', label: 'Billing' },
-      { href: '/settings/api-keys', label: 'API Keys' },
       { href: '/settings/workspace', label: 'Workspace' },
       { href: '/settings/danger-zone', label: 'Danger Zone' },
     ],

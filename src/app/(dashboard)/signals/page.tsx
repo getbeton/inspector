@@ -7,7 +7,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { SignalFiltersBar, type SignalFilters } from '@/components/signals/signal-filters'
 import { SignalsTable } from '@/components/signals/signals-table'
 import { BulkActions } from '@/components/signals/bulk-actions'
-import { SetupBanner } from '@/components/setup'
 import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
@@ -132,9 +131,8 @@ export default function SignalsPage() {
         </Link>
       </div>
 
-      {/* Demo / Setup Banner */}
+      {/* Demo Banner */}
       {isDemoMode && <DemoBanner />}
-      {setupStatus && !isDemoMode && <SetupBanner setupStatus={setupStatus} />}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
