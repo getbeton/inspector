@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -189,14 +188,6 @@ export default function SignalsPage() {
         </div>
         <div className="flex items-center gap-3">
           {!isDemo && <RefreshButton syncType="signal_detection" />}
-          <Link href="/signals/new">
-            <Button>
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Signal
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -311,11 +302,7 @@ export default function SignalsPage() {
               >
                 Clear Filters
               </Button>
-            ) : (
-              <Link href="/signals/new">
-                <Button>Add Signal</Button>
-              </Link>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       )}

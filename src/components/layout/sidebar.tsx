@@ -64,11 +64,6 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   ),
-  plus: (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  ),
   close: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -236,17 +231,6 @@ export function Sidebar({ className, onClose }: SidebarProps) {
         )}
       </nav>
 
-      {/* Footer */}
-      <div className="px-3 py-4 border-t border-border">
-        <Link
-          href="/signals/new"
-          onClick={handleNavClick}
-          className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          {icons.plus}
-          Add Signal
-        </Link>
-      </div>
     </aside>
   )
 }

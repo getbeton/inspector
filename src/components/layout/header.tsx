@@ -1,13 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils/cn'
 import { resetIdentity } from '@/lib/analytics'
-import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 
 interface HeaderProps {
   user: {
@@ -19,63 +15,6 @@ interface HeaderProps {
   onMenuClick?: () => void
   onToggleSidebar?: () => void
   sidebarCollapsed?: boolean
-}
-
-/**
- * Quick action buttons in header — Sync Data + Add Signal.
- * Only visible when setup is complete. Hidden on mobile.
- *
- * "Sync Data" invalidates all mounted React Query caches, causing each
- * visible page to refetch its own data from Beton's API. This is page-specific
- * by design — only queries rendered on screen actually refetch.
- */
-function HeaderQuickActions() {
-  const { data: setupStatus } = useSetupStatus()
-  const queryClient = useQueryClient()
-  const [isSyncing, setIsSyncing] = useState(false)
-
-  const handleSync = useCallback(async () => {
-    setIsSyncing(true)
-    try {
-      await queryClient.invalidateQueries()
-    } finally {
-      // Brief visual feedback so the user sees something happened
-      setTimeout(() => setIsSyncing(false), 600)
-    }
-  }, [queryClient])
-
-  if (!setupStatus?.setupComplete) return null
-
-  return (
-    <div className="hidden sm:flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleSync}
-        disabled={isSyncing}
-        className="gap-1.5"
-      >
-        <svg
-          className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin')}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {isSyncing ? 'Syncing...' : 'Sync Data'}
-      </Button>
-      <Link href="/signals/new">
-        <Button size="sm" className="gap-1.5">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Signal
-        </Button>
-      </Link>
-    </div>
-  )
 }
 
 export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarCollapsed }: HeaderProps) {
@@ -150,8 +89,6 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
 
       {/* Right side - User menu */}
       <div className="flex items-center gap-2">
-        {/* Quick actions — only visible post-setup, hidden on mobile */}
-        <HeaderQuickActions />
 
         {/* Notifications placeholder */}
         <button className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors">
