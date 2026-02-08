@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { EventPicker } from '@/components/signals/event-picker'
 
@@ -16,6 +17,12 @@ const CONDITION_OPERATORS = [
   { id: 'lte', label: '<=' },
 ]
 
+interface PreviewResult {
+  total_count: number
+  count_7d: number
+  count_30d: number
+}
+
 export default function AddSignalPage() {
   const router = useRouter()
   const [name, setName] = useState('')
@@ -25,17 +32,80 @@ export default function AddSignalPage() {
   const [conditionValue, setConditionValue] = useState('1')
   const [timeWindow, setTimeWindow] = useState('7')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewResult | null>(null)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setSubmitError(null)
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      const res = await fetch('/api/signals/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          event_name: eventPattern,
+          condition_operator: conditionOperator,
+          condition_value: Number(conditionValue),
+          time_window_days: Number(timeWindow),
+        }),
+      })
 
-    // In real implementation, this would call the API
-    alert('Signal created successfully! (Demo mode)')
-    router.push('/signals')
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Failed to create signal (${res.status})`)
+      }
+
+      router.push('/signals')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create signal')
+      setIsSubmitting(false)
+    }
+  }
+
+  const handlePreview = async () => {
+    if (!eventPattern) return
+    setIsPreviewing(true)
+    setPreviewError(null)
+    setPreview(null)
+
+    try {
+      // Use the custom signal endpoint with a dry-run approach:
+      // We only need match count, which is the same query the creation endpoint runs.
+      // For preview, we call the PostHog query proxy directly.
+      const res = await fetch('/api/posthog/query/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `SELECT count() as total_count, countIf(timestamp >= now() - interval 7 day) as count_7d, countIf(timestamp >= now() - interval 30 day) as count_30d FROM events WHERE event = '${eventPattern.replace(/'/g, "\\'")}' AND timestamp >= now() - interval 90 day`,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch preview')
+      }
+
+      const data = await res.json()
+      const row = data.results?.[0]
+      if (row) {
+        setPreview({
+          total_count: Number(row[0]) || 0,
+          count_7d: Number(row[1]) || 0,
+          count_30d: Number(row[2]) || 0,
+        })
+      } else {
+        setPreview({ total_count: 0, count_7d: 0, count_30d: 0 })
+      }
+    } catch {
+      setPreviewError('Could not fetch preview. Make sure PostHog is connected.')
+    } finally {
+      setIsPreviewing(false)
+    }
   }
 
   const generateHogQL = () => {
@@ -43,6 +113,8 @@ export default function AddSignalPage() {
     const op = CONDITION_OPERATORS.find(o => o.id === conditionOperator)?.label || '>='
     return `SELECT count() FROM events WHERE event = '${eventPattern}' AND timestamp > now() - interval ${timeWindow} day HAVING count() ${op} ${conditionValue}`
   }
+
+  const formatNumber = (n: number) => new Intl.NumberFormat().format(n)
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -97,7 +169,11 @@ export default function AddSignalPage() {
           <CardContent>
             <EventPicker
               value={eventPattern}
-              onSelect={setEventPattern}
+              onSelect={(val) => {
+                setEventPattern(val)
+                setPreview(null)
+                setPreviewError(null)
+              }}
             />
           </CardContent>
         </Card>
@@ -154,16 +230,61 @@ export default function AddSignalPage() {
                 <code>{generateHogQL()}</code>
               </pre>
               <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm">
-                  <span className="font-medium">Estimated matches:</span>{' '}
-                  <span className="text-primary font-bold">~{Math.round(20 + Math.random() * 50)}</span> users/month
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Based on your PostHog data from the last 30 days
-                </p>
+                {preview ? (
+                  <>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Last 7 days:</span>{' '}
+                        <span className="font-bold text-primary">{formatNumber(preview.count_7d)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Last 30 days:</span>{' '}
+                        <span className="font-bold text-primary">{formatNumber(preview.count_30d)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total (90d):</span>{' '}
+                        <span className="font-bold">{formatNumber(preview.total_count)}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Event occurrences from your PostHog data
+                    </p>
+                  </>
+                ) : previewError ? (
+                  <p className="text-sm text-destructive">{previewError}</p>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Preview how many times this event occurred in your data
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePreview}
+                      disabled={isPreviewing}
+                    >
+                      {isPreviewing ? (
+                        <>
+                          <span className="animate-spin mr-2 inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                          Querying...
+                        </>
+                      ) : (
+                        'Preview Matches'
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Submit error */}
+        {submitError && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <p className="text-sm text-destructive">{submitError}</p>
+          </div>
         )}
 
         {/* Actions */}
