@@ -11,7 +11,7 @@ import { BulkActions } from '@/components/signals/bulk-actions'
 import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
-import { useRealSignals } from '@/lib/hooks/use-signals'
+import { useRealSignals, useDeleteSignal } from '@/lib/hooks/use-signals'
 import { RefreshButton } from '@/components/ui/refresh-button'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 import type { DBSignal } from '@/lib/api/signals'
@@ -123,26 +123,49 @@ export default function SignalsPage() {
     return { active, avgLift, totalArr, totalLeads }
   }, [signals])
 
+  const deleteMutation = useDeleteSignal()
+
   // Bulk actions handlers
   const handleActivate = () => {
+    // TODO: enable/disable API routes not yet implemented
     console.log('Activating signals:', selectedIds)
     setSelectedIds([])
   }
 
   const handleDeactivate = () => {
+    // TODO: enable/disable API routes not yet implemented
     console.log('Deactivating signals:', selectedIds)
     setSelectedIds([])
   }
 
-  const handleDelete = () => {
-    if (confirm(`Delete ${selectedIds.length} signal(s)?`)) {
-      console.log('Deleting signals:', selectedIds)
-      setSelectedIds([])
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.length} signal(s)?`)) return
+    for (const id of selectedIds) {
+      try {
+        await deleteMutation.mutateAsync(id)
+      } catch {
+        // continue deleting others
+      }
     }
+    setSelectedIds([])
   }
 
   const handleExport = () => {
-    console.log('Exporting signals:', selectedIds)
+    // Export selected signals as CSV
+    const selected = filteredSignals.filter(s => selectedIds.includes(s.id))
+    const csv = [
+      'Name,Status,Lift,Confidence,Leads/Month,Est. ARR,Source',
+      ...selected.map(s =>
+        `"${s.name}",${s.status},${s.lift >= 0 ? s.lift : 'Pending'},${s.confidence >= 0 ? s.confidence : 'Pending'},${s.leads_per_month},${s.estimated_arr},${s.source}`
+      )
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'signals-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const formatCurrency = (n: number) => {

@@ -73,6 +73,34 @@ export interface SignalFilterParams {
   limit?: number
 }
 
+export interface SignalMetrics {
+  total_count: number
+  count_7d: number
+  count_30d: number
+  lift: number | null
+  conversion_rate: number | null
+  confidence: number | null
+  sample_size: number | null
+  calculated_at: string | null
+}
+
+export interface RealSignalDetailResponse {
+  signal: DBSignal
+  metrics: SignalMetrics | null
+  related_signals: Array<{
+    id: string
+    type: string
+    value: number | null
+    timestamp: string
+    source: string | null
+  }>
+  scores: Array<{
+    score_type: string
+    score_value: number
+    calculated_at: string
+  }>
+}
+
 /**
  * Get list of signals from the real API
  */
@@ -89,6 +117,17 @@ export async function getSignalsFromAPI(params?: SignalFilterParams): Promise<DB
   const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) {
     throw new Error('Failed to fetch signals')
+  }
+  return res.json()
+}
+
+/**
+ * Get a single signal by ID from the real API (with metrics)
+ */
+export async function getRealSignalById(id: string): Promise<RealSignalDetailResponse> {
+  const res = await fetch(`/api/signals/${id}`, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error('Failed to fetch signal')
   }
   return res.json()
 }

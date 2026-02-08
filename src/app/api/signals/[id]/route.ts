@@ -75,8 +75,30 @@ export async function GET(
 
     const scores = scoresData as Pick<HeuristicScore, 'score_type' | 'score_value' | 'calculated_at'>[] | null
 
+    // Get calculated metrics from signal_aggregates
+    const { data: metricsData } = await supabase
+      .from('signal_aggregates')
+      .select('*')
+      .eq('workspace_id', signal.workspace_id)
+      .eq('signal_type', signal.type)
+      .single() as { data: Record<string, unknown> | null; error: unknown }
+
+    const metrics = metricsData
+      ? {
+          total_count: metricsData.total_count as number,
+          count_7d: metricsData.count_last_7d as number,
+          count_30d: metricsData.count_last_30d as number,
+          lift: metricsData.avg_lift as number | null,
+          conversion_rate: metricsData.avg_conversion_rate as number | null,
+          confidence: metricsData.confidence_score as number | null,
+          sample_size: metricsData.sample_size as number | null,
+          calculated_at: metricsData.last_calculated_at as string | null,
+        }
+      : null
+
     return NextResponse.json({
       signal,
+      metrics,
       related_signals: relatedSignals || [],
       scores: scores || []
     })

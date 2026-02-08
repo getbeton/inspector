@@ -82,8 +82,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch signals' }, { status: 500 })
     }
 
+    // Fetch aggregated metrics for all signal types in this workspace
+    const signalTypes = [...new Set((signals || []).map((s: { type: string }) => s.type))]
+    let aggregatesMap: Record<string, Record<string, unknown>> = {}
+
+    if (signalTypes.length > 0) {
+      const { data: aggregates } = await supabase
+        .from('signal_aggregates')
+        .select('*')
+        .eq('workspace_id', membership.workspaceId)
+        .in('signal_type', signalTypes) as { data: Array<Record<string, unknown>> | null; error: unknown }
+
+      if (aggregates) {
+        for (const agg of aggregates) {
+          aggregatesMap[agg.signal_type as string] = agg
+        }
+      }
+    }
+
+    // Merge metrics into signal details for the response
+    const enrichedSignals = (signals || []).map((signal: { type: string; details: Record<string, unknown> | null }) => {
+      const agg = aggregatesMap[signal.type]
+      if (!agg) return signal
+      return {
+        ...signal,
+        details: {
+          ...(signal.details || {}),
+          lift: agg.avg_lift ?? null,
+          confidence: agg.confidence_score ?? null,
+          conversion_with: agg.avg_conversion_rate ?? null,
+          leads_per_month: agg.count_last_30d ? Math.round((agg.count_last_30d as number) / 4.3) : null,
+          match_count_7d: agg.count_last_7d ?? null,
+          match_count_30d: agg.count_last_30d ?? null,
+          match_count_total: agg.total_count ?? null,
+          sample_with: agg.sample_size ?? null,
+        },
+      }
+    })
+
     return NextResponse.json({
-      signals,
+      signals: enrichedSignals,
       pagination: {
         page,
         limit,

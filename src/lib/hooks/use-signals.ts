@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSignals, getSignal, getSignalsFromAPI, createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, bulkUpdateSignals } from '@/lib/api/signals'
+import { getSignals, getSignal, getSignalsFromAPI, getRealSignalById, createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, bulkUpdateSignals } from '@/lib/api/signals'
 import { useDataMode } from '@/lib/store/data-mode'
-import type { Signal, SignalDetail, SignalFilterParams } from '@/lib/api/signals'
+import type { Signal, SignalDetail, SignalFilterParams, RealSignalDetailResponse } from '@/lib/api/signals'
 
 /**
  * Hook to fetch all signals (legacy mock-aware)
@@ -33,7 +33,7 @@ export function useRealSignals(params?: SignalFilterParams) {
 }
 
 /**
- * Hook to fetch a single signal
+ * Hook to fetch a single signal (legacy mock-aware)
  */
 export function useSignal(id: string) {
   const { useMockData } = useDataMode()
@@ -43,6 +43,19 @@ export function useSignal(id: string) {
     queryFn: () => getSignal(id, useMockData),
     staleTime: 5 * 60 * 1000,
     enabled: !!id
+  })
+}
+
+/**
+ * Hook to fetch a single signal from the real database with metrics.
+ * Does NOT depend on useDataMode — always fetches real data.
+ */
+export function useRealSignal(id: string) {
+  return useQuery<RealSignalDetailResponse>({
+    queryKey: ['signals', 'real', id],
+    queryFn: () => getRealSignalById(id),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!id,
   })
 }
 
