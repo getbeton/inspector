@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { trackDemoTourStarted, trackSetupStarted } from '@/lib/analytics'
 
 interface PreSetupViewProps {
   className?: string
@@ -18,11 +19,13 @@ export function PreSetupView({ className }: PreSetupViewProps) {
   const { enterDemoMode } = useDemoMode()
 
   const handleDemoTour = () => {
+    trackDemoTourStarted()
     enterDemoMode()
     router.push('/signals')
   }
 
   const handleConnectData = () => {
+    trackSetupStarted()
     // Navigate to the setup wizard — the home page will show it
     // We just reload to re-enter the page.tsx logic which renders SetupWizard
     router.refresh()

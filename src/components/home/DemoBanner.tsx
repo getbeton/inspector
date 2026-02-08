@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { trackDemoTourCompleted } from '@/lib/analytics'
 
 /**
  * Persistent banner shown when the user is in demo mode.
@@ -15,6 +16,7 @@ export function DemoBanner() {
   if (!isDemoMode) return null
 
   const handleExit = () => {
+    trackDemoTourCompleted()
     exitDemoMode()
     router.push('/')
   }

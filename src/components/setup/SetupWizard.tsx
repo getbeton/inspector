@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { trackSetupStepCompleted, trackOnboardingCompleted } from "@/lib/analytics";
 import { ProgressIndicator } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
@@ -123,6 +124,7 @@ export function SetupWizard({
   const handlePostHogSuccess = useCallback(
     (data: { mtuCount: number; region: string }) => {
       setMtuCount(data.mtuCount);
+      trackSetupStepCompleted("posthog");
       setCurrentStep(getNextStep("posthog"));
     },
     [getNextStep]
@@ -132,8 +134,10 @@ export function SetupWizard({
    * Handle Billing step completion
    */
   const handleBillingComplete = useCallback(() => {
+    trackSetupStepCompleted("billing");
     const next = getNextStep("billing");
     if (next === "complete") {
+      trackOnboardingCompleted();
       router.push("/signals");
     } else {
       setCurrentStep(next);
@@ -144,8 +148,10 @@ export function SetupWizard({
    * Handle Attio step completion
    */
   const handleAttioSuccess = useCallback(() => {
+    trackSetupStepCompleted("attio");
     const next = getNextStep("attio");
     if (next === "complete") {
+      trackOnboardingCompleted();
       router.push("/signals");
     } else {
       setCurrentStep(next);

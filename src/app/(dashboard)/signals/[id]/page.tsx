@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { trackFirstSignalViewed } from '@/lib/analytics'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,13 @@ export default function SignalDetailPage() {
 
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [showTrend, setShowTrend] = useState(true)
+
+  // Track first signal viewed (deduped via sessionStorage inside the function)
+  useEffect(() => {
+    if (signalId) {
+      trackFirstSignalViewed(signalId)
+    }
+  }, [signalId])
 
   // Get signal data (mock for now)
   const signal = useMemo<SignalDetail | null>(() => {
