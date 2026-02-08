@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { BillingStatusCard } from '@/components/billing'
@@ -14,9 +13,20 @@ interface WorkspaceSummaryProps {
   className?: string
 }
 
+function formatTimeAgo(dateString: string): string {
+  const diffMs = Date.now() - new Date(dateString).getTime()
+  const diffMin = Math.floor(diffMs / 60_000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHours = Math.floor(diffMin / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
+}
+
 /**
  * Post-setup dashboard shown to users who have completed onboarding.
- * Shows integration status, signal metrics, and quick actions.
+ * Shows integration status, signal metrics, recent signals, and billing.
  */
 export function WorkspaceSummary({ className }: WorkspaceSummaryProps) {
   const { data: setupStatus } = useSetupStatus()
@@ -102,31 +112,54 @@ export function WorkspaceSummary({ className }: WorkspaceSummaryProps) {
         )}
       </div>
 
+      {/* Recent Signals */}
+      {metrics?.recentSignals && metrics.recentSignals.length > 0 && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium">Recent Signals</h3>
+              <Link href="/signals" className="text-xs text-primary hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b border-border">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Signal</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Account</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Source</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.recentSignals.map((signal) => (
+                    <tr key={signal.id} className="border-b border-border last:border-0">
+                      <td className="px-3 py-2 font-medium">{signal.type}</td>
+                      <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]">
+                        {signal.accountName || '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {signal.source === 'manual' ? 'User' : 'Auto'}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                        {formatTimeAgo(signal.timestamp)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Billing (compact) */}
       <div className="mb-6">
         <BillingStatusCard compact />
       </div>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="font-medium mb-3">Quick Actions</h3>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/signals">
-              <Button variant="outline" size="sm">View Signals</Button>
-            </Link>
-            <Link href="/identities">
-              <Button variant="outline" size="sm">View Identities</Button>
-            </Link>
-            <Link href="/settings">
-              <Button variant="outline" size="sm">Manage Integrations</Button>
-            </Link>
-            <Link href="/signals/new">
-              <Button size="sm">Add Signal</Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils/cn'
 import { resetIdentity } from '@/lib/analytics'
-import { useAllSyncStatuses } from '@/lib/hooks/use-sync-status'
+import { useAllSyncStatuses, useTriggerSync } from '@/lib/hooks/use-sync-status'
+import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 
 interface HeaderProps {
   user: {
@@ -18,6 +19,84 @@ interface HeaderProps {
   onMenuClick?: () => void
   onToggleSidebar?: () => void
   sidebarCollapsed?: boolean
+}
+
+/**
+ * Quick action buttons in header — Sync Data + Add Signal.
+ * Only visible when setup is complete. Hidden on mobile.
+ */
+function HeaderQuickActions() {
+  const { data: setupStatus } = useSetupStatus()
+  const triggerSync = useTriggerSync()
+
+  if (!setupStatus?.setupComplete) return null
+
+  return (
+    <div className="hidden sm:flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => triggerSync.mutate({ syncType: 'posthog_events' })}
+        disabled={triggerSync.isPending}
+        className="gap-1.5"
+      >
+        <svg
+          className={cn('w-3.5 h-3.5', triggerSync.isPending && 'animate-spin')}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {triggerSync.isPending ? 'Syncing...' : 'Sync Data'}
+      </Button>
+      <Link href="/signals/new">
+        <Button size="sm" className="gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Signal
+        </Button>
+      </Link>
+    </div>
+  )
+}
+
+/**
+ * Sync health indicator — green if all syncs are recent, yellow if stale (>24h), red if any failed.
+ */
+function SyncHealthDot() {
+  const { data: statuses } = useAllSyncStatuses()
+
+  if (!statuses || statuses.length === 0) return null
+
+  const now = Date.now()
+  const hasFailure = statuses.some(s => s.status === 'failed')
+  const hasStale = statuses.some(s => {
+    const lastTime = s.completed_at || s.started_at
+    if (!lastTime) return true
+    return now - new Date(lastTime).getTime() > 24 * 60 * 60 * 1000
+  })
+
+  const color = hasFailure ? 'bg-destructive' : hasStale ? 'bg-warning' : 'bg-success'
+  const label = hasFailure ? 'Sync error' : hasStale ? 'Sync stale' : 'Syncs healthy'
+
+  return (
+    <Link
+      href="/settings/sync"
+      className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
+      title={label}
+    >
+      <div className="relative">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        <span className={cn('absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card', color)} />
+      </div>
+    </Link>
+  )
 }
 
 export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarCollapsed }: HeaderProps) {
@@ -91,7 +170,13 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
       </div>
 
       {/* Right side - User menu */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        {/* Quick actions — only visible post-setup, hidden on mobile */}
+        <HeaderQuickActions />
+
+        {/* Sync health indicator */}
+        <SyncHealthDot />
+
         {/* Notifications placeholder */}
         <button className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
