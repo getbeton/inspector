@@ -6,15 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils/cn'
-
-const EVENT_TYPES = [
-  { id: 'pageview', name: 'Page View', description: 'Track visits to specific pages' },
-  { id: 'feature_used', name: 'Feature Usage', description: 'Track feature adoption events' },
-  { id: 'api_call', name: 'API Call', description: 'Track API endpoint usage' },
-  { id: 'custom', name: 'Custom Event', description: 'Define your own event pattern' },
-]
+import { EventPicker } from '@/components/signals/event-picker'
 
 const CONDITION_OPERATORS = [
   { id: 'gte', label: '>=' },
@@ -28,7 +20,6 @@ export default function AddSignalPage() {
   const router = useRouter()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [eventType, setEventType] = useState<string>('')
   const [eventPattern, setEventPattern] = useState('')
   const [conditionOperator, setConditionOperator] = useState('gte')
   const [conditionValue, setConditionValue] = useState('1')
@@ -97,91 +88,55 @@ export default function AddSignalPage() {
           </CardContent>
         </Card>
 
-        {/* Event Type */}
+        {/* Event Selection */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Event Type</CardTitle>
-            <CardDescription>Select the type of event to track</CardDescription>
+            <CardTitle className="text-lg">Event</CardTitle>
+            <CardDescription>Select the PostHog event to track</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {EVENT_TYPES.map(type => (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => setEventType(type.id)}
-                  className={cn(
-                    'text-left p-4 rounded-lg border transition-colors',
-                    eventType === type.id
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50'
-                  )}
-                >
-                  <p className="font-medium">{type.name}</p>
-                  <p className="text-sm text-muted-foreground">{type.description}</p>
-                </button>
-              ))}
-            </div>
+            <EventPicker
+              value={eventPattern}
+              onSelect={setEventPattern}
+            />
           </CardContent>
         </Card>
 
-        {/* Event Pattern */}
-        {eventType && (
+        {/* Condition */}
+        {eventPattern && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Event Pattern</CardTitle>
-              <CardDescription>Define the specific event to match</CardDescription>
+              <CardTitle className="text-lg">Condition</CardTitle>
+              <CardDescription>Define when this signal fires</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  {eventType === 'pageview' ? 'Page URL Pattern' :
-                   eventType === 'feature_used' ? 'Feature Name' :
-                   eventType === 'api_call' ? 'API Endpoint' : 'Event Name'}
-                </label>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Event count</span>
+                <select
+                  value={conditionOperator}
+                  onChange={(e) => setConditionOperator(e.target.value)}
+                  className="px-3 py-2 border border-border rounded-md bg-background text-sm"
+                >
+                  {CONDITION_OPERATORS.map(op => (
+                    <option key={op.id} value={op.id}>{op.label}</option>
+                  ))}
+                </select>
                 <Input
-                  placeholder={
-                    eventType === 'pageview' ? '/pricing' :
-                    eventType === 'feature_used' ? 'dashboard_viewed' :
-                    eventType === 'api_call' ? '/api/v1/users' : 'custom_event_name'
-                  }
-                  value={eventPattern}
-                  onChange={(e) => setEventPattern(e.target.value)}
-                  required
+                  type="number"
+                  min="1"
+                  value={conditionValue}
+                  onChange={(e) => setConditionValue(e.target.value)}
+                  className="w-20"
                 />
-              </div>
-
-              {/* Condition */}
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Condition</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Event count</span>
-                  <select
-                    value={conditionOperator}
-                    onChange={(e) => setConditionOperator(e.target.value)}
-                    className="px-3 py-2 border border-border rounded-md bg-background text-sm"
-                  >
-                    {CONDITION_OPERATORS.map(op => (
-                      <option key={op.id} value={op.id}>{op.label}</option>
-                    ))}
-                  </select>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={conditionValue}
-                    onChange={(e) => setConditionValue(e.target.value)}
-                    className="w-20"
-                  />
-                  <span className="text-sm text-muted-foreground">in last</span>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={timeWindow}
-                    onChange={(e) => setTimeWindow(e.target.value)}
-                    className="w-20"
-                  />
-                  <span className="text-sm text-muted-foreground">days</span>
-                </div>
+                <span className="text-sm text-muted-foreground">in last</span>
+                <Input
+                  type="number"
+                  min="1"
+                  value={timeWindow}
+                  onChange={(e) => setTimeWindow(e.target.value)}
+                  className="w-20"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
               </div>
             </CardContent>
           </Card>
@@ -218,7 +173,7 @@ export default function AddSignalPage() {
           </Link>
           <Button
             type="submit"
-            disabled={!name || !eventType || !eventPattern || isSubmitting}
+            disabled={!name || !eventPattern || isSubmitting}
           >
             {isSubmitting ? 'Creating...' : 'Create Signal'}
           </Button>
