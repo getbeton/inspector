@@ -16,6 +16,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { toastManager } from '@/components/ui/toast'
+import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
 interface Integration {
@@ -218,6 +219,16 @@ export default function SettingsIntegrationsPage() {
                         />
                       </div>
                     ))}
+                    {integration.id === 'attio' && (
+                      <a
+                        href="https://app.attio.com/settings/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        Get your API key <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
                     <div className="flex items-center gap-2 pt-2">
                       <Button onClick={() => handleSave(integration.id)} disabled={isSaving}>
                         {isSaving ? 'Saving...' : 'Save'}
