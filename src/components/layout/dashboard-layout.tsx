@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
+import { TestModeBanner } from './test-mode-banner'
 import { DashboardThresholdBanner, AccessBlockedOverlay } from '@/components/billing'
 
 interface DashboardLayoutProps {
@@ -51,7 +52,8 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Threshold warning banner (sticky) */}
+        {/* Environment banners (sticky, stacked) */}
+        <TestModeBanner />
         <DashboardThresholdBanner />
 
         <Header
