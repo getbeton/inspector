@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 /**
  * Signal API methods
- * Communicates with FastAPI backend for signal operations
+ * Communicates with Next.js API routes for signal operations
  */
 
 export interface Signal {
@@ -35,8 +35,66 @@ export interface SignalListResponse {
   mock: boolean
 }
 
+/** Real signal from the database (signals table shape) */
+export interface DBSignal {
+  id: string
+  workspace_id: string
+  account_id: string
+  type: string
+  value: number | null
+  details: Record<string, unknown>
+  timestamp: string
+  source: string | null
+  created_at: string
+  accounts?: {
+    id: string
+    name: string
+    domain: string | null
+    arr: number | null
+    health_score: number | null
+  } | null
+}
+
+export interface DBSignalListResponse {
+  signals: DBSignal[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
+
+export interface SignalFilterParams {
+  source?: 'manual' | 'heuristic' | string
+  type?: string
+  search?: string
+  page?: number
+  limit?: number
+}
+
 /**
- * Get list of all signals
+ * Get list of signals from the real API
+ */
+export async function getSignalsFromAPI(params?: SignalFilterParams): Promise<DBSignalListResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.source) searchParams.set('source', params.source)
+  if (params?.type) searchParams.set('type', params.type)
+  if (params?.page) searchParams.set('page', String(params.page))
+  if (params?.limit) searchParams.set('limit', String(params.limit))
+
+  const qs = searchParams.toString()
+  const url = qs ? `/api/signals?${qs}` : '/api/signals'
+
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error('Failed to fetch signals')
+  }
+  return res.json()
+}
+
+/**
+ * Get list of all signals (legacy — supports mock mode)
  */
 export async function getSignals(useMockData = false): Promise<SignalListResponse> {
   return apiClient.get<SignalListResponse>('/api/signals/list', { useMockData })
