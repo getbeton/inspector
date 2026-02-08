@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EventPicker } from '@/components/signals/event-picker'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 
 const CONDITION_OPERATORS = [
@@ -74,6 +75,8 @@ export default function AddSignalPage() {
   const [cohortResult, setCohortResult] = useState<CohortResult | null>(null)
   const [isCreatingAttioList, setIsCreatingAttioList] = useState(false)
   const [attioListResult, setAttioListResult] = useState<AttioListResult | null>(null)
+  const [cohortError, setCohortError] = useState<string | null>(null)
+  const [attioListError, setAttioListError] = useState<string | null>(null)
   const [autoUpdateCohort, setAutoUpdateCohort] = useState(false)
   const [autoUpdateAttioList, setAutoUpdateAttioList] = useState(false)
 
@@ -128,7 +131,11 @@ export default function AddSignalPage() {
   }
 
   const handleCreateCohort = async () => {
-    if (!preview || preview.users.length === 0) return
+    if (!preview || preview.users.length === 0) {
+      setCohortError('Run a preview first to find matching users')
+      return
+    }
+    setCohortError(null)
     setIsCreatingCohort(true)
 
     try {
@@ -152,14 +159,18 @@ export default function AddSignalPage() {
       const data: CohortResult = await res.json()
       setCohortResult(data)
     } catch (err) {
-      setPreviewError(err instanceof Error ? err.message : 'Failed to create cohort')
+      setCohortError(err instanceof Error ? err.message : 'Failed to create cohort')
     } finally {
       setIsCreatingCohort(false)
     }
   }
 
   const handleCreateAttioList = async () => {
-    if (!preview || preview.users.length === 0) return
+    if (!preview || preview.users.length === 0) {
+      setAttioListError('Run a preview first to find matching users')
+      return
+    }
+    setAttioListError(null)
     setIsCreatingAttioList(true)
 
     try {
@@ -183,7 +194,7 @@ export default function AddSignalPage() {
       const data: AttioListResult = await res.json()
       setAttioListResult(data)
     } catch (err) {
-      setPreviewError(err instanceof Error ? err.message : 'Failed to create Attio list')
+      setAttioListError(err instanceof Error ? err.message : 'Failed to create Attio list')
     } finally {
       setIsCreatingAttioList(false)
     }
@@ -474,64 +485,108 @@ export default function AddSignalPage() {
                   {/* Action buttons */}
                   <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
                     {/* PostHog cohort */}
-                    <div className="flex items-center gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCreateCohort}
-                        disabled={isCreatingCohort || !!cohortResult}
-                      >
-                        {isCreatingCohort ? 'Creating...' : cohortResult ? 'Cohort Created' : 'Create PostHog Cohort'}
-                      </Button>
-                      {cohortResult && (
-                        <a
-                          href={cohortResult.cohort_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary text-xs hover:underline"
-                        >
-                          Open in PostHog
-                        </a>
-                      )}
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
-                        <Checkbox
-                          checked={autoUpdateCohort}
-                          onCheckedChange={(checked) => setAutoUpdateCohort(checked === true)}
-                          disabled={!cohortResult}
-                        />
-                        Auto-update
-                      </label>
-                    </div>
-
-                    {/* Attio list (only if connected) */}
-                    {attioConnected && (
+                    <div className="space-y-1.5">
                       <div className="flex items-center gap-3">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleCreateAttioList}
-                          disabled={isCreatingAttioList || !!attioListResult}
+                          onClick={handleCreateCohort}
+                          disabled={isCreatingCohort || !!cohortResult}
                         >
-                          {isCreatingAttioList ? 'Creating...' : attioListResult ? 'List Created' : 'Save to Attio List'}
+                          {isCreatingCohort ? 'Creating...' : cohortResult ? 'Cohort Created' : 'Create PostHog Cohort'}
                         </Button>
-                        {attioListResult && (
-                          <span className="text-xs text-muted-foreground">
-                            {attioListResult.entries_added} people added
-                            {attioListResult.entries_failed > 0 && (
-                              <span className="text-destructive"> ({attioListResult.entries_failed} failed)</span>
-                            )}
-                          </span>
+                        {cohortResult && (
+                          <a
+                            href={cohortResult.cohort_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary text-xs hover:underline"
+                          >
+                            Open in PostHog
+                          </a>
                         )}
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
-                          <Checkbox
-                            checked={autoUpdateAttioList}
-                            onCheckedChange={(checked) => setAutoUpdateAttioList(checked === true)}
-                            disabled={!attioListResult}
-                          />
-                          Auto-update
-                        </label>
+                        {!cohortResult ? (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span />}
+                              className="ml-auto"
+                            >
+                              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-not-allowed opacity-60">
+                                <Checkbox
+                                  checked={autoUpdateCohort}
+                                  disabled
+                                />
+                                Auto-update
+                              </label>
+                            </TooltipTrigger>
+                            <TooltipContent>Create the cohort first to enable auto-update</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
+                            <Checkbox
+                              checked={autoUpdateCohort}
+                              onCheckedChange={(checked) => setAutoUpdateCohort(checked === true)}
+                            />
+                            Auto-update
+                          </label>
+                        )}
+                      </div>
+                      {cohortError && (
+                        <p className="text-xs text-destructive">{cohortError}</p>
+                      )}
+                    </div>
+
+                    {/* Attio list (only if connected) */}
+                    {attioConnected && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCreateAttioList}
+                            disabled={isCreatingAttioList || !!attioListResult}
+                          >
+                            {isCreatingAttioList ? 'Creating...' : attioListResult ? 'List Created' : 'Save to Attio List'}
+                          </Button>
+                          {attioListResult && (
+                            <span className="text-xs text-muted-foreground">
+                              {attioListResult.entries_added} people added
+                              {attioListResult.entries_failed > 0 && (
+                                <span className="text-destructive"> ({attioListResult.entries_failed} failed)</span>
+                              )}
+                            </span>
+                          )}
+                          {!attioListResult ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<span />}
+                                className="ml-auto"
+                              >
+                                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-not-allowed opacity-60">
+                                  <Checkbox
+                                    checked={autoUpdateAttioList}
+                                    disabled
+                                  />
+                                  Auto-update
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent>Create the list first to enable auto-update</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
+                              <Checkbox
+                                checked={autoUpdateAttioList}
+                                onCheckedChange={(checked) => setAutoUpdateAttioList(checked === true)}
+                              />
+                              Auto-update
+                            </label>
+                          )}
+                        </div>
+                        {attioListError && (
+                          <p className="text-xs text-destructive">{attioListError}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -575,16 +630,27 @@ export default function AddSignalPage() {
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3">
-          <Link href="/signals">
-            <Button type="button" variant="outline">Cancel</Button>
-          </Link>
-          <Button
-            type="submit"
-            disabled={!name || eventPatterns.length === 0 || isSubmitting}
-          >
-            {isSubmitting ? 'Creating...' : 'Create Signal'}
-          </Button>
+        <div className="flex flex-col items-end gap-2">
+          {(!name || eventPatterns.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              {!name && eventPatterns.length === 0
+                ? 'Enter a signal name and select at least one event to continue'
+                : !name
+                  ? 'Enter a signal name to continue'
+                  : 'Select at least one event to continue'}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <Link href="/signals">
+              <Button type="button" variant="outline">Cancel</Button>
+            </Link>
+            <Button
+              type="submit"
+              disabled={!name || eventPatterns.length === 0 || isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Signal'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

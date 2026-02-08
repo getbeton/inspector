@@ -12,6 +12,7 @@ import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
 import { useRealSignals } from '@/lib/hooks/use-signals'
+import { RefreshButton } from '@/components/ui/refresh-button'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 import type { DBSignal } from '@/lib/api/signals'
 
@@ -163,14 +164,17 @@ export default function SignalsPage() {
             Behavioral patterns that predict customer conversion
           </p>
         </div>
-        <Link href="/signals/new">
-          <Button>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Signal
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          {!isDemo && <RefreshButton syncType="signal_detection" />}
+          <Link href="/signals/new">
+            <Button>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Signal
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Demo Banner */}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { BillingStatusCard } from '@/components/billing'
+import { RefreshButton } from '@/components/ui/refresh-button'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDashboardMetrics } from '@/lib/hooks/use-dashboard-metrics'
 
@@ -23,11 +24,14 @@ export function WorkspaceSummary({ className }: WorkspaceSummaryProps) {
 
   return (
     <div className={className}>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
-        <p className="text-muted-foreground">
-          Your workspace overview
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold">Dashboard</h2>
+          <p className="text-muted-foreground">
+            Your workspace overview
+          </p>
+        </div>
+        <RefreshButton syncType="posthog_events" />
       </div>
 
       {/* Integration Status */}

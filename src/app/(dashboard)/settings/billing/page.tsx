@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useBillingStatus, useCreatePortalSession } from '@/lib/hooks/use-billing'
 import { Spinner } from '@/components/ui/spinner'
 import { MessageCircle } from 'lucide-react'
+import { RefreshButton } from '@/components/ui/refresh-button'
 
 declare global {
   interface Window {
@@ -34,6 +35,13 @@ export default function SettingsBillingPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Billing</h2>
+          <p className="text-sm text-muted-foreground">Manage your subscription and usage</p>
+        </div>
+        <RefreshButton syncType="mtu_tracking" />
+      </div>
       <BillingStatusCard />
 
       {showRefund && (

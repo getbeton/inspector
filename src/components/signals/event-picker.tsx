@@ -149,7 +149,7 @@ export function EventPicker({ value, onChange, placeholder, className }: EventPi
         <PopoverPopup
           side="bottom"
           align="start"
-          className="w-[var(--anchor-width)] max-h-80"
+          className="w-[var(--anchor-width)] max-h-[28rem]"
         >
           {/* Header with PostHog branding */}
           <div className="flex items-center gap-2 px-3 pb-2 border-b border-border mb-2">
@@ -189,7 +189,7 @@ export function EventPicker({ value, onChange, placeholder, className }: EventPi
           </div>
 
           {/* Event list */}
-          <ScrollArea className="max-h-48">
+          <ScrollArea className="max-h-72">
             <div className="px-1">
               {isLoading ? (
                 <div className="p-2 space-y-2">
