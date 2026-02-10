@@ -50,20 +50,23 @@ export async function GET(req: NextRequest) {
             credentials.host || undefined
         );
 
-        // Query system.tables via HogQL
-        const hogql = `SELECT name, engine, total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() ORDER BY name`;
-        const result = await client.query(hogql);
+        // Fetch virtual schema via DatabaseSchemaQuery
+        const schema = await client.getDatabaseSchema();
 
-        const tables: TableInfo[] = result.results.map((row) => {
-            const name = String(row[0]);
-            return {
-                table_id: TABLE_ID_REGEX.test(name) ? name : '',
-                table_name: name,
-                engine: String(row[1]),
-                total_rows: Number(row[2]) || 0,
-                total_bytes: Number(row[3]) || 0,
-            };
-        }).filter(t => t.table_id !== '');
+        // Table types that are structural/internal and not directly queryable
+        const NON_QUERYABLE_TYPES = new Set(['lazy_table', 'virtual_table', 'field_traverser']);
+
+        const tables: TableInfo[] = Object.entries(schema.tables)
+            .filter(([, table]) => !NON_QUERYABLE_TYPES.has(table.type))
+            .filter(([key]) => TABLE_ID_REGEX.test(key))
+            .map(([key, table]) => ({
+                table_id: key,
+                table_name: table.name,
+                engine: table.type,
+                total_rows: 0,
+                total_bytes: 0,
+            }))
+            .sort((a, b) => a.table_id.localeCompare(b.table_id));
 
         log.info(`Listed ${tables.length} tables for workspace=${workspaceId} session=${sessionId}`);
         return NextResponse.json({ tables });

@@ -27,6 +27,29 @@ export interface QueryResult {
   columns: string[]
 }
 
+// ============================================
+// DatabaseSchemaQuery types
+// ============================================
+
+export interface DatabaseSchemaField {
+  name: string
+  /** e.g. 'integer', 'float', 'string', 'datetime', 'boolean', 'array', 'json', 'lazy_table', 'virtual_table', 'field_traverser' */
+  type: string
+  schema_valid: boolean
+}
+
+export interface DatabaseSchemaTable {
+  id: string
+  name: string
+  /** e.g. 'posthog', 'data_warehouse', 'view', 'lazy_table', 'virtual_table' */
+  type: string
+  fields: Record<string, DatabaseSchemaField>
+}
+
+export interface DatabaseSchemaResponse {
+  tables: Record<string, DatabaseSchemaTable>
+}
+
 export interface PostHogSavedQueryResponse {
   id: number | string
   name: string
@@ -241,6 +264,19 @@ export class PostHogClient {
     } finally {
       clearTimeout(timeoutId)
     }
+  }
+
+  /**
+   * Fetch the full database schema via PostHog's DatabaseSchemaQuery.
+   * Returns all tables and their fields visible in the project's HogQL virtual schema.
+   */
+  async getDatabaseSchema(): Promise<DatabaseSchemaResponse> {
+    return this.fetchWithTimeout<DatabaseSchemaResponse>('/query', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: { kind: 'DatabaseSchemaQuery' },
+      }),
+    })
   }
 
   /**

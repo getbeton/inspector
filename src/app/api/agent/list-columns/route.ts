@@ -57,11 +57,22 @@ export async function GET(req: NextRequest) {
             credentials.host || undefined
         );
 
-        // Query 1: Column metadata from system.columns
-        const metadataQuery = `SELECT name, type FROM system.columns WHERE database = currentDatabase() AND table = '${tableId}' ORDER BY position`;
-        const metadataResult = await client.query(metadataQuery);
+        // Fetch virtual schema and look up the requested table
+        const schema = await client.getDatabaseSchema();
+        const schemaTable = schema.tables[tableId];
 
-        // Query 2: Sample rows for example values
+        if (!schemaTable) {
+            return NextResponse.json({ error: `Table '${tableId}' not found in schema` }, { status: 404 });
+        }
+
+        // Field types that are structural/internal and not directly queryable
+        const NON_QUERYABLE_FIELD_TYPES = new Set(['lazy_table', 'virtual_table', 'field_traverser']);
+
+        // Extract queryable fields from schema
+        const schemaFields = Object.values(schemaTable.fields)
+            .filter(f => !NON_QUERYABLE_FIELD_TYPES.has(f.type));
+
+        // Sample rows for example values (this works via HogQL on Cloud)
         const sampleQuery = `SELECT * FROM ${tableId} LIMIT 3`;
         let sampleRows: unknown[][] = [];
         let sampleColumns: string[] = [];
@@ -75,20 +86,16 @@ export async function GET(req: NextRequest) {
         }
 
         // Build column info with example values
-        const columns: ColumnInfo[] = metadataResult.results.map((row) => {
-            const colName = String(row[0]);
-            const colType = String(row[1]);
-
-            // Find examples from sample rows
-            const colIndex = sampleColumns.indexOf(colName);
+        const columns: ColumnInfo[] = schemaFields.map((field) => {
+            const colIndex = sampleColumns.indexOf(field.name);
             const examples = colIndex >= 0
                 ? sampleRows.map(sampleRow => sampleRow[colIndex])
                 : [];
 
             return {
-                col_id: colName,
-                col_name: colName,
-                col_type: colType,
+                col_id: field.name,
+                col_name: field.name,
+                col_type: field.type,
                 examples,
             };
         });
