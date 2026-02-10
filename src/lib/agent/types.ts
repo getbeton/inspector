@@ -8,6 +8,7 @@ export type { AgentSessionStatus } from './session';
 export interface TableInfo {
     table_id: string;
     table_name: string;
+    /** PostHog table type from DatabaseSchemaQuery (e.g. 'posthog', 'data_warehouse', 'view') */
     engine: string;
     total_rows: number;
     total_bytes: number;
