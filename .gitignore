@@ -39,6 +39,7 @@ task_logs/
 # Local-only Claude config
 .claude/settings.local.json
 .claude/plans/
+.claude/skills/
 .mcp.json
 CLAUDE.md
 

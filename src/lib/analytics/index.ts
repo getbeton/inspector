@@ -13,7 +13,15 @@ export {
   setWorkspaceContext,
   trackSignup,
   trackLogin,
-  resetIdentity
+  resetIdentity,
+  trackDemoTourStarted,
+  trackDemoTourCompleted,
+  trackSetupStarted,
+  trackSetupStepCompleted,
+  trackIntegrationConnected,
+  trackCardLinked,
+  trackFirstSignalViewed,
+  trackOnboardingCompleted,
 } from './gtm'
 
 export { usePostHogIdentify } from './use-posthog-identify'

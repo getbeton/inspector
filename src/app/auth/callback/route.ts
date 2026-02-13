@@ -4,6 +4,17 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
+ * Public email domains — these don't indicate a company website.
+ * If the user's email domain is in this list, we leave website_url null.
+ */
+const PUBLIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com',
+  'live.com', 'yahoo.com', 'aol.com', 'icloud.com', 'me.com',
+  'protonmail.com', 'proton.me', 'zoho.com', 'mail.com',
+  'yandex.com', 'fastmail.com', 'tutanota.com',
+])
+
+/**
  * OAuth callback handler
  * Exchanges the auth code for a session and creates/updates workspace
  *
@@ -69,6 +80,15 @@ export async function GET(request: NextRequest) {
         if (workspaceError || !workspace) {
           console.error('[Auth Callback] Workspace creation failed:', workspaceError?.message)
           return NextResponse.redirect(`${origin}/login?error=workspace_creation_failed`)
+        }
+
+        // Auto-detect company domain from email for website_url
+        const emailDomain = email.split('@')[1]?.toLowerCase()
+        if (emailDomain && !PUBLIC_EMAIL_DOMAINS.has(emailDomain)) {
+          await adminClient
+            .from('workspaces')
+            .update({ website_url: `https://${emailDomain}` } as never)
+            .eq('id', workspace.id)
         }
 
         // Add user as workspace owner

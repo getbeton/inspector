@@ -1,24 +1,58 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { SignalFiltersBar, type SignalFilters } from '@/components/signals/signal-filters'
 import { SignalsTable } from '@/components/signals/signals-table'
 import { BulkActions } from '@/components/signals/bulk-actions'
-import { SetupBanner } from '@/components/setup'
+import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
+import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { useRealSignals, useDeleteSignal } from '@/lib/hooks/use-signals'
+import { RefreshButton } from '@/components/ui/refresh-button'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
+import type { DBSignal } from '@/lib/api/signals'
+
+/**
+ * Map a real DB signal to the SignalData shape used by the table.
+ * Missing metrics show as "Pending" (represented by -1 sentinel values).
+ */
+function dbSignalToDisplay(signal: DBSignal): SignalData {
+  const details = signal.details || {}
+  return {
+    id: signal.id,
+    name: (details.name as string) || signal.type,
+    status: 'active',
+    lift: (details.lift as number) ?? -1,
+    confidence: (details.confidence as number) ?? -1,
+    leads_per_month: (details.leads_per_month as number) ?? 0,
+    estimated_arr: (details.estimated_arr as number) ?? 0,
+    source: signal.source === 'manual' ? 'User-Defined' : 'Beton-Discovered',
+    trend_30d: (details.trend_30d as string) || '--',
+    sample_with: (details.sample_with as number) ?? 0,
+    sample_without: (details.sample_without as number) ?? 0,
+    conversion_with: (details.conversion_with as number) ?? -1,
+    conversion_without: (details.conversion_without as number) ?? -1,
+    trend_data: (details.trend_data as number[]) || [0],
+    accuracy_trend: (details.accuracy_trend as number[]) || [0],
+  }
+}
+
+/** Map source filter value to API param */
+function sourceFilterToAPI(source: string): string | undefined {
+  if (source === 'User-Defined') return 'manual'
+  if (source === 'Beton-Discovered') return 'heuristic'
+  return undefined
+}
 
 export default function SignalsPage() {
   const { data: setupStatus } = useSetupStatus()
+  const { isDemoMode } = useDemoMode()
   const isDemo = !setupStatus || !setupStatus.setupComplete
 
-  // Show mock data when setup incomplete, empty when complete (real API TBD)
-  const signals: SignalData[] = isDemo ? MOCK_SIGNALS : []
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-
   const [filters, setFilters] = useState<SignalFilters>({
     search: '',
     status: 'all',
@@ -27,7 +61,20 @@ export default function SignalsPage() {
     minConfidence: 0
   })
 
-  // Filter signals based on current filters
+  // Fetch real signals from API (only when setup is complete)
+  const sourceParam = filters.source !== 'all' ? sourceFilterToAPI(filters.source) : undefined
+  const { data: realData, isLoading, isError } = useRealSignals(
+    isDemo ? undefined : { source: sourceParam }
+  )
+
+  // Use mock data in demo mode, real data otherwise
+  const signals: SignalData[] = useMemo(() => {
+    if (isDemo) return MOCK_SIGNALS
+    if (!realData?.signals) return []
+    return realData.signals.map(dbSignalToDisplay)
+  }, [isDemo, realData])
+
+  // Filter signals based on current filters (client-side for mock, server-side source already applied)
   const filteredSignals = useMemo(() => {
     return signals.filter(signal => {
       // Search filter
@@ -43,30 +90,31 @@ export default function SignalsPage() {
         return false
       }
 
-      // Source filter
-      if (filters.source !== 'all' && signal.source !== filters.source) {
+      // Source filter (client-side for mock data)
+      if (isDemo && filters.source !== 'all' && signal.source !== filters.source) {
         return false
       }
 
-      // Min lift filter
-      if (signal.lift < filters.minLift) {
+      // Min lift filter (skip pending metrics)
+      if (signal.lift >= 0 && signal.lift < filters.minLift) {
         return false
       }
 
-      // Min confidence filter
-      if (signal.confidence < filters.minConfidence) {
+      // Min confidence filter (skip pending metrics)
+      if (signal.confidence >= 0 && signal.confidence < filters.minConfidence) {
         return false
       }
 
       return true
     })
-  }, [signals, filters])
+  }, [signals, filters, isDemo])
 
   // Stats summary
   const stats = useMemo(() => {
     const active = signals.filter(s => s.status === 'active').length
-    const avgLift = signals.length > 0
-      ? signals.reduce((sum, s) => sum + s.lift, 0) / signals.length
+    const signalsWithLift = signals.filter(s => s.lift >= 0)
+    const avgLift = signalsWithLift.length > 0
+      ? signalsWithLift.reduce((sum, s) => sum + s.lift, 0) / signalsWithLift.length
       : 0
     const totalArr = signals.reduce((sum, s) => sum + s.estimated_arr, 0)
     const totalLeads = signals.reduce((sum, s) => sum + s.leads_per_month, 0)
@@ -74,30 +122,49 @@ export default function SignalsPage() {
     return { active, avgLift, totalArr, totalLeads }
   }, [signals])
 
+  const deleteMutation = useDeleteSignal()
+
   // Bulk actions handlers
   const handleActivate = () => {
+    // TODO: enable/disable API routes not yet implemented
     console.log('Activating signals:', selectedIds)
-    // TODO: Call API to activate signals
     setSelectedIds([])
   }
 
   const handleDeactivate = () => {
+    // TODO: enable/disable API routes not yet implemented
     console.log('Deactivating signals:', selectedIds)
-    // TODO: Call API to deactivate signals
     setSelectedIds([])
   }
 
-  const handleDelete = () => {
-    if (confirm(`Delete ${selectedIds.length} signal(s)?`)) {
-      console.log('Deleting signals:', selectedIds)
-      // TODO: Call API to delete signals
-      setSelectedIds([])
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${selectedIds.length} signal(s)?`)) return
+    for (const id of selectedIds) {
+      try {
+        await deleteMutation.mutateAsync(id)
+      } catch {
+        // continue deleting others
+      }
     }
+    setSelectedIds([])
   }
 
   const handleExport = () => {
-    console.log('Exporting signals:', selectedIds)
-    // TODO: Implement CSV export
+    // Export selected signals as CSV
+    const selected = filteredSignals.filter(s => selectedIds.includes(s.id))
+    const csv = [
+      'Name,Status,Lift,Confidence,Leads/Month,Est. ARR,Source',
+      ...selected.map(s =>
+        `"${s.name}",${s.status},${s.lift >= 0 ? s.lift : 'Pending'},${s.confidence >= 0 ? s.confidence : 'Pending'},${s.leads_per_month},${s.estimated_arr},${s.source}`
+      )
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'signals-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const formatCurrency = (n: number) => {
@@ -119,18 +186,21 @@ export default function SignalsPage() {
             Behavioral patterns that predict customer conversion
           </p>
         </div>
-        <Link href="/signals/new">
-          <Button>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Signal
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          {!isDemo && <RefreshButton syncType="signal_detection" />}
+        </div>
       </div>
 
-      {/* Setup Banner */}
-      {setupStatus && <SetupBanner setupStatus={setupStatus} />}
+      {/* Demo Banner */}
+      {isDemoMode && <DemoBanner />}
+
+      {/* Demo indicator */}
+      {isDemo && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Badge variant="secondary">Demo data</Badge>
+          <span>Complete setup to see your real signals</span>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -175,14 +245,37 @@ export default function SignalsPage() {
         onExport={handleExport}
       />
 
+      {/* Loading state */}
+      {!isDemo && isLoading && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading signals...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error state */}
+      {!isDemo && isError && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive font-medium mb-2">Failed to load signals</p>
+            <p className="text-muted-foreground mb-4">Please try again or check your connection.</p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Signals Table */}
-      {filteredSignals.length > 0 ? (
+      {!isLoading && !isError && filteredSignals.length > 0 ? (
         <SignalsTable
           signals={filteredSignals}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
-      ) : (
+      ) : !isLoading && !isError && (
         <Card>
           <CardContent className="py-12 text-center">
             <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -209,11 +302,7 @@ export default function SignalsPage() {
               >
                 Clear Filters
               </Button>
-            ) : (
-              <Link href="/signals/new">
-                <Button>Add Signal</Button>
-              </Link>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       )}

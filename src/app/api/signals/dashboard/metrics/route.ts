@@ -54,9 +54,43 @@ export async function GET(request: NextRequest) {
 
     const signalSummary = signalSummaryData as SignalTypesSummaryResult[] | null
 
+    // Optionally include recent signals for the dashboard
+    const includeRecent = searchParams.get('include_recent') === 'true'
+    let recentSignals: Array<{
+      id: string
+      type: string
+      source: string
+      accountName: string | null
+      timestamp: string
+    }> | undefined
+
+    if (includeRecent) {
+      const { data: recentData } = await supabase
+        .from('signals')
+        .select('id, type, source, timestamp, accounts(name)')
+        .eq('workspace_id', membership.workspaceId)
+        .order('timestamp', { ascending: false })
+        .limit(5) as { data: Array<{
+          id: string
+          type: string
+          source: string
+          timestamp: string
+          accounts: { name: string } | null
+        }> | null }
+
+      recentSignals = recentData?.map(s => ({
+        id: s.id,
+        type: s.type,
+        source: s.source || 'heuristic',
+        accountName: s.accounts?.name || null,
+        timestamp: s.timestamp,
+      }))
+    }
+
     return NextResponse.json({
       metrics: metrics?.[0] || {},
-      signal_types: signalSummary || []
+      signal_types: signalSummary || [],
+      ...(recentSignals ? { recent_signals: recentSignals } : {}),
     })
   } catch (error) {
     console.error('Error in GET /api/signals/dashboard/metrics:', error)

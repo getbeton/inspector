@@ -24,60 +24,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import { QueryService } from '@/lib/services/query-service'
 import { PostHogClient } from '@/lib/integrations/posthog/client'
-import { getIntegrationCredentials } from '@/lib/integrations/credentials'
-import { getPostHogHost } from '@/lib/integrations/posthog/regions'
-import { ConfigurationError, InvalidQueryError } from '@/lib/errors/query-errors'
+import { getPostHogConfig } from '@/lib/integrations/posthog/config'
+import { InvalidQueryError } from '@/lib/errors/query-errors'
 import type { QueryExecutionRequest, QueryExecutionResult } from '@/lib/types/posthog-query'
-
-/**
- * Get PostHog configuration for the workspace
- * Uses the new credentials helper to decrypt stored credentials
- */
-async function getPostHogConfig(
-  workspaceId: string
-): Promise<{ apiKey: string; projectId: string; host?: string }> {
-  const credentials = await getIntegrationCredentials(workspaceId, 'posthog')
-
-  if (!credentials) {
-    throw new ConfigurationError(
-      'PostHog integration is not configured for this workspace. ' +
-      'Please configure PostHog in Settings → Integrations.'
-    )
-  }
-
-  if (!credentials.isActive) {
-    throw new ConfigurationError(
-      'PostHog integration is disabled for this workspace. ' +
-      'Please enable it in Settings → Integrations.'
-    )
-  }
-
-  if (credentials.status !== 'connected' && credentials.status !== 'validating') {
-    throw new ConfigurationError(
-      `PostHog integration status is "${credentials.status}". ` +
-      'Please reconnect PostHog in Settings → Integrations.'
-    )
-  }
-
-  if (!credentials.apiKey) {
-    throw new ConfigurationError(
-      'PostHog API key is missing. Please reconfigure PostHog.'
-    )
-  }
-
-  if (!credentials.projectId) {
-    throw new ConfigurationError(
-      'PostHog project ID is missing. Please reconfigure PostHog with a project ID.'
-    )
-  }
-
-  return {
-    apiKey: credentials.apiKey,
-    projectId: credentials.projectId,
-    // Always derive host from region to ensure /api path is included
-    host: getPostHogHost(credentials.region),
-  }
-}
 
 /**
  * POST handler for query execution
