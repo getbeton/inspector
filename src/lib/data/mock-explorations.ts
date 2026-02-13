@@ -14,7 +14,7 @@ const CONFIRMED_JOINS: JoinPair[] = [
 export const MOCK_SESSIONS: ExplorationSession[] = [
   {
     id: 'uuid-001',
-    session_id: 's_abc123def456',
+    session_id: 'uuid-001',
     workspace_id: MOCK_WORKSPACE_ID,
     agent_app_name: 'upsell_agent',
     status: 'completed',
@@ -29,7 +29,7 @@ export const MOCK_SESSIONS: ExplorationSession[] = [
   },
   {
     id: 'uuid-002',
-    session_id: 's_ghi789jkl012',
+    session_id: 'uuid-002',
     workspace_id: MOCK_WORKSPACE_ID,
     agent_app_name: 'upsell_agent',
     status: 'running',
@@ -44,7 +44,7 @@ export const MOCK_SESSIONS: ExplorationSession[] = [
   },
   {
     id: 'uuid-003',
-    session_id: 's_mno345pqr678',
+    session_id: 'uuid-003',
     workspace_id: MOCK_WORKSPACE_ID,
     agent_app_name: 'upsell_agent',
     status: 'failed',
@@ -124,7 +124,7 @@ const SESSION_RECORDINGS_COLUMNS = [
 ]
 
 export const MOCK_EDA_RESULTS: Record<string, EdaResult[]> = {
-  's_abc123def456': [
+  'uuid-001': [
     {
       id: 'eda-001',
       workspace_id: MOCK_WORKSPACE_ID,
@@ -223,7 +223,7 @@ export const MOCK_EDA_RESULTS: Record<string, EdaResult[]> = {
       updated_at: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
     },
   ],
-  's_ghi789jkl012': [
+  'uuid-002': [
     {
       id: 'eda-006',
       workspace_id: MOCK_WORKSPACE_ID,
@@ -257,7 +257,7 @@ export const MOCK_EDA_RESULTS: Record<string, EdaResult[]> = {
       updated_at: new Date(Date.now() - 3 * 60_000).toISOString(),
     },
   ],
-  's_mno345pqr678': [
+  'uuid-003': [
     {
       id: 'eda-008',
       workspace_id: MOCK_WORKSPACE_ID,
@@ -279,7 +279,7 @@ export const MOCK_EDA_RESULTS: Record<string, EdaResult[]> = {
 // ─── Mock Website Results (keyed by session_id) ───
 
 export const MOCK_WEBSITE_RESULTS: Record<string, WebsiteExplorationResult> = {
-  's_abc123def456': {
+  'uuid-001': {
     id: 'web-001',
     workspace_id: MOCK_WORKSPACE_ID,
     is_b2b: true,
@@ -304,7 +304,7 @@ export const MOCK_WEBSITE_RESULTS: Record<string, WebsiteExplorationResult> = {
     },
     updated_at: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
   },
-  's_mno345pqr678': {
+  'uuid-003': {
     id: 'web-002',
     workspace_id: MOCK_WORKSPACE_ID,
     is_b2b: true,

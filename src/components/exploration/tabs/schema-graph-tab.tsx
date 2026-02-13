@@ -185,7 +185,7 @@ function SchemaGraphInner({
 export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
   const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
     externalEdaResults ? undefined : workspaceId,
-    externalEdaResults ? undefined : session.session_id,
+    externalEdaResults ? undefined : session.id,
   )
   const edaResults = externalEdaResults ?? fetchedEdaResults
   const isLoading = externalEdaResults ? false : fetchLoading
