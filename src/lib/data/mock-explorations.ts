@@ -322,23 +322,33 @@ export const MOCK_WEBSITE_RESULTS: Record<string, WebsiteExplorationResult> = {
 
 export const MOCK_TABLE_COLUMNS: Record<string, TableColumnsResponse> = {
   events: {
-    table_id: 'events',
-    columns: EVENTS_COLUMNS.map(c => ({ ...c, col_id: c.col_name, examples: [] })),
+    table_name: 'events',
+    queryable_name: 'events',
+    source_type: 'posthog',
+    columns: EVENTS_COLUMNS.map(c => ({ name: c.col_name, type: c.col_type, samples: [] })),
   },
   persons: {
-    table_id: 'persons',
-    columns: PERSONS_COLUMNS.map(c => ({ ...c, col_id: c.col_name, examples: [] })),
+    table_name: 'persons',
+    queryable_name: 'persons',
+    source_type: 'posthog',
+    columns: PERSONS_COLUMNS.map(c => ({ name: c.col_name, type: c.col_type, samples: [] })),
   },
   sessions: {
-    table_id: 'sessions',
-    columns: SESSIONS_COLUMNS.map(c => ({ ...c, col_id: c.col_name, examples: [] })),
+    table_name: 'sessions',
+    queryable_name: 'sessions',
+    source_type: 'posthog',
+    columns: SESSIONS_COLUMNS.map(c => ({ name: c.col_name, type: c.col_type, samples: [] })),
   },
   groups: {
-    table_id: 'groups',
-    columns: GROUPS_COLUMNS.map(c => ({ ...c, col_id: c.col_name, examples: [] })),
+    table_name: 'groups',
+    queryable_name: 'groups',
+    source_type: 'posthog',
+    columns: GROUPS_COLUMNS.map(c => ({ name: c.col_name, type: c.col_type, samples: [] })),
   },
   session_recordings: {
-    table_id: 'session_recordings',
-    columns: SESSION_RECORDINGS_COLUMNS.map(c => ({ ...c, col_id: c.col_name, examples: [] })),
+    table_name: 'session_recordings',
+    queryable_name: 'session_recordings',
+    source_type: 'posthog',
+    columns: SESSION_RECORDINGS_COLUMNS.map(c => ({ name: c.col_name, type: c.col_type, samples: [] })),
   },
 }
