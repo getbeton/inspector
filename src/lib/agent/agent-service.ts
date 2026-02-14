@@ -56,7 +56,7 @@ export class AgentService {
             // Non-blocking: continue even if DB write fails
         }
 
-        const promptText = `Analyze website: '${workspace.website_url}'. Use the Inspector callback URL to query PostHog data via proxy routes. Return JSON only.`;
+        const promptText = `Analyze website: '${workspace.website_url}'. Use the Inspector callback URL to query PostHog data via proxy routes. Your session ID for Inspector callbacks is: ${sessionId}. Your workspace ID is: ${workspaceId}. Return JSON only.`;
 
         // 4. Create User/Session on Agent
         try {
