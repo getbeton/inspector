@@ -18,7 +18,7 @@ export default function MemoryAssumptionsPage() {
   )
   const { data: websiteData = null, isLoading: websiteLoading } = useSessionWebsiteResult(
     workspaceId,
-    latestCompletedSession?.session_id,
+    latestCompletedSession?.id,
   )
   const { data: latestChanges } = useLatestChanges(workspaceId)
 
@@ -43,7 +43,7 @@ export default function MemoryAssumptionsPage() {
         websiteData={websiteData}
         isLoading={websiteLoading}
         workspaceId={workspaceId}
-        sessionId={latestCompletedSession?.session_id}
+        sessionId={latestCompletedSession?.id}
         isDemo={isDemo}
         lastChange={latestChanges?.business_model ?? null}
       />

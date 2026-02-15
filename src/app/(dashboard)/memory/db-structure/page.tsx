@@ -19,7 +19,7 @@ export default function MemoryDbStructurePage() {
   )
   const { data: latestEdaResults = [] } = useSessionEdaResults(
     workspaceId,
-    latestCompletedSession?.session_id,
+    latestCompletedSession?.id,
   )
   const { data: latestChanges } = useLatestChanges(workspaceId)
 

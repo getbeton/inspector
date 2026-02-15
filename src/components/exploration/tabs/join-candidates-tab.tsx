@@ -11,7 +11,7 @@ interface JoinCandidatesTabProps {
 }
 
 export function JoinCandidatesTab({ workspaceId, session }: JoinCandidatesTabProps) {
-  const { data: edaResults = [] } = useSessionEdaResults(workspaceId, session.session_id)
+  const { data: edaResults = [] } = useSessionEdaResults(workspaceId, session.id)
 
   const suggestedJoins = useMemo(() => {
     const joins: JoinPair[] = []

@@ -94,13 +94,13 @@ export function ExplorationSheet({
           {activeTab === 'website' && (
             <WebsiteExplorationTab
               workspaceId={workspaceId}
-              sessionId={session.session_id}
+              sessionId={session.id}
             />
           )}
           {activeTab === 'tables' && (
             <TablesTab
               workspaceId={workspaceId}
-              sessionId={session.session_id}
+              sessionId={session.id}
             />
           )}
           {activeTab === 'joins' && (

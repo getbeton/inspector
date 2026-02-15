@@ -9,7 +9,26 @@ import type { TableInfo } from '@/lib/agent/types';
 
 const log = createModuleLogger('[API][Agent][ListTables]');
 
-const TABLE_ID_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+/** Schema table types that are not directly queryable */
+const NON_QUERYABLE_TYPES = new Set(['lazy_table', 'virtual_table', 'field_traverser']);
+
+/**
+ * Recursively strip null/undefined values from an object to minimize token consumption.
+ */
+function stripNulls<T>(obj: T): T {
+    if (obj === null || obj === undefined) return undefined as unknown as T;
+    if (Array.isArray(obj)) return obj.map(stripNulls) as unknown as T;
+    if (typeof obj === 'object') {
+        const cleaned: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+            if (v !== null && v !== undefined) {
+                cleaned[k] = stripNulls(v);
+            }
+        }
+        return cleaned as T;
+    }
+    return obj;
+}
 
 export async function GET(req: NextRequest) {
     if (!validateAgentRequest(req)) {
@@ -50,23 +69,40 @@ export async function GET(req: NextRequest) {
             credentials.host || undefined
         );
 
-        // Fetch virtual schema via DatabaseSchemaQuery
-        const schema = await client.getDatabaseSchema();
+        // Fetch both sources in parallel
+        const [warehouseTables, schema] = await Promise.all([
+            client.getWarehouseTables().catch((e) => {
+                log.warn(`Warehouse tables fetch failed: ${e}`);
+                return [];
+            }),
+            client.getDatabaseSchema().catch((e) => {
+                log.warn(`Database schema fetch failed: ${e}`);
+                return {} as Record<string, never>;
+            }),
+        ]);
 
-        // Table types that are structural/internal and not directly queryable
-        const NON_QUERYABLE_TYPES = new Set(['lazy_table', 'virtual_table', 'field_traverser']);
+        // Build merged table map: schema provides the base, warehouse overlays
+        const tableMap = new Map<string, TableInfo>();
 
-        const tables: TableInfo[] = Object.entries(schema.tables)
-            .filter(([, table]) => !NON_QUERYABLE_TYPES.has(table.type))
-            .filter(([key]) => TABLE_ID_REGEX.test(key))
-            .map(([key, table]) => ({
-                table_id: key,
-                table_name: table.name,
-                engine: table.type,
-                total_rows: 0,
-                total_bytes: 0,
-            }))
-            .sort((a, b) => a.table_id.localeCompare(b.table_id));
+        // 1. Schema tables (native PostHog tables: events, persons, groups, etc.)
+        for (const [name, entry] of Object.entries(schema)) {
+            if (NON_QUERYABLE_TYPES.has(entry.type)) continue;
+            tableMap.set(name, { table_name: name, source_type: 'posthog' });
+        }
+
+        // 2. Warehouse tables overlay with richer source_type metadata
+        for (const wt of warehouseTables) {
+            const sourceType = wt.external_data_source?.source_type ?? null;
+            tableMap.set(wt.name, {
+                table_name: wt.name,
+                source_type: sourceType,
+            });
+        }
+
+        // Sort alphabetically and strip nulls
+        const tables = Array.from(tableMap.values())
+            .sort((a, b) => a.table_name.localeCompare(b.table_name))
+            .map(stripNulls);
 
         log.info(`Listed ${tables.length} tables for workspace=${workspaceId} session=${sessionId}`);
         return NextResponse.json({ tables });

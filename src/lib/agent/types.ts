@@ -6,23 +6,20 @@ export type { AgentSessionStatus } from './session';
 // ============================================
 
 export interface TableInfo {
-    table_id: string;
     table_name: string;
-    /** PostHog table type from DatabaseSchemaQuery (e.g. 'posthog', 'data_warehouse', 'view') */
-    engine: string;
-    total_rows: number;
-    total_bytes: number;
+    source_type?: string | null;
 }
 
 export interface ColumnInfo {
-    col_id: string;
-    col_name: string;
-    col_type: string;
-    examples: unknown[];
+    name: string;
+    type: string;
+    samples: unknown[];
 }
 
 export interface TableColumnsResponse {
-    table_id: string;
+    table_name: string;
+    queryable_name: string;
+    source_type?: string | null;
     columns: ColumnInfo[];
 }
 
