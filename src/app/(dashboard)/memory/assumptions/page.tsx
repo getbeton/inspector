@@ -3,23 +3,22 @@
 import { useMemo } from 'react'
 import { WebsiteSection } from '@/components/exploration/sections/website-section'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
-import { useExplorationSessions, useSessionWebsiteResult, useLatestChanges } from '@/lib/hooks/use-explorations'
+import { useExplorationSessions, useWorkspaceWebsiteResult, useLatestChanges } from '@/lib/hooks/use-explorations'
 
 export default function MemoryAssumptionsPage() {
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
   const isDemo = !setupStatus || !setupStatus.setupComplete
   const workspaceId = isDemo ? undefined : setupStatus?.workspaceId
 
+  // Sessions still needed for edit/update functionality
   const { data: sessions = [] } = useExplorationSessions(workspaceId)
-
   const latestCompletedSession = useMemo(
     () => sessions.find(s => s.status === 'completed'),
     [sessions]
   )
-  const { data: websiteData = null, isLoading: websiteLoading } = useSessionWebsiteResult(
-    workspaceId,
-    latestCompletedSession?.id,
-  )
+
+  // Data fetch is now workspace-level — no longer blocked on session
+  const { data: websiteData = null, isLoading: websiteLoading } = useWorkspaceWebsiteResult(workspaceId)
   const { data: latestChanges } = useLatestChanges(workspaceId)
 
   if (setupLoading) {
