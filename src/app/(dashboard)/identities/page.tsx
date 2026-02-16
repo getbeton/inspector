@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils/cn'
+import { RefreshButton } from '@/components/ui/refresh-button'
 import { MOCK_IDENTITIES } from '@/lib/data/mock-identities'
 import type { IdentityData } from '@/lib/data/mock-identities'
 
@@ -89,6 +90,7 @@ export default function IdentitiesPage() {
             Track and manage user identities from PostHog
           </p>
         </div>
+        <RefreshButton syncType="posthog_events" />
       </div>
 
       {/* Stats */}

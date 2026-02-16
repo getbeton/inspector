@@ -135,30 +135,48 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                   </Badge>
                 </td>
                 <td className="px-4 py-4 text-right">
-                  <div className="font-medium">{formatPercent(signal.conversion_with)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    n={formatNumber(signal.sample_with)}
-                  </div>
+                  {signal.conversion_with < 0 ? (
+                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                  ) : (
+                    <>
+                      <div className="font-medium">{formatPercent(signal.conversion_with)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        n={formatNumber(signal.sample_with)}
+                      </div>
+                    </>
+                  )}
                 </td>
                 <td className="px-4 py-4 text-right">
-                  <div className="font-medium">{formatPercent(signal.conversion_without)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    n={formatNumber(signal.sample_without)}
-                  </div>
+                  {signal.conversion_without < 0 ? (
+                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                  ) : (
+                    <>
+                      <div className="font-medium">{formatPercent(signal.conversion_without)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        n={formatNumber(signal.sample_without)}
+                      </div>
+                    </>
+                  )}
                 </td>
                 <td className="px-4 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <span className={cn(
-                      'font-bold text-lg',
-                      signal.lift >= 3 ? 'text-success' : signal.lift >= 2 ? 'text-warning' : 'text-foreground'
-                    )}>
-                      {signal.lift.toFixed(1)}x
-                    </span>
-                    <MiniSparkline data={signal.trend_data} width={40} height={16} />
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPercent(signal.confidence)} conf
-                  </div>
+                  {signal.lift < 0 ? (
+                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className={cn(
+                          'font-bold text-lg',
+                          signal.lift >= 3 ? 'text-success' : signal.lift >= 2 ? 'text-warning' : 'text-foreground'
+                        )}>
+                          {signal.lift.toFixed(1)}x
+                        </span>
+                        <MiniSparkline data={signal.trend_data} width={40} height={16} />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {signal.confidence >= 0 ? `${formatPercent(signal.confidence)} conf` : 'Pending'}
+                      </div>
+                    </>
+                  )}
                 </td>
                 <td className="px-4 py-4 text-right font-medium">
                   {formatCurrency(signal.estimated_arr)}

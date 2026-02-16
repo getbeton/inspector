@@ -13,6 +13,8 @@
  * - Quick actions (add card, manage billing)
  */
 
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { CreditCard, ExternalLink, Settings, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -154,6 +156,29 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
   const { data: billingStatus, isLoading: statusLoading, error: statusError } = useBillingStatus();
   const { data: paymentMethods = [], isLoading: methodsLoading } = usePaymentMethods();
   const portalSession = useCreatePortalSession();
+  const queryClient = useQueryClient();
+  const mtuCalcTriggered = useRef(false);
+
+  // First-load MTU calculation: if MTU is 0 but limit > 0, trigger a one-time calculation
+  useEffect(() => {
+    if (
+      billingStatus &&
+      billingStatus.mtu.current === 0 &&
+      billingStatus.mtu.limit > 0 &&
+      !mtuCalcTriggered.current
+    ) {
+      mtuCalcTriggered.current = true;
+      fetch('/api/billing/calculate-mtu', { method: 'POST', credentials: 'include' })
+        .then(res => {
+          if (res.ok) {
+            queryClient.invalidateQueries({ queryKey: ['billing'] });
+          }
+        })
+        .catch(() => {
+          // Non-critical — cron will eventually update this
+        });
+    }
+  }, [billingStatus, queryClient]);
 
   const isLoading = statusLoading || methodsLoading;
 
@@ -186,20 +211,41 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
     return null;
   }
 
+  // Calculate remaining days in billing cycle
+  const daysRemaining = billingStatus.subscription?.currentPeriodEnd
+    ? Math.max(0, Math.ceil((new Date(billingStatus.subscription.currentPeriodEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+
   // Compact version for dashboard
   if (compact) {
     return (
       <Card>
         <CardContent className="py-4">
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
+            <div className="space-y-1.5 flex-1 mr-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Billing</span>
                 <StatusBadge status={billingStatus.status} />
               </div>
-              <div className="text-xs text-muted-foreground">
-                {(billingStatus.mtu?.current ?? 0).toLocaleString()} / {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      billingStatus.mtu.percentUsed >= 90 ? 'bg-destructive' :
+                      billingStatus.mtu.percentUsed >= 80 ? 'bg-warning' : 'bg-primary'
+                    }`}
+                    style={{ width: `${Math.min(100, billingStatus.mtu.percentUsed)}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {(billingStatus.mtu?.current ?? 0).toLocaleString()} / {(billingStatus.mtu?.limit ?? 0).toLocaleString()} MTU
+                </span>
               </div>
+              {daysRemaining !== null && (
+                <p className="text-xs text-muted-foreground">
+                  {daysRemaining} days remaining in cycle
+                </p>
+              )}
             </div>
             {!billingStatus.hasPaymentMethod && billingStatus.mtu.percentUsed >= 80 && (
               <CardLinkingModal
@@ -235,28 +281,44 @@ export function BillingStatusCard({ compact = false, onCardAdded }: BillingStatu
           percentUsed={billingStatus.mtu.percentUsed}
         />
 
-        {/* Subscription Info */}
-        {billingStatus.subscription.hasSubscription && (
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Subscription</div>
-            <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+        {/* Billing Cycle Info */}
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Billing Cycle</div>
+          <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+            {billingStatus.subscription?.hasSubscription && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
                 <Badge variant="outline" className="capitalize">
                   {billingStatus.subscription.status}
                 </Badge>
               </div>
-              {billingStatus.subscription.currentPeriodEnd && (
+            )}
+            {billingStatus.subscription?.currentPeriodEnd && (
+              <>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Current period ends</span>
+                  <span className="text-muted-foreground">Next billing date</span>
                   <span>
                     {new Date(billingStatus.subscription.currentPeriodEnd).toLocaleDateString()}
                   </span>
                 </div>
-              )}
-            </div>
+                {daysRemaining !== null && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Days remaining</span>
+                    <span>{daysRemaining}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {billingStatus.mtu.current > 0 && daysRemaining !== null && daysRemaining > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Daily avg MTU</span>
+                <span>
+                  {Math.round(billingStatus.mtu.current / Math.max(1, 30 - daysRemaining)).toLocaleString()}
+                </span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Payment Method */}
         <div className="space-y-2">

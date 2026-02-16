@@ -169,13 +169,13 @@ function TableDetail({ edaResult, workspaceId, onBack }: TableDetailProps) {
               </thead>
               <tbody>
                 {columnsData.columns.map((col) => (
-                  <tr key={col.col_id} className="border-t">
-                    <td className="px-3 py-2 font-mono">{col.col_name}</td>
+                  <tr key={col.name} className="border-t">
+                    <td className="px-3 py-2 font-mono">{col.name}</td>
                     <td className="px-3 py-2">
-                      <Badge variant="outline" size="sm">{col.col_type}</Badge>
+                      <Badge variant="outline" size="sm">{col.type}</Badge>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground truncate max-w-[200px]">
-                      {col.examples?.slice(0, 3).map(String).join(', ') || '—'}
+                      {col.samples?.slice(0, 3).map(String).join(', ') || '—'}
                     </td>
                   </tr>
                 ))}

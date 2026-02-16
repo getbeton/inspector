@@ -148,12 +148,12 @@ Change task status to "In progress" in Plane.
 
 Write the code following Beton's patterns:
 
-- **API Routes**: Place in `frontend-nextjs/src/app/api/`
-- **Pages**: Place in `frontend-nextjs/src/app/(dashboard)/`
-- **Components**: Place in `frontend-nextjs/src/components/`
-- **Business Logic**: Place in `frontend-nextjs/src/lib/`
-- **Signal Detectors**: Place in `frontend-nextjs/src/lib/heuristics/signals/detectors/`
-- **Integration Clients**: Place in `frontend-nextjs/src/lib/integrations/`
+- **API Routes**: Place in `src/app/api/`
+- **Pages**: Place in `src/app/(dashboard)/`
+- **Components**: Place in `src/components/`
+- **Business Logic**: Place in `src/lib/`
+- **Signal Detectors**: Place in `src/lib/heuristics/signals/detectors/`
+- **Integration Clients**: Place in `src/lib/integrations/`
 - **Supabase Migrations**: Place in `supabase/migrations/`
 
 Follow existing patterns in the codebase.
@@ -163,7 +163,7 @@ Follow existing patterns in the codebase.
 **MANDATORY before committing:**
 
 ```bash
-cd frontend-nextjs && npm run build
+npm run build
 ```
 
 If build fails:
@@ -228,7 +228,7 @@ Once ALL tasks are complete, push the branch to origin. Then:
 #### Step 4.1: Final Build Check
 
 ```bash
-cd frontend-nextjs && npm run build
+npm run build
 ```
 
 Ensure entire branch builds cleanly.

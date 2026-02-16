@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Check, AlertCircle, Eye, EyeOff, Link2 } from "lucide-react";
+import { trackIntegrationConnected } from "@/lib/analytics";
 
 /**
  * Component state machine
@@ -108,6 +109,7 @@ export function AttioStep({ onSuccess, className }: AttioStepProps) {
       const data = await validateResponse.json();
       setWorkspaceName(data.workspace_name ?? data.workspaceName ?? "Connected");
       setState("success");
+      trackIntegrationConnected("attio");
 
       // Notify parent of success
       onSuccess();

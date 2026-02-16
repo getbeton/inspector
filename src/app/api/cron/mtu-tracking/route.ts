@@ -30,6 +30,7 @@ import {
 } from '@/lib/billing/cycle-service';
 import { recordMeterEvent } from '@/lib/integrations/stripe/billing';
 import { createAuditLogger } from '@/lib/utils/audit';
+import { verifyCronAuth } from '@/lib/middleware/cron-auth';
 
 // ============================================
 // Types
@@ -54,31 +55,6 @@ const CRON_DEADLINE_MS = 270_000;
 const MTU_BATCH_SIZE = 5;
 
 const audit = createAuditLogger('mtu-cron');
-
-// ============================================
-// Cron Authentication
-// ============================================
-
-/**
- * Verifies the CRON_SECRET header for authentication.
- */
-function verifyCronAuth(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret) {
-    console.warn('[MTU Cron] CRON_SECRET not configured');
-    return false;
-  }
-
-  const authHeader = request.headers.get('authorization');
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true;
-  }
-
-  // Also check X-Cron-Secret for Vercel cron compatibility
-  const cronSecretHeader = request.headers.get('x-cron-secret');
-  return cronSecretHeader === cronSecret;
-}
 
 // ============================================
 // Supabase Admin Client

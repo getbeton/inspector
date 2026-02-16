@@ -35,6 +35,18 @@ export function getPostHogHost(region?: string | null): string {
 export type PostHogRegion = 'us' | 'eu'
 
 /**
+ * Get the PostHog app host for a given region (no /api suffix).
+ * Used server-side only for constructing UI URLs (profile links, cohort links).
+ *
+ * @param region - The region code ('us' or 'eu')
+ * @returns The app host URL (e.g., 'https://us.posthog.com')
+ */
+export function getPostHogAppHost(region?: string | null): string {
+  const apiHost = getPostHogHost(region)
+  return apiHost.replace(/\/api$/, '')
+}
+
+/**
  * Check if a string is a valid PostHog region
  */
 export function isValidRegion(region: string): region is PostHogRegion {

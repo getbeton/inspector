@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Check, AlertCircle, Globe, Eye, EyeOff } from "lucide-react";
+import { trackIntegrationConnected } from "@/lib/analytics";
 
 /**
  * PostHog region configuration
@@ -170,6 +171,7 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
 
       setMtuCount(count);
       setState("success");
+      trackIntegrationConnected("posthog");
 
       // Notify parent of success
       onSuccess({ mtuCount: count, region });

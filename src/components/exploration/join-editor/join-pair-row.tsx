@@ -52,7 +52,7 @@ export function JoinPairRow({
       >
         <option value="">Column</option>
         {t1Columns?.columns.map((c) => (
-          <option key={c.col_id} value={c.col_name}>{c.col_name}</option>
+          <option key={c.name} value={c.name}>{c.name}</option>
         ))}
       </select>
 
@@ -80,7 +80,7 @@ export function JoinPairRow({
       >
         <option value="">Column</option>
         {t2Columns?.columns.map((c) => (
-          <option key={c.col_id} value={c.col_name}>{c.col_name}</option>
+          <option key={c.name} value={c.name}>{c.name}</option>
         ))}
       </select>
 

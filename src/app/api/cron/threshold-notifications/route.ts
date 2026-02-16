@@ -20,6 +20,7 @@ import { createClient } from '@supabase/supabase-js';
 import { isBillingEnabled, BILLING_CONFIG } from '@/lib/utils/deployment';
 import { withRetry } from '@/lib/utils/retry';
 import { sendThresholdNotification } from '@/lib/email';
+import { verifyCronAuth } from '@/lib/middleware/cron-auth';
 
 // ============================================
 // Types
@@ -60,30 +61,6 @@ interface WorkspaceBillingData {
       };
     }>;
   };
-}
-
-// ============================================
-// Cron Authentication
-// ============================================
-
-/**
- * Verifies the CRON_SECRET header for authentication.
- */
-function verifyCronAuth(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret) {
-    console.warn('[Threshold Cron] CRON_SECRET not configured');
-    return false;
-  }
-
-  const authHeader = request.headers.get('authorization');
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true;
-  }
-
-  const cronSecretHeader = request.headers.get('x-cron-secret');
-  return cronSecretHeader === cronSecret;
 }
 
 // ============================================

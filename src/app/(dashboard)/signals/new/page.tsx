@@ -5,16 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils/cn'
-
-const EVENT_TYPES = [
-  { id: 'pageview', name: 'Page View', description: 'Track visits to specific pages' },
-  { id: 'feature_used', name: 'Feature Usage', description: 'Track feature adoption events' },
-  { id: 'api_call', name: 'API Call', description: 'Track API endpoint usage' },
-  { id: 'custom', name: 'Custom Event', description: 'Define your own event pattern' },
-]
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { EventPicker } from '@/components/signals/event-picker'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 
 const CONDITION_OPERATORS = [
   { id: 'gte', label: '>=' },
@@ -24,33 +20,270 @@ const CONDITION_OPERATORS = [
   { id: 'lte', label: '<=' },
 ]
 
+interface PreviewUser {
+  distinct_id: string
+  event_count: number
+  profile_url: string
+}
+
+interface PreviewResult {
+  users: PreviewUser[]
+  total_matching_users: number
+  aggregate: {
+    total_count: number
+    count_7d: number
+    count_30d: number
+  }
+}
+
+interface CohortResult {
+  cohort_id: number
+  cohort_name: string
+  cohort_url: string
+}
+
+interface AttioListResult {
+  list_id: string
+  list_name: string
+  entries_added: number
+  entries_failed: number
+}
+
 export default function AddSignalPage() {
   const router = useRouter()
+  const { data: setupStatus } = useSetupStatus()
+  const attioConnected = setupStatus?.integrations?.attio ?? false
+
+  // Form state
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [eventType, setEventType] = useState<string>('')
-  const [eventPattern, setEventPattern] = useState('')
+  const [eventPatterns, setEventPatterns] = useState<string[]>([])
   const [conditionOperator, setConditionOperator] = useState('gte')
   const [conditionValue, setConditionValue] = useState('1')
   const [timeWindow, setTimeWindow] = useState('7')
+
+  // Preview state
+  const [preview, setPreview] = useState<PreviewResult | null>(null)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [lastPreviewParams, setLastPreviewParams] = useState<string | null>(null)
+
+  // Action state
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isCreatingCohort, setIsCreatingCohort] = useState(false)
+  const [cohortResult, setCohortResult] = useState<CohortResult | null>(null)
+  const [isCreatingAttioList, setIsCreatingAttioList] = useState(false)
+  const [attioListResult, setAttioListResult] = useState<AttioListResult | null>(null)
+  const [cohortError, setCohortError] = useState<string | null>(null)
+  const [attioListError, setAttioListError] = useState<string | null>(null)
+  const [autoUpdateCohort, setAutoUpdateCohort] = useState(false)
+  const [autoUpdateAttioList, setAutoUpdateAttioList] = useState(false)
+
+  // Stale detection
+  const currentParams = JSON.stringify({
+    eventPatterns, conditionOperator, conditionValue, timeWindow,
+  })
+  const isStale = preview !== null && lastPreviewParams !== currentParams
+
+  const formatNumber = (n: number) => new Intl.NumberFormat().format(n)
+
+  const conditionSummary = () => {
+    if (eventPatterns.length === 0) return ''
+    const opLabel = CONDITION_OPERATORS.find(o => o.id === conditionOperator)?.label || '>='
+    const events = eventPatterns.length === 1
+      ? eventPatterns[0]
+      : `[${eventPatterns.join(', ')}]`
+    return `Users who triggered ${events} ${opLabel} ${conditionValue} times in the last ${timeWindow} days`
+  }
+
+  const handlePreview = async () => {
+    if (eventPatterns.length === 0) return
+    setIsPreviewing(true)
+    setPreviewError(null)
+    setPreview(null)
+
+    try {
+      const res = await fetch('/api/posthog/signal-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_names: eventPatterns,
+          condition_operator: conditionOperator,
+          condition_value: Number(conditionValue),
+          time_window_days: Number(timeWindow),
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Failed to fetch preview (${res.status})`)
+      }
+
+      const data: PreviewResult = await res.json()
+      setPreview(data)
+      setLastPreviewParams(currentParams)
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Could not fetch preview')
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
+
+  const handleCreateCohort = async () => {
+    if (!preview || preview.users.length === 0) {
+      setCohortError('Run a preview first to find matching users')
+      return
+    }
+    setCohortError(null)
+    setIsCreatingCohort(true)
+
+    try {
+      const distinctIds = preview.users.map(u => u.distinct_id)
+      const cohortName = `Signal: ${name || eventPatterns.join(', ')}`
+
+      const res = await fetch('/api/posthog/cohorts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cohortName,
+          distinct_ids: distinctIds,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Failed to create cohort')
+      }
+
+      const data: CohortResult = await res.json()
+      setCohortResult(data)
+    } catch (err) {
+      setCohortError(err instanceof Error ? err.message : 'Failed to create cohort')
+    } finally {
+      setIsCreatingCohort(false)
+    }
+  }
+
+  const handleCreateAttioList = async () => {
+    if (!preview || preview.users.length === 0) {
+      setAttioListError('Run a preview first to find matching users')
+      return
+    }
+    setAttioListError(null)
+    setIsCreatingAttioList(true)
+
+    try {
+      const emails = preview.users.map(u => u.distinct_id)
+      const listName = `Signal: ${name || eventPatterns.join(', ')}`
+
+      const res = await fetch('/api/attio/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: listName,
+          emails,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Failed to create Attio list')
+      }
+
+      const data: AttioListResult = await res.json()
+      setAttioListResult(data)
+    } catch (err) {
+      setAttioListError(err instanceof Error ? err.message : 'Failed to create Attio list')
+    } finally {
+      setIsCreatingAttioList(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (eventPatterns.length === 0) return
     setIsSubmitting(true)
+    setSubmitError(null)
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      // Create one signal per event
+      let firstSignalId: string | null = null
 
-    // In real implementation, this would call the API
-    alert('Signal created successfully! (Demo mode)')
-    router.push('/signals')
-  }
+      for (const eventName of eventPatterns) {
+        const res = await fetch('/api/signals/custom', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            description,
+            event_name: eventName,
+            condition_operator: conditionOperator,
+            condition_value: Number(conditionValue),
+            time_window_days: Number(timeWindow),
+          }),
+        })
 
-  const generateHogQL = () => {
-    if (!eventPattern) return ''
-    const op = CONDITION_OPERATORS.find(o => o.id === conditionOperator)?.label || '>='
-    return `SELECT count() FROM events WHERE event = '${eventPattern}' AND timestamp > now() - interval ${timeWindow} day HAVING count() ${op} ${conditionValue}`
+        if (!res.ok) {
+          const data = await res.json().catch(() => null)
+          throw new Error(data?.error || `Failed to create signal (${res.status})`)
+        }
+
+        const data = await res.json()
+        if (!firstSignalId) {
+          firstSignalId = data.signal?.id
+        }
+      }
+
+      // If auto-update is enabled and we have a signal + cohort/list, create sync targets
+      if (firstSignalId && (autoUpdateCohort || autoUpdateAttioList)) {
+        const targets: Array<{ type: string; id: string; name?: string; auto: boolean }> = []
+
+        if (autoUpdateCohort && cohortResult) {
+          targets.push({
+            type: 'posthog_cohort',
+            id: String(cohortResult.cohort_id),
+            name: cohortResult.cohort_name,
+            auto: autoUpdateCohort,
+          })
+        }
+        if (autoUpdateAttioList && attioListResult) {
+          targets.push({
+            type: 'attio_list',
+            id: attioListResult.list_id,
+            name: attioListResult.list_name,
+            auto: autoUpdateAttioList,
+          })
+        }
+
+        for (const target of targets) {
+          await fetch('/api/signals/custom', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              signal_id: firstSignalId,
+              event_names: eventPatterns,
+              condition_operator: conditionOperator,
+              condition_value: Number(conditionValue),
+              time_window_days: Number(timeWindow),
+              target: {
+                type: target.type,
+                external_id: target.id,
+                external_name: target.name,
+                auto_update: target.auto,
+              },
+            }),
+          }).catch(err => {
+            console.error('Failed to create sync target (non-blocking):', err)
+          })
+        }
+      }
+
+      router.push('/signals')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create signal')
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -97,131 +330,327 @@ export default function AddSignalPage() {
           </CardContent>
         </Card>
 
-        {/* Event Type */}
+        {/* Event Selection */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Event Type</CardTitle>
-            <CardDescription>Select the type of event to track</CardDescription>
+            <CardTitle className="text-lg">Events</CardTitle>
+            <CardDescription>Select one or more PostHog events to track</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {EVENT_TYPES.map(type => (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => setEventType(type.id)}
-                  className={cn(
-                    'text-left p-4 rounded-lg border transition-colors',
-                    eventType === type.id
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50'
-                  )}
-                >
-                  <p className="font-medium">{type.name}</p>
-                  <p className="text-sm text-muted-foreground">{type.description}</p>
-                </button>
-              ))}
-            </div>
+            <EventPicker
+              value={eventPatterns}
+              onChange={(val) => {
+                setEventPatterns(val)
+                setPreview(null)
+                setPreviewError(null)
+              }}
+            />
           </CardContent>
         </Card>
 
-        {/* Event Pattern */}
-        {eventType && (
+        {/* Condition */}
+        {eventPatterns.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Event Pattern</CardTitle>
-              <CardDescription>Define the specific event to match</CardDescription>
+              <CardTitle className="text-lg">Condition</CardTitle>
+              <CardDescription>Define when this signal fires</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  {eventType === 'pageview' ? 'Page URL Pattern' :
-                   eventType === 'feature_used' ? 'Feature Name' :
-                   eventType === 'api_call' ? 'API Endpoint' : 'Event Name'}
-                </label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Event count</span>
+                <select
+                  value={conditionOperator}
+                  onChange={(e) => setConditionOperator(e.target.value)}
+                  className="px-3 py-2 border border-border rounded-md bg-background text-sm"
+                >
+                  {CONDITION_OPERATORS.map(op => (
+                    <option key={op.id} value={op.id}>{op.label}</option>
+                  ))}
+                </select>
                 <Input
-                  placeholder={
-                    eventType === 'pageview' ? '/pricing' :
-                    eventType === 'feature_used' ? 'dashboard_viewed' :
-                    eventType === 'api_call' ? '/api/v1/users' : 'custom_event_name'
-                  }
-                  value={eventPattern}
-                  onChange={(e) => setEventPattern(e.target.value)}
-                  required
+                  type="number"
+                  min="1"
+                  max="10000"
+                  value={conditionValue}
+                  onChange={(e) => setConditionValue(e.target.value)}
+                  className="w-20"
                 />
+                <span className="text-sm text-muted-foreground">in last</span>
+                <Input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={timeWindow}
+                  onChange={(e) => setTimeWindow(e.target.value)}
+                  className="w-20"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
               </div>
 
-              {/* Condition */}
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Condition</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Event count</span>
-                  <select
-                    value={conditionOperator}
-                    onChange={(e) => setConditionOperator(e.target.value)}
-                    className="px-3 py-2 border border-border rounded-md bg-background text-sm"
-                  >
-                    {CONDITION_OPERATORS.map(op => (
-                      <option key={op.id} value={op.id}>{op.label}</option>
-                    ))}
-                  </select>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={conditionValue}
-                    onChange={(e) => setConditionValue(e.target.value)}
-                    className="w-20"
-                  />
-                  <span className="text-sm text-muted-foreground">in last</span>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={timeWindow}
-                    onChange={(e) => setTimeWindow(e.target.value)}
-                    className="w-20"
-                  />
-                  <span className="text-sm text-muted-foreground">days</span>
-                </div>
-              </div>
+              {/* Condition summary */}
+              {conditionSummary() && (
+                <p className="text-sm text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                  {conditionSummary()}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
 
         {/* Preview */}
-        {eventPattern && (
+        {eventPatterns.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Query Preview</CardTitle>
-              <CardDescription>Generated HogQL query</CardDescription>
+              <CardTitle className="text-lg">Preview</CardTitle>
+              <CardDescription>See which users match this signal</CardDescription>
             </CardHeader>
-            <CardContent>
-              <pre className="bg-muted p-4 rounded-lg text-sm overflow-x-auto">
-                <code>{generateHogQL()}</code>
-              </pre>
-              <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm">
-                  <span className="font-medium">Estimated matches:</span>{' '}
-                  <span className="text-primary font-bold">~{Math.round(20 + Math.random() * 50)}</span> users/month
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Based on your PostHog data from the last 30 days
-                </p>
-              </div>
+            <CardContent className="space-y-4">
+              {/* Stale banner */}
+              {isStale && (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-warning/10 border border-warning/20">
+                  <p className="text-sm text-warning-foreground">
+                    Conditions changed since last preview
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreview}
+                    disabled={isPreviewing}
+                  >
+                    Rerun
+                  </Button>
+                </div>
+              )}
+
+              {preview ? (
+                <>
+                  {/* Aggregate stats */}
+                  <div className="flex items-center gap-4 text-sm p-3 bg-primary/5 rounded-lg border border-primary/20">
+                    <div>
+                      <span className="text-muted-foreground">Last 7d:</span>{' '}
+                      <span className="font-bold text-primary">{formatNumber(preview.aggregate.count_7d)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Last 30d:</span>{' '}
+                      <span className="font-bold text-primary">{formatNumber(preview.aggregate.count_30d)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total (90d):</span>{' '}
+                      <span className="font-bold">{formatNumber(preview.aggregate.total_count)}</span>
+                    </div>
+                  </div>
+
+                  {/* User table */}
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 border-b border-border">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">User</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Events</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Profile</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.users.map((user, i) => (
+                          <tr key={user.distinct_id} className="border-b border-border last:border-0">
+                            <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                            <td className="px-3 py-2 font-mono text-xs truncate max-w-[200px]">
+                              {user.distinct_id}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <Badge variant="secondary">{formatNumber(user.event_count)}</Badge>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <a
+                                href={user.profile_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline text-xs"
+                              >
+                                View
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Showing {preview.users.length} of {formatNumber(preview.total_matching_users)} matching users
+                  </p>
+
+                  {/* Action buttons */}
+                  <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
+                    {/* PostHog cohort */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCreateCohort}
+                          disabled={isCreatingCohort || !!cohortResult}
+                        >
+                          {isCreatingCohort ? 'Creating...' : cohortResult ? 'Cohort Created' : 'Create PostHog Cohort'}
+                        </Button>
+                        {cohortResult && (
+                          <a
+                            href={cohortResult.cohort_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary text-xs hover:underline"
+                          >
+                            Open in PostHog
+                          </a>
+                        )}
+                        {!cohortResult ? (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span />}
+                              className="ml-auto"
+                            >
+                              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-not-allowed opacity-60">
+                                <Checkbox
+                                  checked={autoUpdateCohort}
+                                  disabled
+                                />
+                                Auto-update
+                              </label>
+                            </TooltipTrigger>
+                            <TooltipContent>Create the cohort first to enable auto-update</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
+                            <Checkbox
+                              checked={autoUpdateCohort}
+                              onCheckedChange={(checked) => setAutoUpdateCohort(checked === true)}
+                            />
+                            Auto-update
+                          </label>
+                        )}
+                      </div>
+                      {cohortError && (
+                        <p className="text-xs text-destructive">{cohortError}</p>
+                      )}
+                    </div>
+
+                    {/* Attio list (only if connected) */}
+                    {attioConnected && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCreateAttioList}
+                            disabled={isCreatingAttioList || !!attioListResult}
+                          >
+                            {isCreatingAttioList ? 'Creating...' : attioListResult ? 'List Created' : 'Save to Attio List'}
+                          </Button>
+                          {attioListResult && (
+                            <span className="text-xs text-muted-foreground">
+                              {attioListResult.entries_added} people added
+                              {attioListResult.entries_failed > 0 && (
+                                <span className="text-destructive"> ({attioListResult.entries_failed} failed)</span>
+                              )}
+                            </span>
+                          )}
+                          {!attioListResult ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<span />}
+                                className="ml-auto"
+                              >
+                                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-not-allowed opacity-60">
+                                  <Checkbox
+                                    checked={autoUpdateAttioList}
+                                    disabled
+                                  />
+                                  Auto-update
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent>Create the list first to enable auto-update</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer ml-auto">
+                              <Checkbox
+                                checked={autoUpdateAttioList}
+                                onCheckedChange={(checked) => setAutoUpdateAttioList(checked === true)}
+                              />
+                              Auto-update
+                            </label>
+                          )}
+                        </div>
+                        {attioListError && (
+                          <p className="text-xs text-destructive">{attioListError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : previewError ? (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <p className="text-sm text-destructive">{previewError}</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Preview which users match this signal definition
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreview}
+                    disabled={isPreviewing}
+                  >
+                    {isPreviewing ? (
+                      <>
+                        <span className="animate-spin mr-2 inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                        Querying...
+                      </>
+                    ) : (
+                      'Preview Matches'
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
+        {/* Submit error */}
+        {submitError && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <p className="text-sm text-destructive">{submitError}</p>
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="flex justify-end gap-3">
-          <Link href="/signals">
-            <Button type="button" variant="outline">Cancel</Button>
-          </Link>
-          <Button
-            type="submit"
-            disabled={!name || !eventType || !eventPattern || isSubmitting}
-          >
-            {isSubmitting ? 'Creating...' : 'Create Signal'}
-          </Button>
+        <div className="flex flex-col items-end gap-2">
+          {(!name || eventPatterns.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              {!name && eventPatterns.length === 0
+                ? 'Enter a signal name and select at least one event to continue'
+                : !name
+                  ? 'Enter a signal name to continue'
+                  : 'Select at least one event to continue'}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <Link href="/signals">
+              <Button type="button" variant="outline">Cancel</Button>
+            </Link>
+            <Button
+              type="submit"
+              disabled={!name || eventPatterns.length === 0 || isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Signal'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

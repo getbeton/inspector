@@ -48,6 +48,60 @@ export interface PostHogDashboardResponse {
   updated_at: string
 }
 
+// ============================================
+// Warehouse Tables API types
+// ============================================
+
+export interface WarehouseTableColumn {
+  key: string
+  name: string
+  type: string
+  schema_valid: boolean
+  fields?: Record<string, unknown>
+  table?: string
+  chain?: unknown[]
+}
+
+export interface WarehouseTable {
+  id: string
+  name: string
+  format: string
+  columns: WarehouseTableColumn[]
+  external_data_source?: {
+    id: string
+    source_type: string
+  } | null
+}
+
+export interface WarehouseTablesPage {
+  count: number
+  next: string | null
+  previous: string | null
+  results: WarehouseTable[]
+}
+
+// ============================================
+// DatabaseSchemaQuery types
+// ============================================
+
+export interface DatabaseSchemaField {
+  key: string
+  type: string
+  table?: string
+  fields?: string[]
+  chain?: string[]
+  schema_valid?: boolean
+}
+
+export interface DatabaseSchemaTable {
+  type: string
+  id: string
+  name: string
+  fields: Record<string, DatabaseSchemaField>
+}
+
+export type DatabaseSchemaResponse = Record<string, DatabaseSchemaTable>
+
 export class PostHogClient {
   private apiKey: string
   private projectId: string
@@ -359,6 +413,175 @@ export class PostHogClient {
     type: 'event' | 'person' | 'group' = 'person'
   ): Promise<{ results: { name: string; property_type: string }[] }> {
     return this.fetch(`/property_definitions?type=${type}`)
+  }
+
+  // ============================================
+  // Cohorts (create/update static cohorts)
+  // ============================================
+
+  /**
+   * Create a static cohort from a list of distinct_ids.
+   * Uses multipart/form-data with a CSV file upload.
+   */
+  async createStaticCohort(
+    name: string,
+    distinctIds: string[]
+  ): Promise<{ id: number; name: string }> {
+    const csv = 'distinct_id\n' + distinctIds.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('is_static', 'true')
+    formData.append('csv', blob, 'cohort.csv')
+
+    const url = `${this.baseUrl}/projects/${this.projectId}/cohorts`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        // Do NOT set Content-Type — fetch sets it with the correct boundary for FormData
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      throw createIntegrationError(
+        `Failed to create PostHog cohort: ${response.statusText} ${errorBody}`,
+        'API_ERROR',
+        response.status,
+        response.status >= 500
+      )
+    }
+
+    const data = await response.json()
+    return { id: data.id, name: data.name }
+  }
+
+  /**
+   * Update an existing static cohort's membership by re-uploading CSV.
+   * Uses PATCH to replace the cohort's distinct_ids.
+   */
+  async updateStaticCohort(
+    cohortId: number,
+    distinctIds: string[]
+  ): Promise<void> {
+    const csv = 'distinct_id\n' + distinctIds.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+
+    const formData = new FormData()
+    formData.append('csv', blob, 'cohort.csv')
+
+    const url = `${this.baseUrl}/projects/${this.projectId}/cohorts/${cohortId}`
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      throw createIntegrationError(
+        `Failed to update PostHog cohort: ${response.statusText} ${errorBody}`,
+        'API_ERROR',
+        response.status,
+        response.status >= 500
+      )
+    }
+  }
+
+  // ============================================
+  // Warehouse Tables & Database Schema
+  // ============================================
+
+  /**
+   * Fetch using an absolute API path (no /projects/ prefix).
+   * Needed for endpoints that use /environments/ instead of /projects/.
+   */
+  private async fetchRaw<T>(
+    fullPath: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${fullPath}`
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+
+    if (!response.ok) {
+      const isRetryable = response.status === 429 || response.status >= 500
+      throw createIntegrationError(
+        `PostHog API error: ${response.statusText}`,
+        'API_ERROR',
+        response.status,
+        isRetryable
+      )
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      throw createIntegrationError(
+        'Invalid response from PostHog. Please verify your region and project ID.',
+        'API_ERROR',
+        response.status,
+        false
+      )
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Fetch all DWH tables from the warehouse_tables REST API.
+   * Paginates automatically until all pages are consumed.
+   */
+  async getWarehouseTables(): Promise<WarehouseTable[]> {
+    const all: WarehouseTable[] = []
+    let path: string | null = `/environments/${this.projectId}/warehouse_tables/`
+    const MAX_PAGES = 20 // Safety guard: 20 pages × ~100 per page = 2000 tables max
+
+    for (let i = 0; i < MAX_PAGES && path; i++) {
+      const pageData: WarehouseTablesPage = await this.fetchRaw<WarehouseTablesPage>(path)
+      all.push(...pageData.results)
+      // `next` is a full URL — extract the path portion after the base /api prefix
+      // because fetchRaw() already prepends this.baseUrl (which includes /api)
+      if (pageData.next) {
+        try {
+          const nextUrl = new URL(pageData.next)
+          path = nextUrl.pathname.replace(/^\/api/, '') + nextUrl.search
+        } catch {
+          path = null
+        }
+      } else {
+        path = null
+      }
+    }
+
+    return all
+  }
+
+  /**
+   * Fetch the full database schema via DatabaseSchemaQuery.
+   * Returns all queryable tables (native + DWH) with their fields.
+   */
+  async getDatabaseSchema(): Promise<DatabaseSchemaResponse> {
+    const result = await this.fetch<{ tables: DatabaseSchemaResponse }>('/query/', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: {
+          kind: 'DatabaseSchemaQuery',
+        },
+      }),
+    })
+    return result.tables
   }
 }
 

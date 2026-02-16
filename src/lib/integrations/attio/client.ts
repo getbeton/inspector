@@ -474,3 +474,171 @@ export async function testConnection(apiKey: string): Promise<{
     }
   }
 }
+
+// ============================================
+// Lists: Create, add entries, sync
+// ============================================
+
+/**
+ * Create a new list in Attio
+ */
+export async function createList(
+  apiKey: string,
+  name: string,
+  parentObject: string = 'people'
+): Promise<{ listId: string; listName: string }> {
+  const response = await fetch(`${ATTIO_BASE_URL}/lists`, {
+    method: 'POST',
+    headers: createHeaders(apiKey),
+    body: JSON.stringify({
+      name,
+      parent_object: parentObject,
+    }),
+  })
+
+  const data = await handleResponse<{
+    data?: {
+      id?: { list_id?: string }
+      name?: string
+    }
+  }>(response)
+
+  return {
+    listId: data.data?.id?.list_id || '',
+    listName: data.data?.name || name,
+  }
+}
+
+/**
+ * Add a record to a list by parent record ID
+ */
+export async function addListEntry(
+  apiKey: string,
+  listId: string,
+  parentRecordId: string
+): Promise<{ entryId: string }> {
+  const response = await fetch(`${ATTIO_BASE_URL}/lists/${listId}/entries`, {
+    method: 'POST',
+    headers: createHeaders(apiKey),
+    body: JSON.stringify({
+      data: {
+        parent_record_id: parentRecordId,
+      },
+    }),
+  })
+
+  const data = await handleResponse<{
+    data?: {
+      id?: { entry_id?: string }
+    }
+  }>(response)
+
+  return {
+    entryId: data.data?.id?.entry_id || '',
+  }
+}
+
+/**
+ * Query all entries in a list
+ */
+export async function queryListEntries(
+  apiKey: string,
+  listId: string
+): Promise<Array<{ entryId: string; parentRecordId: string }>> {
+  const response = await fetch(`${ATTIO_BASE_URL}/lists/${listId}/entries/query`, {
+    method: 'POST',
+    headers: createHeaders(apiKey),
+    body: JSON.stringify({ limit: 500 }),
+  })
+
+  const data = await handleResponse<{
+    data?: Array<{
+      id?: { entry_id?: string }
+      parent_record_id?: string
+    }>
+  }>(response)
+
+  return (data.data || []).map((entry) => ({
+    entryId: entry.id?.entry_id || '',
+    parentRecordId: entry.parent_record_id || '',
+  }))
+}
+
+/**
+ * Delete a list entry by ID
+ */
+export async function deleteListEntry(
+  apiKey: string,
+  listId: string,
+  entryId: string
+): Promise<void> {
+  const response = await fetch(`${ATTIO_BASE_URL}/lists/${listId}/entries/${entryId}`, {
+    method: 'DELETE',
+    headers: createHeaders(apiKey),
+  })
+
+  if (!response.ok) {
+    await handleResponse(response)
+  }
+}
+
+/**
+ * Upsert person records from email addresses, return record IDs.
+ * Maps PostHog distinct_id (usually email) to Attio person record ID.
+ * Uses existing upsertRecord() internally, batched with Promise.allSettled.
+ */
+export async function upsertPersonRecords(
+  apiKey: string,
+  emails: string[]
+): Promise<Array<{ email: string; recordId: string }>> {
+  const results = await Promise.allSettled(
+    emails.map(async (email) => {
+      const result = await upsertRecord(
+        apiKey,
+        'people',
+        { email_addresses: email },
+        'email_addresses'
+      )
+      return { email, recordId: result.recordId }
+    })
+  )
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<{ email: string; recordId: string }> =>
+      r.status === 'fulfilled'
+    )
+    .map((r) => r.value)
+}
+
+/**
+ * Sync list entries: add missing records, remove stale ones.
+ * Returns counts of added and removed entries.
+ */
+export async function syncListEntries(
+  apiKey: string,
+  listId: string,
+  desiredRecordIds: string[]
+): Promise<{ added: number; removed: number }> {
+  // 1. Query current entries
+  const currentEntries = await queryListEntries(apiKey, listId)
+  const currentRecordIds = new Set(currentEntries.map((e) => e.parentRecordId))
+  const desiredSet = new Set(desiredRecordIds)
+
+  // 2. Compute diff
+  const toAdd = desiredRecordIds.filter((id) => !currentRecordIds.has(id))
+  const toRemove = currentEntries.filter((e) => !desiredSet.has(e.parentRecordId))
+
+  // 3. Add new entries
+  const addResults = await Promise.allSettled(
+    toAdd.map((recordId) => addListEntry(apiKey, listId, recordId))
+  )
+  const addedCount = addResults.filter((r) => r.status === 'fulfilled').length
+
+  // 4. Remove stale entries
+  const removeResults = await Promise.allSettled(
+    toRemove.map((entry) => deleteListEntry(apiKey, listId, entry.entryId))
+  )
+  const removedCount = removeResults.filter((r) => r.status === 'fulfilled').length
+
+  return { added: addedCount, removed: removedCount }
+}

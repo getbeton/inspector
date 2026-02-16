@@ -75,15 +75,51 @@ export async function GET(request: NextRequest) {
     const to = from + limit - 1
     query = query.range(from, to)
 
-    const { data: signals, error, count } = await query
+    // Run both queries in parallel — aggregates don't depend on signal results
+    const [signalsResult, aggregatesResult] = await Promise.all([
+      query,
+      supabase
+        .from('signal_aggregates')
+        .select('*')
+        .eq('workspace_id', membership.workspaceId) as unknown as Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>,
+    ])
+
+    const { data: signals, error, count } = signalsResult
 
     if (error) {
       console.error('Error fetching signals:', error)
       return NextResponse.json({ error: 'Failed to fetch signals' }, { status: 500 })
     }
 
+    const aggregatesMap: Record<string, Record<string, unknown>> = {}
+    if (aggregatesResult.data) {
+      for (const agg of aggregatesResult.data) {
+        aggregatesMap[agg.signal_type as string] = agg
+      }
+    }
+
+    // Merge metrics into signal details for the response
+    const enrichedSignals = (signals || []).map((signal: { type: string; details: Record<string, unknown> | null }) => {
+      const agg = aggregatesMap[signal.type]
+      if (!agg) return signal
+      return {
+        ...signal,
+        details: {
+          ...(signal.details || {}),
+          lift: agg.avg_lift ?? null,
+          confidence: agg.confidence_score ?? null,
+          conversion_with: agg.avg_conversion_rate ?? null,
+          leads_per_month: agg.count_last_30d ? Math.round((agg.count_last_30d as number) / 4.3) : null,
+          match_count_7d: agg.count_last_7d ?? null,
+          match_count_30d: agg.count_last_30d ?? null,
+          match_count_total: agg.total_count ?? null,
+          sample_with: agg.sample_size ?? null,
+        },
+      }
+    })
+
     return NextResponse.json({
-      signals,
+      signals: enrichedSignals,
       pagination: {
         page,
         limit,

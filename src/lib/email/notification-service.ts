@@ -24,6 +24,8 @@ export interface NotificationEmailParams {
   mtuCount: number;
   threshold: number;
   settingsUrl?: string;
+  /** Estimated days until the workspace reaches 100% usage (used in 95% email). */
+  estimatedDaysToLimit?: number;
 }
 
 export interface EmailResult {
@@ -39,6 +41,8 @@ export interface EmailResult {
 const EMAIL_CONFIG = {
   from: process.env.RESEND_FROM_EMAIL || 'Beton Inspector <noreply@betoninspector.com>',
   replyTo: process.env.RESEND_REPLY_TO || 'support@betoninspector.com',
+  companyAddress: process.env.COMPANY_ADDRESS || 'Beton Inspector',
+  githubUrl: 'https://github.com/getbeton/inspector',
 };
 
 // ============================================
@@ -50,17 +54,17 @@ const EMAIL_CONFIG = {
  */
 function getEmailSubject(
   level: NotificationEmailParams['notificationLevel'],
-  workspaceName: string
+  _workspaceName: string
 ): string {
   switch (level) {
     case 'warning_90':
-      return `[${workspaceName}] You've used 90% of your free tier`;
+      return `You're approaching your Beton Inspector free tier limit`;
     case 'warning_95':
-      return `[${workspaceName}] Urgent: 95% of free tier used`;
+      return `You're about to exceed your Beton Inspector free tier limit`;
     case 'exceeded':
-      return `[${workspaceName}] Free tier limit exceeded - Action required`;
+      return `Your Beton Inspector free tier limit has been exceeded`;
     default:
-      return `[${workspaceName}] Billing notification`;
+      return `Beton Inspector billing notification`;
   }
 }
 
@@ -74,6 +78,7 @@ function getEmailHtml(params: NotificationEmailParams): string {
     mtuCount,
     threshold,
     settingsUrl = 'https://app.betoninspector.com/settings',
+    estimatedDaysToLimit,
   } = params;
 
   const percentUsed = Math.round((mtuCount / threshold) * 100);
@@ -102,16 +107,22 @@ function getEmailHtml(params: NotificationEmailParams): string {
       ctaText = 'Add Payment Method';
       break;
 
-    case 'warning_95':
+    case 'warning_95': {
       headerColor = '#E53935'; // Danger red
       headerText = '95% of Free Tier Used - Urgent';
+      const timeEstimate =
+        estimatedDaysToLimit != null && estimatedDaysToLimit > 0
+          ? `<p>At your current rate, you'll reach 100% in approximately <strong>${estimatedDaysToLimit} day${estimatedDaysToLimit === 1 ? '' : 's'}</strong>.</p>`
+          : '';
       mainMessage = `
         <p>Your workspace <strong>${workspaceName}</strong> has used ${mtuCount} of your ${threshold} monthly tracked users (MTU) limit.</p>
         <p>You have only <strong>${remaining} MTUs remaining</strong> this billing cycle.</p>
+        ${timeEstimate}
         <p><strong>Action required:</strong> Please add a payment method to continue using Beton Inspector without interruption.</p>
       `;
       ctaText = 'Add Payment Method Now';
       break;
+    }
 
     case 'exceeded':
       headerColor = '#E53935'; // Danger red
@@ -121,6 +132,9 @@ function getEmailHtml(params: NotificationEmailParams): string {
         <p>Current usage: <strong>${mtuCount} MTUs (${percentUsed}%)</strong></p>
         <p><strong>Your access has been restricted.</strong> To restore full access, please add a payment method to your account.</p>
         <p>With a payment method on file, you'll only be charged for usage above the free tier, and your access will be immediately restored.</p>
+        <p style="margin-top: 16px; color: #666; font-size: 14px;">
+          Alternatively, you can <a href="${EMAIL_CONFIG.githubUrl}" style="color: #4A90E2; text-decoration: underline;">self-host Beton Inspector</a> for unlimited usage at no cost.
+        </p>
       `;
       ctaText = 'Restore Access Now';
       break;
@@ -189,11 +203,15 @@ function getEmailHtml(params: NotificationEmailParams): string {
           <td style="background-color: #f5f5f5; padding: 24px; text-align: center; font-size: 12px; color: #666;">
             <p style="margin: 0 0 8px;">
               <a href="${settingsUrl}" style="color: #4A90E2; text-decoration: none;">Settings</a> &middot;
-              <a href="https://betoninspector.com/docs/billing" style="color: #4A90E2; text-decoration: none;">Billing FAQ</a>
+              <a href="https://betoninspector.com/docs/billing" style="color: #4A90E2; text-decoration: none;">Billing FAQ</a> &middot;
+              <a href="${settingsUrl}?unsubscribe=threshold" style="color: #4A90E2; text-decoration: none;">Unsubscribe</a>
             </p>
-            <p style="margin: 0;">
+            <p style="margin: 0 0 8px;">
               You're receiving this because you're an admin of ${workspaceName}.<br>
               &copy; ${new Date().getFullYear()} Beton Inspector
+            </p>
+            <p style="margin: 0; font-size: 11px; color: #999;">
+              ${EMAIL_CONFIG.companyAddress}
             </p>
           </td>
         </tr>
@@ -213,6 +231,7 @@ function getEmailText(params: NotificationEmailParams): string {
     mtuCount,
     threshold,
     settingsUrl = 'https://app.betoninspector.com/settings',
+    estimatedDaysToLimit,
   } = params;
 
   const percentUsed = Math.round((mtuCount / threshold) * 100);
@@ -231,14 +250,19 @@ You have approximately ${remaining} MTUs remaining this billing cycle.
 To avoid interruption to your service, we recommend adding a payment method to your account.`;
       break;
 
-    case 'warning_95':
+    case 'warning_95': {
       header = '95% of Free Tier Used - Urgent';
+      const timeNote =
+        estimatedDaysToLimit != null && estimatedDaysToLimit > 0
+          ? `\nAt your current rate, you'll reach 100% in approximately ${estimatedDaysToLimit} day${estimatedDaysToLimit === 1 ? '' : 's'}.\n`
+          : '';
       message = `Your workspace "${workspaceName}" has used ${mtuCount} of your ${threshold} monthly tracked users (MTU) limit.
 
 You have only ${remaining} MTUs remaining this billing cycle.
-
+${timeNote}
 ACTION REQUIRED: Please add a payment method to continue using Beton Inspector without interruption.`;
       break;
+    }
 
     case 'exceeded':
       header = 'Free Tier Limit Exceeded';
@@ -246,7 +270,9 @@ ACTION REQUIRED: Please add a payment method to continue using Beton Inspector w
 
 Current usage: ${mtuCount} MTUs (${percentUsed}%)
 
-YOUR ACCESS HAS BEEN RESTRICTED. To restore full access, please add a payment method to your account.`;
+YOUR ACCESS HAS BEEN RESTRICTED. To restore full access, please add a payment method to your account.
+
+Alternatively, self-host Beton Inspector for unlimited usage: ${EMAIL_CONFIG.githubUrl}`;
       break;
 
     default:
@@ -262,6 +288,9 @@ Add a payment method: ${settingsUrl}
 
 ---
 You're receiving this because you're an admin of ${workspaceName}.
+Unsubscribe from threshold notifications: ${settingsUrl}?unsubscribe=threshold
+
+${EMAIL_CONFIG.companyAddress}
 `;
 }
 
@@ -293,6 +322,8 @@ export async function sendThresholdNotification(
   const subject = getEmailSubject(notificationLevel, workspaceName);
   const html = getEmailHtml(params);
   const text = getEmailText(params);
+  const settingsUrl = params.settingsUrl || 'https://app.betoninspector.com/settings';
+  const unsubscribeUrl = `${settingsUrl}?unsubscribe=threshold`;
 
   // Check if Resend is configured
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -313,6 +344,10 @@ export async function sendThresholdNotification(
           html,
           text,
           reply_to: EMAIL_CONFIG.replyTo,
+          headers: {
+            'List-Unsubscribe': `<${unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
           tags: [
             { name: 'notification_level', value: notificationLevel },
             { name: 'workspace_id', value: params.workspaceId },

@@ -4,8 +4,8 @@ import { GET } from './route';
 /**
  * Tests for GET /api/agent/list-columns
  *
- * Returns column metadata and example values for a given table.
- * Validates table_id against a strict regex to prevent injection.
+ * Returns column metadata and non-empty sample values for a given table.
+ * Uses allowlist validation (table must exist in warehouse or schema).
  */
 
 // ---------------------------------------------------------------------------
@@ -53,6 +53,22 @@ function makeRequest(params: Record<string, string>) {
   return new NextRequest(url.toString(), { method: 'GET' });
 }
 
+/** Helper: build a mock client with warehouse tables, schema, and optional query results */
+function buildMockClient(opts: {
+  warehouseTables?: unknown[];
+  schema?: Record<string, unknown>;
+  queryResult?: { results: unknown[][]; columns: string[] };
+  queryError?: Error;
+}) {
+  return {
+    getWarehouseTables: vi.fn().mockResolvedValue(opts.warehouseTables ?? []),
+    getDatabaseSchema: vi.fn().mockResolvedValue(opts.schema ?? {}),
+    query: opts.queryError
+      ? vi.fn().mockRejectedValue(opts.queryError)
+      : vi.fn().mockResolvedValue(opts.queryResult ?? { results: [], columns: [] }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -82,18 +98,23 @@ describe('GET /api/agent/list-columns', () => {
     expect(await res.json()).toEqual({ error: 'Missing session_id or table_id' });
   });
 
-  it('returns 400 for SQL injection attempt in table_id', async () => {
+  it('returns 404 when table is not in warehouse or schema', async () => {
     mockValidate.mockReturnValue(true);
-    const res = await GET(makeRequest({ session_id: 's_1', table_id: "events; DROP TABLE users--" }));
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Invalid table_id format' });
-  });
+    mockResolveSession.mockResolvedValue({ workspaceId: 'ws-1', status: 'running' });
+    mockGetCreds.mockResolvedValue({
+      apiKey: 'phx_key', projectId: '123', host: null, isActive: true, status: 'active',
+    });
 
-  it('returns 400 for table_id with special characters', async () => {
-    mockValidate.mockReturnValue(true);
-    const res = await GET(makeRequest({ session_id: 's_1', table_id: "table-with-dashes" }));
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Invalid table_id format' });
+    const mockClient = buildMockClient({
+      warehouseTables: [],
+      schema: { events: { type: 'posthog', id: 'events', name: 'events', fields: {} } },
+    });
+    mockCreatePostHogClient.mockReturnValue(mockClient);
+
+    const res = await GET(makeRequest({ session_id: 's_1', table_id: 'nonexistent_table' }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toContain('not found');
   });
 
   it('returns 404 when session is not found', async () => {
@@ -104,106 +125,149 @@ describe('GET /api/agent/list-columns', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns columns with examples on success', async () => {
+  it('returns columns with samples from warehouse table', async () => {
     mockValidate.mockReturnValue(true);
     mockResolveSession.mockResolvedValue({ workspaceId: 'ws-1', status: 'running' });
     mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '123',
-      host: 'https://us.posthog.com',
-      isActive: true,
-      status: 'active',
+      apiKey: 'phx_key', projectId: '123', host: 'https://us.posthog.com',
+      isActive: true, status: 'active',
     });
 
-    const mockClient = {
-      query: vi.fn()
-        // First call: column metadata
-        .mockResolvedValueOnce({
-          results: [
-            ['event', 'String'],
-            ['timestamp', 'DateTime'],
-            ['distinct_id', 'String'],
+    const mockClient = buildMockClient({
+      warehouseTables: [
+        {
+          id: 'wh-1',
+          name: 'googlesheets_people',
+          format: 'DeltaS3Wrapper',
+          columns: [
+            { key: 'name', name: 'name', type: 'string', schema_valid: true },
+            { key: 'email', name: 'email', type: 'string', schema_valid: true },
           ],
-          columns: ['name', 'type'],
-        })
-        // Second call: sample rows
-        .mockResolvedValueOnce({
-          results: [
-            ['pageview', '2026-01-01T00:00:00Z', 'user-1'],
-            ['click', '2026-01-02T00:00:00Z', 'user-2'],
-            ['signup', '2026-01-03T00:00:00Z', 'user-3'],
-          ],
-          columns: ['event', 'timestamp', 'distinct_id'],
-        }),
-    };
+          external_data_source: { id: 'src-1', source_type: 'GoogleSheets' },
+        },
+      ],
+      queryResult: {
+        results: [
+          ['Alice', 'alice@example.com'],
+          [null, 'bob@example.com'],
+          ['Charlie', ''],
+          ['Diana', 'diana@example.com'],
+        ],
+        columns: ['name', 'email'],
+      },
+    });
+    mockCreatePostHogClient.mockReturnValue(mockClient);
+
+    const res = await GET(makeRequest({ session_id: 's_1', table_id: 'googlesheets_people' }));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.table_name).toBe('googlesheets_people');
+    expect(body.queryable_name).toBe('googlesheets_people');
+    expect(body.source_type).toBe('GoogleSheets');
+    expect(body.columns).toHaveLength(2);
+
+    // 'name' column: skips null at index 1, gets Alice, Charlie, Diana
+    expect(body.columns[0]).toEqual({
+      name: 'name',
+      type: 'string',
+      samples: ['Alice', 'Charlie', 'Diana'],
+    });
+    // 'email' column: skips empty string at index 2
+    expect(body.columns[1]).toEqual({
+      name: 'email',
+      type: 'string',
+      samples: ['alice@example.com', 'bob@example.com', 'diana@example.com'],
+    });
+  });
+
+  it('returns columns from schema fallback for native PostHog tables', async () => {
+    mockValidate.mockReturnValue(true);
+    mockResolveSession.mockResolvedValue({ workspaceId: 'ws-1', status: 'running' });
+    mockGetCreds.mockResolvedValue({
+      apiKey: 'phx_key', projectId: '123', host: null, isActive: true, status: 'active',
+    });
+
+    const mockClient = buildMockClient({
+      warehouseTables: [],
+      schema: {
+        events: {
+          type: 'posthog',
+          id: 'events',
+          name: 'events',
+          fields: {
+            event: { key: 'event', type: 'string' },
+            timestamp: { key: 'timestamp', type: 'datetime' },
+            pdi: { key: 'pdi', type: 'lazy_table' }, // should be filtered
+          },
+        },
+      },
+      queryResult: {
+        results: [
+          ['pageview', '2026-01-01T00:00:00Z'],
+          ['click', '2026-01-02T00:00:00Z'],
+        ],
+        columns: ['event', 'timestamp'],
+      },
+    });
     mockCreatePostHogClient.mockReturnValue(mockClient);
 
     const res = await GET(makeRequest({ session_id: 's_1', table_id: 'events' }));
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.table_id).toBe('events');
-    expect(body.columns).toHaveLength(3);
+    expect(body.source_type).toBe('posthog');
+    // Should have 2 columns (pdi lazy_table is filtered out)
+    expect(body.columns).toHaveLength(2);
     expect(body.columns[0]).toEqual({
-      col_id: 'event',
-      col_name: 'event',
-      col_type: 'String',
-      examples: ['pageview', 'click', 'signup'],
-    });
-    expect(body.columns[1]).toEqual({
-      col_id: 'timestamp',
-      col_name: 'timestamp',
-      col_type: 'DateTime',
-      examples: ['2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z'],
+      name: 'event',
+      type: 'string',
+      samples: ['pageview', 'click'],
     });
   });
 
-  it('returns columns without examples when sample query fails', async () => {
+  it('returns columns without samples when HogQL query fails', async () => {
     mockValidate.mockReturnValue(true);
     mockResolveSession.mockResolvedValue({ workspaceId: 'ws-1', status: 'running' });
     mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '123',
-      host: null,
-      isActive: true,
-      status: 'active',
+      apiKey: 'phx_key', projectId: '123', host: null, isActive: true, status: 'active',
     });
 
-    const mockClient = {
-      query: vi.fn()
-        .mockResolvedValueOnce({
-          results: [['id', 'UInt64']],
-          columns: ['name', 'type'],
-        })
-        .mockRejectedValueOnce(new Error('Table not queryable')),
-    };
+    const mockClient = buildMockClient({
+      warehouseTables: [
+        {
+          id: 'wh-1',
+          name: 'broken_table',
+          format: 'DeltaS3Wrapper',
+          columns: [{ key: 'col_a', name: 'col_a', type: 'string', schema_valid: true }],
+          external_data_source: { id: 'src-1', source_type: 'Postgres' },
+        },
+      ],
+      queryError: new Error('Table not queryable'),
+    });
     mockCreatePostHogClient.mockReturnValue(mockClient);
 
-    const res = await GET(makeRequest({ session_id: 's_1', table_id: 'system_table' }));
+    const res = await GET(makeRequest({ session_id: 's_1', table_id: 'broken_table' }));
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.columns[0].examples).toEqual([]);
+    expect(body.columns[0].samples).toEqual([]);
   });
 
-  it('accepts valid table identifiers', async () => {
+  it('accepts table IDs that would fail old regex (SQL injection blocked by allowlist)', async () => {
     mockValidate.mockReturnValue(true);
     mockResolveSession.mockResolvedValue({ workspaceId: 'ws-1', status: 'running' });
     mockGetCreds.mockResolvedValue({
-      apiKey: 'phx_key',
-      projectId: '123',
-      host: null,
-      isActive: true,
-      status: 'active',
+      apiKey: 'phx_key', projectId: '123', host: null, isActive: true, status: 'active',
     });
 
-    const mockClient = {
-      query: vi.fn().mockResolvedValue({ results: [], columns: [] }),
-    };
+    // SQL injection attempt: table doesn't exist in allowlist → 404
+    const mockClient = buildMockClient({ warehouseTables: [], schema: {} });
     mockCreatePostHogClient.mockReturnValue(mockClient);
 
-    // Valid identifiers should pass regex
-    const res = await GET(makeRequest({ session_id: 's_1', table_id: '_my_table_123' }));
-    expect(res.status).toBe(200);
+    const res = await GET(
+      makeRequest({ session_id: 's_1', table_id: "events; DROP TABLE users--" })
+    );
+    expect(res.status).toBe(404);
   });
 });
