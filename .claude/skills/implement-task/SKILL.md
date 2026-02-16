@@ -17,6 +17,23 @@ Example: `/implement-task BETON-42` or `/implement-task INSP-15`
 
 ## Workflow
 
+Do not assume my priorities on timeline or scale.
+After each section, pause and ask for my feedback before moving on.
+
+BEFORE YOU START:
+Ask if I want one of two options:
+1/ BIG CHANGE: Work through this interactively, one section at a time (Architecture → Code Quality → Tests → Performance) with at most 4 top issues in each section.
+2/ SMALL CHANGE: Work through interactively ONE question per review section
+FOR EACH STAGE OF REVIEW: output the explanation and pros and cons of each stage's questions AND your opinionated recommendation and why, and then use AskUserQuestion make sure each option clearly labels the issue NUMBER and option LETTER as the user doesn't get confused. Make the recommended option always the 1st option. LETTER as the user doesn't get confused. Make the recommended option always the 1st option.
+
+My engineering preferences (use these to guide your recommendations):
+
+DRY is important—flag repetition aggressively.
+Well-tested code is non-negotiable; I'd rather have too many tests than too few.
+I want code that's "engineered enough" — not under-engineered (fragile, hacky) and not over-engineered (premature abstraction, unnecessary complexity).
+I err on the side of handling more edge cases, not fewer; thoughtfulness > speed.
+Bias toward explicit over clever.
+
 ### Phase 1: Work Item Discovery
 
 #### Step 1.1: Fetch the Epic
@@ -78,6 +95,18 @@ Create a dependency order. Example:
 3. BETON-45: Add frontend form (depends on API)
 4. BETON-46: Add tests (depends on all above)
 ```
+
+#### Step 1.5: Plan review
+
+Review this plan thoroughly before making any code changes. For every issue or recommendation, explain the concrete tradeoffs, give me an opinionated recommendation, and ask for my input before assuming a direction.
+
+Evaluate:
+
+Overall system design and component boundaries.
+Dependency graph and coupling concerns.
+Data flow patterns and potential bottlenecks.
+Scaling characteristics and single points of failure.
+Security architecture (auth, data access, API boundaries).
 
 ---
 
@@ -158,6 +187,14 @@ Write the code following Beton's patterns:
 
 Follow existing patterns in the codebase.
 
+Evaluate:
+
+Code organization and module structure.
+DRY violations—be aggressive here.
+Error handling patterns and missing edge cases (call these out explicitly).
+Technical debt hotspots.
+Areas that are over-engineered or under-engineered relative to my preferences.
+
 #### Step 3.4: Build Locally
 
 **MANDATORY before committing:**
@@ -175,6 +212,17 @@ If build fails:
 **Do NOT commit code that fails the build.**
 
 #### Step 3.5: Test the Implementation
+
+Evaluate:
+
+Test coverage gaps (unit, integration, e2e).
+Test quality and assertion strength.
+Missing edge case coverage—be thorough.
+Untested failure modes and error paths.
+N+1 queries and database access patterns.
+Memory-usage concerns.
+Caching opportunities.
+Slow or high-complexity code paths.
 
 **For API endpoints:**
 
@@ -200,6 +248,15 @@ Verify:
 - Verify the page loads without errors in browser. Use Chrome Extension MCP for this
 - Check browser console for errors
 - Test key user interactions
+
+For each issue you find:
+For every specific issue (bug, smell, design concern, or risk):
+
+Describe the problem concretely, with file and line references.
+Present 2-3 options, including "do nothing" where that's reasonable.
+For each option, clearly: implementation effort, risk, impact on other code, and maintenance burden.
+Give me your recommended option and why, mapped to my preferences above.
+Then explicitly ask whether I agree or want to choose a different direction before proceeding.
 
 #### Step 3.6: Commit
 
