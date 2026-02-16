@@ -7,12 +7,12 @@ import type { EdaResult } from '@/lib/agent/types'
 
 interface SchemaSectionProps {
   workspaceId: string | undefined
-  session: ExplorationSession | null
+  session?: ExplorationSession | null
   edaResults: EdaResult[]
 }
 
 export function SchemaSection({ workspaceId, session, edaResults }: SchemaSectionProps) {
-  if (!session) {
+  if (edaResults.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -35,7 +35,7 @@ export function SchemaSection({ workspaceId, session, edaResults }: SchemaSectio
       <CardContent className="p-0 h-[500px]">
         <SchemaGraphTab
           workspaceId={workspaceId}
-          session={session}
+          session={session ?? undefined}
           edaResults={edaResults}
         />
       </CardContent>

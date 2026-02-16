@@ -5,6 +5,8 @@ import {
   getSessions,
   getSessionEdaResults,
   getSessionWebsiteResult,
+  getWorkspaceEdaResults,
+  getWorkspaceWebsiteResult,
   getTableColumns,
   saveConfirmedJoins,
   updateWebsiteExploration,
@@ -73,6 +75,39 @@ export function useSessionWebsiteResult(workspaceId: string | undefined, session
       return getSessionWebsiteResult(workspaceId!, sessionId!)
     },
     enabled: !!sessionId,
+    staleTime: isDemo ? Infinity : 60_000,
+  })
+}
+
+export function useWorkspaceEdaResults(workspaceId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
+  return useQuery({
+    queryKey: ['explorations', 'eda', workspaceId ?? DEMO_WORKSPACE, '__all__'],
+    queryFn: () => {
+      if (isDemo) {
+        return Promise.resolve(Object.values(MOCK_EDA_RESULTS).flat())
+      }
+      return getWorkspaceEdaResults(workspaceId!)
+    },
+    enabled: true,
+    staleTime: isDemo ? Infinity : 60_000,
+  })
+}
+
+export function useWorkspaceWebsiteResult(workspaceId: string | undefined) {
+  const isDemo = !workspaceId || workspaceId === DEMO_WORKSPACE
+
+  return useQuery({
+    queryKey: ['explorations', 'website', workspaceId ?? DEMO_WORKSPACE, '__all__'],
+    queryFn: () => {
+      if (isDemo) {
+        const allResults = Object.values(MOCK_WEBSITE_RESULTS)
+        return Promise.resolve(allResults[0] ?? null)
+      }
+      return getWorkspaceWebsiteResult(workspaceId!)
+    },
+    enabled: true,
     staleTime: isDemo ? Infinity : 60_000,
   })
 }

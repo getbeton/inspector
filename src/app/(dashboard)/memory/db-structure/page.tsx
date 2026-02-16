@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { JoinCandidatesSection } from '@/components/exploration/sections/join-candidates-section'
 import { SchemaSection } from '@/components/exploration/sections/schema-section'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
-import { useExplorationSessions, useSessionEdaResults, useLatestChanges } from '@/lib/hooks/use-explorations'
+import { useExplorationSessions, useWorkspaceEdaResults, useLatestChanges } from '@/lib/hooks/use-explorations'
 
 export default function MemoryDbStructurePage() {
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
@@ -17,10 +17,7 @@ export default function MemoryDbStructurePage() {
     () => sessions.find(s => s.status === 'completed'),
     [sessions]
   )
-  const { data: latestEdaResults = [] } = useSessionEdaResults(
-    workspaceId,
-    latestCompletedSession?.id,
-  )
+  const { data: latestEdaResults = [] } = useWorkspaceEdaResults(workspaceId)
   const { data: latestChanges } = useLatestChanges(workspaceId)
 
   if (setupLoading) {
