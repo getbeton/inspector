@@ -127,7 +127,7 @@ export function JoinCandidatesSection({
 
   const canEdit = !!session
 
-  if (!session) {
+  if (edaResults.length === 0 && !session) {
     return (
       <Card>
         <CardHeader>
@@ -142,8 +142,8 @@ export function JoinCandidatesSection({
     )
   }
 
-  const hasConfirmed = session.confirmed_joins && session.confirmed_joins.length > 0
-  const displayPairs = isEditing ? draftPairs : (hasConfirmed ? session.confirmed_joins! : suggestedJoins)
+  const hasConfirmed = session?.confirmed_joins && session.confirmed_joins.length > 0
+  const displayPairs = isEditing ? draftPairs : (hasConfirmed ? session!.confirmed_joins! : suggestedJoins)
 
   return (
     <Card>
