@@ -62,6 +62,18 @@ export async function getSessionWebsiteResult(
   )
 }
 
+export async function getWorkspaceEdaResults(workspaceId: string): Promise<EdaResult[]> {
+  return apiClient.get<EdaResult[]>(
+    `/api/agent/data/eda?workspaceId=${encodeURIComponent(workspaceId)}`
+  )
+}
+
+export async function getWorkspaceWebsiteResult(workspaceId: string): Promise<WebsiteExplorationResult | null> {
+  return apiClient.get<WebsiteExplorationResult | null>(
+    `/api/agent/data/website-exploration?workspaceId=${encodeURIComponent(workspaceId)}`
+  )
+}
+
 export async function getTableColumns(
   workspaceId: string,
   tableId: string

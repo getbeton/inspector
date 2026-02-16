@@ -46,7 +46,7 @@ interface DagreGraph {
 
 interface SchemaGraphTabProps {
   workspaceId: string | undefined
-  session: ExplorationSession
+  session?: ExplorationSession
   edaResults?: EdaResult[]
 }
 
@@ -185,7 +185,7 @@ function SchemaGraphInner({
 export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
   const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
     externalEdaResults ? undefined : workspaceId,
-    externalEdaResults ? undefined : session.id,
+    externalEdaResults ? undefined : session?.id,
   )
   const edaResults = externalEdaResults ?? fetchedEdaResults
   const isLoading = externalEdaResults ? false : fetchLoading
@@ -206,8 +206,8 @@ export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaRe
 
   const graph = useMemo(() => {
     if (!dagre) return null
-    return buildGraph(dagre, edaResults, session.confirmed_joins)
-  }, [dagre, edaResults, session.confirmed_joins])
+    return buildGraph(dagre, edaResults, session?.confirmed_joins ?? null)
+  }, [dagre, edaResults, session?.confirmed_joins])
 
   if (isLoading || !dagre) {
     return (
