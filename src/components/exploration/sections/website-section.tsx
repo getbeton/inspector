@@ -142,7 +142,7 @@ export function WebsiteSection({
     }))
   }
 
-  const canEdit = !!sessionId
+  const canEdit = !!websiteData
 
   if (isLoading) {
     return (
