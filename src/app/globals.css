@@ -37,6 +37,10 @@
   --color-signal-neutral: #666666;
   --color-signal-light: #eeeeee;
 
+  /* Neobrutalist shadows */
+  --shadow-card: 4px 4px 0 var(--color-foreground);
+
+  --font-heading: 'Cal Sans', ui-sans-serif, system-ui, sans-serif;
   --font-sans:
     var(--font-sans), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -303,11 +307,36 @@
   ---break---
 */
 
+/* Cal Sans — heading font for neobrutalist style */
+@font-face {
+  font-family: 'Cal Sans';
+  src: url('/fonts/cal-sans-semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* Neobrutalist: kill all border-radius */
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+  }
+
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Neobrutalist headings: Cal Sans, uppercase, wide tracking */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
   }
 }
