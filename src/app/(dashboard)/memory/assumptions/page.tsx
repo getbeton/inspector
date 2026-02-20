@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { WebsiteSection } from '@/components/exploration/sections/website-section'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useExplorationSessions, useWorkspaceWebsiteResult, useLatestChanges } from '@/lib/hooks/use-explorations'
@@ -12,10 +11,8 @@ export default function MemoryAssumptionsPage() {
 
   // Sessions still needed for edit/update functionality
   const { data: sessions = [] } = useExplorationSessions(workspaceId)
-  const latestCompletedSession = useMemo(
-    () => sessions.find(s => s.status === 'completed'),
-    [sessions]
-  )
+  // Use latest session of any status for save target (not just completed)
+  const latestSession = sessions[0] ?? null
 
   // Data fetch is now workspace-level — no longer blocked on session
   const { data: websiteData = null, isLoading: websiteLoading } = useWorkspaceWebsiteResult(workspaceId)
@@ -42,7 +39,7 @@ export default function MemoryAssumptionsPage() {
         websiteData={websiteData}
         isLoading={websiteLoading}
         workspaceId={workspaceId}
-        sessionId={latestCompletedSession?.id}
+        sessionId={latestSession?.id}
         isDemo={isDemo}
         lastChange={latestChanges?.business_model ?? null}
       />
