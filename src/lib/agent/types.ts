@@ -68,6 +68,53 @@ export interface WebsiteExplorationResult {
     updated_at: string;
 }
 
+// ============================================
+// Fetch URL types (web scraping proxy)
+// ============================================
+
+export interface FetchUrlRequest {
+    session_id: string;
+    url?: string;
+    urls?: string[];
+    operation?: 'scrape' | 'crawl' | 'extract';
+    formats?: string[];
+    only_main_content?: boolean;
+    timeout?: number;
+    selectors?: { include?: string[]; exclude?: string[] };
+    max_pages?: number;
+    max_depth?: number;
+    schema?: Record<string, unknown>;
+    prompt?: string;
+    skip_cache?: boolean;
+}
+
+export interface FetchUrlResult {
+    url: string;
+    success: boolean;
+    cached: boolean;
+    data?: {
+        markdown?: string;
+        html?: string;
+        links?: string[];
+        metadata?: {
+            title?: string;
+            description?: string;
+            sourceURL?: string;
+            statusCode?: number;
+        };
+        truncated?: boolean;
+    };
+    error?: string;
+}
+
+export interface FetchUrlResponse {
+    success: boolean;
+    cached?: boolean;
+    data?: FetchUrlResult['data'];
+    results?: FetchUrlResult[];
+    error?: string;
+}
+
 export interface EdaResult {
     id: string;
     workspace_id: string;

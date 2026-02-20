@@ -31,6 +31,16 @@ import {
 // Integration metadata (static — never changes)
 // ---------------------------------------------------------------------------
 
+interface ExtraField {
+  id: string
+  label: string
+  type: 'select' | 'text'
+  options?: { value: string; label: string }[]
+  placeholder?: string
+  /** Show this field only when another field has a specific value */
+  visibleWhen?: { field: string; value: string }
+}
+
 interface IntegrationMeta {
   id: string
   name: string
@@ -43,6 +53,9 @@ interface IntegrationMeta {
     placeholder: string
     credentialKey: string // maps to the credential response key
   }[]
+  /** Additional config fields stored in config_json (not encrypted) */
+  extraFields?: ExtraField[]
+  helpUrl?: string
 }
 
 const INTEGRATIONS: IntegrationMeta[] = [
@@ -64,6 +77,46 @@ const INTEGRATIONS: IntegrationMeta[] = [
     fields: [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'attio_...', credentialKey: 'apiKey' },
     ],
+    helpUrl: 'https://app.attio.com/settings/api-keys',
+  },
+  {
+    id: 'firecrawl',
+    name: 'Firecrawl',
+    description: 'Web scraping to enrich agent analysis with web data',
+    icon: 'F',
+    fields: [
+      { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'fc-...', credentialKey: 'apiKey' },
+    ],
+    extraFields: [
+      {
+        id: 'mode',
+        label: 'Deployment Mode',
+        type: 'select',
+        options: [
+          { value: 'cloud', label: 'Cloud (api.firecrawl.dev)' },
+          { value: 'self_hosted', label: 'Self-hosted' },
+        ],
+      },
+      {
+        id: 'base_url',
+        label: 'Self-hosted URL',
+        type: 'text',
+        placeholder: 'https://firecrawl.example.com',
+        visibleWhen: { field: 'mode', value: 'self_hosted' },
+      },
+      {
+        id: 'proxy',
+        label: 'Proxy Tier',
+        type: 'select',
+        options: [
+          { value: '', label: 'None' },
+          { value: 'basic', label: 'Basic' },
+          { value: 'stealth', label: 'Stealth' },
+        ],
+        visibleWhen: { field: 'mode', value: 'cloud' },
+      },
+    ],
+    helpUrl: 'https://www.firecrawl.dev/app/api-keys',
   },
 ]
 
@@ -93,6 +146,14 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
     const values: Record<string, string> = {}
     meta.fields.forEach(field => {
       values[field.id] = ''
+    })
+    // Set defaults for extra fields
+    meta.extraFields?.forEach(field => {
+      if (field.type === 'select' && field.options?.[0]) {
+        values[field.id] = field.options[0].value
+      } else {
+        values[field.id] = ''
+      }
     })
     setEditValues(values)
   }
@@ -133,6 +194,11 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
     if (!value) return ''
     if (value.length <= 8) return '••••••••'
     return `${value.substring(0, 4)}••••${value.substring(value.length - 4)}`
+  }
+
+  const isExtraFieldVisible = (field: ExtraField): boolean => {
+    if (!field.visibleWhen) return true
+    return editValues[field.visibleWhen.field] === field.visibleWhen.value
   }
 
   return (
@@ -199,9 +265,35 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   />
                 </div>
               ))}
-              {meta.id === 'attio' && (
+              {meta.extraFields?.map(field => {
+                if (!isExtraFieldVisible(field)) return null
+                return (
+                  <div key={field.id}>
+                    <label className="text-sm font-medium mb-1.5 block">{field.label}</label>
+                    {field.type === 'select' && field.options ? (
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={editValues[field.id] || ''}
+                        onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
+                      >
+                        {field.options.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        type="text"
+                        placeholder={field.placeholder}
+                        value={editValues[field.id] || ''}
+                        onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+              {meta.helpUrl && (
                 <a
-                  href="https://app.attio.com/settings/api-keys"
+                  href={meta.helpUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-primary hover:underline"

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/supabase/types'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 
-const SUPPORTED_INTEGRATIONS = ['posthog', 'stripe', 'attio', 'apollo']
+const SUPPORTED_INTEGRATIONS = ['posthog', 'stripe', 'attio', 'apollo', 'firecrawl']
 
 /**
  * GET /api/integrations/[name]

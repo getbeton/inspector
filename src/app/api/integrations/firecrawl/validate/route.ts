@@ -1,0 +1,297 @@
+/**
+ * POST /api/integrations/firecrawl/validate
+ *
+ * Validate Firecrawl credentials and store them encrypted on success.
+ *
+ * Request:
+ * {
+ *   "api_key": "fc-...",
+ *   "mode": "cloud" | "self_hosted",
+ *   "base_url": "http://...",  (required if mode === "self_hosted")
+ *   "proxy": "basic" | "stealth" | null
+ * }
+ *
+ * Response (success):
+ * { "success": true, "message": "Firecrawl connected successfully" }
+ *
+ * Response (error):
+ * { "success": false, "error": { "code": "...", "message": "..." } }
+ */
+
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { FirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRateLimitError } from '@/lib/integrations/firecrawl'
+import { encryptCredentials } from '@/lib/crypto/encryption'
+import { createModuleLogger } from '@/lib/utils/logger'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
+import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+
+const log = createModuleLogger('[Firecrawl Validate]')
+
+// ============================================
+// Error mapping
+// ============================================
+
+interface ErrorMapping {
+  code: string
+  message: string
+  status: number
+}
+
+function mapError(error: unknown): ErrorMapping {
+  if (error instanceof FirecrawlAuthError) {
+    return {
+      code: 'invalid_api_key',
+      message: 'Invalid API key. Please check your Firecrawl API key and try again.',
+      status: 401,
+    }
+  }
+
+  if (error instanceof FirecrawlPaymentError) {
+    return {
+      code: 'payment_required',
+      message: 'Firecrawl credits exhausted. Please check your Firecrawl billing.',
+      status: 402,
+    }
+  }
+
+  if (error instanceof FirecrawlRateLimitError) {
+    return {
+      code: 'rate_limited',
+      message: 'Firecrawl rate limit exceeded. Please wait and try again.',
+      status: 429,
+    }
+  }
+
+  const errorStr = String(error)
+
+  if (
+    errorStr.includes('fetch') ||
+    errorStr.includes('network') ||
+    errorStr.includes('ECONNREFUSED') ||
+    errorStr.includes('ETIMEDOUT')
+  ) {
+    return {
+      code: 'network_error',
+      message: 'Unable to reach Firecrawl. Check your connection or self-hosted URL.',
+      status: 503,
+    }
+  }
+
+  return {
+    code: 'unknown_error',
+    message: error instanceof Error ? error.message : 'An unexpected error occurred.',
+    status: 500,
+  }
+}
+
+// ============================================
+// SSRF validation for self-hosted base URL
+// ============================================
+
+const PRIVATE_HOST_PATTERNS = [
+  /^localhost$/i,
+  /^127\.\d+\.\d+\.\d+$/,
+  /^10\.\d+\.\d+\.\d+$/,
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+  /^192\.168\.\d+\.\d+$/,
+  /^169\.254\.\d+\.\d+$/,
+  /^0\.0\.0\.0$/,
+  /^\[?::1\]?$/,
+  /\.internal$/i,
+  /\.local$/i,
+  /\.localhost$/i,
+]
+
+function isPrivateHost(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
+    return PRIVATE_HOST_PATTERNS.some(p => p.test(hostname))
+  } catch {
+    return true // invalid URL treated as blocked
+  }
+}
+
+// ============================================
+// Route handler
+// ============================================
+
+export async function POST(request: Request) {
+  const rateLimitResp = applyRateLimit(request, 'firecrawl-validate', RATE_LIMITS.VALIDATION)
+  if (rateLimitResp) return rateLimitResp
+
+  try {
+    const supabase = await createClient()
+
+    // Authenticate user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'not_authenticated',
+            message: 'Your session has expired. Please refresh the page.',
+          },
+        },
+        { status: 401 }
+      )
+    }
+
+    // Get workspace
+    const membership = await getWorkspaceMembership()
+    if (!membership) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
+
+    // Parse request body
+    const body = await request.json()
+    const { api_key, mode, base_url, proxy } = body
+
+    // Validate API key format
+    if (!api_key || typeof api_key !== 'string') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'invalid_request',
+            message: 'API key is required.',
+          },
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!api_key.startsWith('fc-')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'invalid_request',
+            message: 'Firecrawl API keys start with "fc-". Please check your key.',
+          },
+        },
+        { status: 400 }
+      )
+    }
+
+    // Validate self-hosted config
+    if (mode === 'self_hosted') {
+      if (!base_url) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'invalid_request',
+              message: 'Base URL is required for self-hosted mode.',
+            },
+          },
+          { status: 400 }
+        )
+      }
+
+      if (isPrivateHost(base_url)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'invalid_base_url',
+              message: 'Self-hosted URL cannot point to a private/internal address.',
+            },
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Create client and test connection
+    const client = new FirecrawlClient({
+      apiKey: api_key,
+      mode: mode || 'cloud',
+      baseUrl: base_url,
+      proxy: proxy || null,
+    })
+
+    const testResult = await client.testConnection()
+
+    if (!testResult.success) {
+      log.debug('Connection test failed:', testResult.error)
+      const mapped = mapError(testResult.error || 'Connection failed')
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: mapped.code,
+            message: mapped.message,
+          },
+        },
+        { status: mapped.status }
+      )
+    }
+
+    // Connection successful — encrypt and store credentials
+    const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
+      apiKey: api_key,
+    })
+
+    const configData: IntegrationConfigInsert = {
+      workspace_id: membership.workspaceId,
+      integration_name: 'firecrawl',
+      api_key_encrypted: apiKeyEncrypted,
+      project_id_encrypted: projectIdEncrypted,
+      config_json: {
+        mode: mode || 'cloud',
+        base_url: base_url || null,
+        proxy: proxy || null,
+      },
+      status: 'connected',
+      is_active: true,
+      last_validated_at: new Date().toISOString(),
+    }
+
+    const result = await supabase
+      .from('integration_configs')
+      .upsert(configData as never, {
+        onConflict: 'workspace_id,integration_name',
+      })
+      .select()
+      .single()
+
+    if (result.error) {
+      log.error('Error saving config:', result.error)
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'storage_error',
+            message: 'Failed to save configuration. Please try again.',
+          },
+        },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Firecrawl connected successfully',
+    })
+  } catch (error) {
+    log.error('Unexpected error:', error)
+    const mapped = mapError(error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: mapped.code,
+          message: mapped.message,
+        },
+      },
+      { status: mapped.status }
+    )
+  }
+}
