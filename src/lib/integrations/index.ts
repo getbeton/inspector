@@ -12,6 +12,7 @@
 import { PostHogClient, createPostHogClient } from './posthog/client'
 import { StripeClient, createStripeClient } from './stripe/client'
 import { ApolloClient, createApolloClient } from './apollo/client'
+import { FirecrawlClient, createFirecrawlClient } from './firecrawl/client'
 
 // Types
 export * from './types'
@@ -19,7 +20,9 @@ export * from './types'
 // Credentials retrieval
 export {
   getIntegrationCredentials,
+  getIntegrationCredentialsAdmin,
   isIntegrationConfigured,
+  isIntegrationConfiguredAdmin,
   type IntegrationCredentials
 } from './credentials'
 
@@ -73,6 +76,25 @@ export {
 // Apollo
 export { ApolloClient, createApolloClient, type ApolloClientConfig, type ApolloSearchResult } from './apollo/client'
 
+// Firecrawl
+export {
+  FirecrawlClient,
+  createFirecrawlClient,
+  FirecrawlError,
+  FirecrawlAuthError,
+  FirecrawlRateLimitError,
+  FirecrawlPaymentError,
+  type FirecrawlClientConfig,
+  type ScrapeOptions,
+  type ScrapeResult,
+  type ScrapeResponse,
+  type ScrapeMetadata,
+  type CrawlOptions,
+  type CrawlResponse,
+  type ExtractOptions,
+  type ExtractResponse,
+} from './firecrawl'
+
 // Attio (explicit exports to avoid naming conflicts with ./types)
 export {
   AttioError,
@@ -101,9 +123,9 @@ export {
  * Integration factory - creates the appropriate client based on integration name
  */
 export function createIntegrationClient(
-  name: 'posthog' | 'stripe' | 'apollo',
+  name: 'posthog' | 'stripe' | 'apollo' | 'firecrawl',
   config: Record<string, string>
-): PostHogClient | StripeClient | ApolloClient {
+): PostHogClient | StripeClient | ApolloClient | FirecrawlClient {
   switch (name) {
     case 'posthog':
       if (!config.apiKey || !config.projectId) {
@@ -122,6 +144,17 @@ export function createIntegrationClient(
         throw new Error('Apollo requires apiKey')
       }
       return createApolloClient(config.apiKey)
+
+    case 'firecrawl':
+      if (!config.apiKey) {
+        throw new Error('Firecrawl requires apiKey')
+      }
+      return createFirecrawlClient({
+        apiKey: config.apiKey,
+        mode: (config.mode as 'cloud' | 'self_hosted') || 'cloud',
+        baseUrl: config.baseUrl,
+        proxy: (config.proxy as 'basic' | 'stealth') || null,
+      })
 
     default:
       throw new Error(`Unknown integration: ${name}`)
