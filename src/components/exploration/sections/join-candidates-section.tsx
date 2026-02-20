@@ -99,17 +99,21 @@ export function JoinCandidatesSection({
     )
 
     if (isDemo) {
-      queryClient.setQueryData(
-        ['explorations', 'sessions', '__demo__'],
-        (old: ExplorationSession[] | undefined) =>
-          old?.map(s => s.session_id === session!.session_id
-            ? { ...s, confirmed_joins: validPairs }
-            : s
-          ) ?? []
-      )
+      if (session) {
+        queryClient.setQueryData(
+          ['explorations', 'sessions', '__demo__'],
+          (old: ExplorationSession[] | undefined) =>
+            old?.map(s => s.session_id === session.session_id
+              ? { ...s, confirmed_joins: validPairs }
+              : s
+            ) ?? []
+        )
+      }
       setIsEditing(false)
       return
     }
+
+    if (!session?.session_id) return
 
     await saveMutation.mutateAsync(validPairs)
     queryClient.invalidateQueries({ queryKey: ['explorations', 'latest-changes'] })
@@ -143,7 +147,7 @@ export function JoinCandidatesSection({
   }
 
   const hasConfirmed = session?.confirmed_joins && session.confirmed_joins.length > 0
-  const displayPairs = isEditing ? draftPairs : (hasConfirmed ? session!.confirmed_joins! : suggestedJoins)
+  const displayPairs = isEditing ? draftPairs : (hasConfirmed ? (session?.confirmed_joins ?? suggestedJoins) : suggestedJoins)
 
   return (
     <Card>
