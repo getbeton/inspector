@@ -31,6 +31,10 @@ export interface AttioStepProps {
    */
   onSuccess: () => void;
   /**
+   * Optional callback to report the connected workspace name
+   */
+  onWorkspaceName?: (name: string) => void;
+  /**
    * Optional CSS class for the container
    */
   className?: string;
@@ -47,7 +51,7 @@ export interface AttioStepProps {
  *
  * Simpler than PostHogStep - no region selection needed
  */
-export function AttioStep({ onSuccess, className }: AttioStepProps) {
+export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepProps) {
   // Form state
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -107,9 +111,15 @@ export function AttioStep({ onSuccess, className }: AttioStepProps) {
       }
 
       const data = await validateResponse.json();
-      setWorkspaceName(data.workspace_name ?? data.workspaceName ?? "Connected");
+      const wsName = data.workspace_name ?? data.workspaceName ?? "Connected";
+      setWorkspaceName(wsName);
       setState("success");
       trackIntegrationConnected("attio");
+
+      // Report workspace name to parent for preview panel
+      if (onWorkspaceName && wsName !== "Connected") {
+        onWorkspaceName(wsName);
+      }
 
       // Notify parent of success
       onSuccess();

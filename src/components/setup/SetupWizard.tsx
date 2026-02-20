@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -9,8 +9,12 @@ import { ProgressIndicator } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
-import { AttioFieldMappingStep } from "./steps/AttioFieldMappingStep";
+import { DealFieldMappingStep, type DealMappingState, type SampleData } from "./steps/DealFieldMappingStep";
 import { WebsiteStep } from "./steps/WebsiteStep";
+import { PostHogPreview } from "./previews/PostHogPreview";
+import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
+import { SlackNotificationPreview } from "./previews/SlackNotificationPreview";
+import { CrmCardPreview } from "./previews/CrmCardPreview";
 
 /**
  * Wizard step identifiers
@@ -23,50 +27,52 @@ type WizardStep = "posthog" | "attio" | "attio_mapping" | "website" | "billing" 
 const STEP_LABELS: Record<WizardStep, string> = {
   posthog: "PostHog",
   attio: "Attio",
-  attio_mapping: "Field Mapping",
+  attio_mapping: "Deal Mapping",
   website: "Website",
   billing: "Billing",
   complete: "Complete",
 };
 
+/**
+ * Dual-panel structure returned by each step renderer
+ */
+interface StepPanels {
+  config: ReactNode;
+  preview: ReactNode;
+}
+
+/**
+ * Default sample data for previews (loaded from API or fallback)
+ */
+const DEFAULT_SAMPLE: SampleData = {
+  company_name: "Acme Corp",
+  company_domain: "acme.com",
+  signal_name: "Product Qualified Lead",
+  signal_type: "pql",
+  health_score: 85,
+  concrete_grade: "M75",
+  signal_count: 12,
+  deal_value: 48000,
+  detected_at: new Date().toISOString().split("T")[0],
+};
+
 export interface SetupWizardProps {
-  /**
-   * Whether billing is enabled (cloud mode)
-   * When false, the billing step is skipped (self-hosted mode)
-   */
   billingEnabled?: boolean;
-  /**
-   * Current setup status — used to skip already-completed steps
-   */
   setupStatus?: {
     integrations: { posthog: boolean; attio: boolean };
     billing: { configured: boolean };
   };
-  /**
-   * Pre-detected website URL from auth callback domain detection
-   */
   websiteUrl?: string | null;
-  /**
-   * Optional CSS class for the container
-   */
   className?: string;
 }
 
 /**
- * Main setup wizard container component
+ * Main setup wizard — two-column layout with live preview.
  *
- * Orchestrates the multi-step onboarding flow:
- * 1. PostHog connection (required)
- * 2. Attio CRM connection (required)
- * 3. Attio field mapping (new — maps Beton fields to Attio attributes)
- * 4. Website confirmation (new — pre-filled from email domain)
- * 5. Billing setup (cloud mode only)
+ * Left column: step configuration (inputs, forms)
+ * Right column: live preview (Slack notification, CRM card, integration status)
  *
- * Features:
- * - State machine for step transitions
- * - Progress indicator showing current step
- * - Passes MTU count from PostHog to Billing step
- * - Navigates to /signals on completion
+ * On mobile, the preview column is hidden and only config is shown.
  */
 export function SetupWizard({
   billingEnabled = false,
@@ -76,70 +82,87 @@ export function SetupWizard({
 }: SetupWizardProps) {
   const router = useRouter();
 
-  // Compute the first incomplete step so the wizard resumes where the user left off
   const getInitialStep = (): WizardStep => {
     if (!setupStatus) return "posthog";
     if (!setupStatus.integrations.posthog) return "posthog";
     if (!setupStatus.integrations.attio) return "attio";
-    // After Attio is connected, proceed to mapping → website → billing
     if (billingEnabled && !setupStatus.billing.configured) return "billing";
     return "complete";
   };
 
-  // Current step in the wizard
   const [currentStep, setCurrentStep] = useState<WizardStep>(getInitialStep);
 
   // Data passed between steps
   const [mtuCount, setMtuCount] = useState<number>(0);
+  const [posthogRegion, setPosthogRegion] = useState<string>("");
+  const [attioWorkspaceName, setAttioWorkspaceName] = useState<string>("");
+  const [posthogConnected, setPosthogConnected] = useState(
+    setupStatus?.integrations.posthog ?? false
+  );
+  const [attioConnected, setAttioConnected] = useState(
+    setupStatus?.integrations.attio ?? false
+  );
 
-  /**
-   * Compute the list of steps based on billing mode
-   * Cloud: PostHog → Attio → Field Mapping → Website → Billing
-   * Self-hosted: PostHog → Attio → Field Mapping → Website
-   */
+  // Deal mapping state for live preview
+  const [dealMappingState, setDealMappingState] = useState<DealMappingState>({
+    dealNameTemplate: "{{company_name}} — {{signal_name}}",
+    fieldMappings: [],
+  });
+
+  // Sample data for previews
+  const [sampleData, setSampleData] = useState<SampleData>(DEFAULT_SAMPLE);
+
+  // Load sample data on mount
+  useEffect(() => {
+    fetch("/api/integrations/attio/sample-data")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.sample) setSampleData(data.sample);
+      })
+      .catch(() => {
+        // Keep default sample on error
+      });
+  }, []);
+
   const steps = useMemo(() => {
     const base: WizardStep[] = ["posthog", "attio", "attio_mapping", "website"];
-    if (billingEnabled) {
-      base.push("billing");
-    }
+    if (billingEnabled) base.push("billing");
     return base;
   }, [billingEnabled]);
 
-  /**
-   * Get display labels for progress indicator
-   */
-  const stepLabels = useMemo(() => {
-    return steps.map((step) => STEP_LABELS[step]);
-  }, [steps]);
-
-  /**
-   * Get the current step label for progress indicator
-   */
+  const stepLabels = useMemo(() => steps.map((step) => STEP_LABELS[step]), [steps]);
   const currentStepLabel = STEP_LABELS[currentStep];
 
-  /**
-   * Get the next step in the sequence
-   */
   const getNextStep = useCallback(
     (current: WizardStep): WizardStep => {
       const currentIndex = steps.indexOf(current);
-      if (currentIndex === -1 || currentIndex >= steps.length - 1) {
-        return "complete";
-      }
+      if (currentIndex === -1 || currentIndex >= steps.length - 1) return "complete";
       return steps[currentIndex + 1];
     },
     [steps]
   );
 
-  /**
-   * Advance to next step or finish
-   */
   const advanceFrom = useCallback(
-    (step: WizardStep) => {
+    async (step: WizardStep) => {
       trackSetupStepCompleted(step);
       const next = getNextStep(step);
       if (next === "complete") {
         trackOnboardingCompleted();
+
+        // Phase 8: Trigger agent session on completion
+        try {
+          await fetch("/api/agent/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_type: "setup_complete",
+              trigger: "onboarding_wizard",
+            }),
+          });
+        } catch {
+          // Non-blocking — don't prevent redirect if agent trigger fails
+        }
+
         router.push("/signals");
       } else {
         setCurrentStep(next);
@@ -148,78 +171,178 @@ export function SetupWizard({
     [getNextStep, router]
   );
 
-  /**
-   * Handle PostHog step completion
-   */
+  // Step handlers
   const handlePostHogSuccess = useCallback(
     (data: { mtuCount: number; region: string }) => {
       setMtuCount(data.mtuCount);
+      setPosthogRegion(data.region);
+      setPosthogConnected(true);
       advanceFrom("posthog");
     },
     [advanceFrom]
   );
 
-  /**
-   * Handle Attio step completion
-   */
-  const handleAttioSuccess = useCallback(() => {
-    advanceFrom("attio");
-  }, [advanceFrom]);
+  const handleAttioSuccess = useCallback(
+    (workspaceName?: string) => {
+      if (workspaceName) setAttioWorkspaceName(workspaceName);
+      setAttioConnected(true);
+      advanceFrom("attio");
+    },
+    [advanceFrom]
+  );
 
-  /**
-   * Handle Attio field mapping completion
-   */
-  const handleFieldMappingSuccess = useCallback(() => {
-    advanceFrom("attio_mapping");
-  }, [advanceFrom]);
+  const handleFieldMappingSuccess = useCallback(
+    (mapping: DealMappingState) => {
+      setDealMappingState(mapping);
+      advanceFrom("attio_mapping");
+    },
+    [advanceFrom]
+  );
 
-  /**
-   * Handle Website step completion
-   */
   const handleWebsiteSuccess = useCallback(() => {
     advanceFrom("website");
   }, [advanceFrom]);
 
-  /**
-   * Handle Billing step completion
-   */
   const handleBillingComplete = useCallback(() => {
     advanceFrom("billing");
   }, [advanceFrom]);
 
   /**
-   * Render the current step content
+   * Render dual-panel content for the current step
    */
-  const renderStep = () => {
+  const renderStep = (): StepPanels => {
     switch (currentStep) {
       case "posthog":
-        return <PostHogStep onSuccess={handlePostHogSuccess} />;
+        return {
+          config: <PostHogStep onSuccess={handlePostHogSuccess} />,
+          preview: (
+            <PostHogPreview
+              isConnected={posthogConnected}
+              mtuCount={posthogConnected ? mtuCount : null}
+              region={posthogRegion}
+            />
+          ),
+        };
       case "attio":
-        return <AttioStep onSuccess={handleAttioSuccess} />;
+        return {
+          config: (
+            <AttioStep
+              onSuccess={() => handleAttioSuccess()}
+              onWorkspaceName={setAttioWorkspaceName}
+            />
+          ),
+          preview: (
+            <AttioConnectionPreview
+              isConnected={attioConnected}
+              workspaceName={attioWorkspaceName}
+            />
+          ),
+        };
       case "attio_mapping":
-        return <AttioFieldMappingStep onSuccess={handleFieldMappingSuccess} />;
+        return {
+          config: (
+            <DealFieldMappingStep
+              onSuccess={handleFieldMappingSuccess}
+              onMappingChange={setDealMappingState}
+            />
+          ),
+          preview: (
+            <div className="space-y-4">
+              <SlackNotificationPreview
+                dealNameTemplate={dealMappingState.dealNameTemplate}
+                sampleData={sampleData}
+              />
+              <CrmCardPreview
+                mappingState={dealMappingState}
+                sampleData={sampleData}
+                attioWorkspaceName={attioWorkspaceName}
+              />
+            </div>
+          ),
+        };
       case "website":
-        return <WebsiteStep initialUrl={websiteUrl} onSuccess={handleWebsiteSuccess} />;
+        return {
+          config: <WebsiteStep initialUrl={websiteUrl} onSuccess={handleWebsiteSuccess} />,
+          preview: (
+            <div className="rounded-lg border-2 border-foreground/10 bg-background p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                  <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm">Website</h4>
+                  <p className="text-xs text-muted-foreground">Company domain for account matching</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                  Match PostHog users to CRM accounts
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                  Auto-enrich with company data
+                </div>
+              </div>
+            </div>
+          ),
+        };
       case "billing":
-        return <BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />;
+        return {
+          config: <BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />,
+          preview: (
+            <div className="rounded-lg border-2 border-foreground/10 bg-background p-4 space-y-4">
+              <div className="text-center py-4">
+                <div className="text-3xl font-bold">{mtuCount.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-1">Monthly Tracked Users</div>
+              </div>
+              <div className="space-y-2 border-t border-foreground/5 pt-3">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Free tier</span>
+                  <span>200 users</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Your usage</span>
+                  <span className="font-medium">{mtuCount.toLocaleString()} users</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Rate</span>
+                  <span>$0.10/user</span>
+                </div>
+              </div>
+            </div>
+          ),
+        };
       case "complete":
-        return null;
+        return { config: null, preview: null };
       default:
-        return null;
+        return { config: null, preview: null };
     }
   };
 
+  const { config, preview } = renderStep();
+
   return (
-    <div className={cn("w-full max-w-lg mx-auto", className)} data-slot="setup-wizard">
-      {/* Progress Indicator */}
+    <div className={cn("w-full max-w-5xl mx-auto", className)} data-slot="setup-wizard">
+      {/* Progress Indicator — spans full width */}
       <div className="mb-8">
         <ProgressIndicator steps={stepLabels} current={currentStepLabel} />
       </div>
 
-      {/* Step Content */}
-      <Card className="p-6">{renderStep()}</Card>
+      {/* Two-column grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left column: Config */}
+        <Card className="p-6">{config}</Card>
 
-      {/* Optional footer with step info */}
+        {/* Right column: Preview (sticky, hidden on mobile) */}
+        <div className="hidden lg:block">
+          <div className="sticky top-8">{preview}</div>
+        </div>
+      </div>
+
+      {/* Step counter */}
       <p className="mt-4 text-center text-xs text-muted-foreground">
         Step {steps.indexOf(currentStep) + 1} of {steps.length}
       </p>

@@ -87,7 +87,7 @@ export function ProgressIndicator({
             {index < steps.length - 1 && (
               <div
                 className={cn(
-                  "mx-3 h-0.5 w-12 transition-colors duration-300",
+                  "mx-2 h-0.5 w-8 lg:w-12 transition-colors duration-300",
                   index < currentIndex ? "bg-primary" : "bg-muted-foreground/20"
                 )}
                 aria-hidden="true"
