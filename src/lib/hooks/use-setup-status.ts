@@ -18,6 +18,15 @@ export interface SetupStatus {
 
 async function fetchSetupStatus(): Promise<SetupStatus> {
   const res = await fetch('/api/workspace/setup-status')
+  if (res.status === 401) {
+    // Guest user — return default "not set up" so pages fall into demo mode
+    return {
+      setupComplete: false,
+      integrations: { posthog: false, attio: false },
+      billing: { required: false, configured: false, status: null },
+      workspaceId: '',
+    }
+  }
   if (!res.ok) throw new Error('Failed to fetch setup status')
   return res.json()
 }

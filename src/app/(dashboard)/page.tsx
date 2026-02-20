@@ -5,12 +5,16 @@ import { PreSetupView } from '@/components/home/PreSetupView'
 import { WorkspaceSummary } from '@/components/home/WorkspaceSummary'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { useSession } from '@/components/auth/session-provider'
 import { useEffect } from 'react'
 
 export default function DashboardHomePage() {
   const router = useRouter()
   const { data: setupStatus, isLoading, error } = useSetupStatus()
   const { isDemoMode } = useDemoMode()
+  const { session, loading: sessionLoading } = useSession()
+
+  const isGuest = !sessionLoading && !session
 
   // If demo mode is active and setup isn't complete, redirect to signals
   useEffect(() => {
@@ -20,7 +24,7 @@ export default function DashboardHomePage() {
   }, [isLoading, isDemoMode, setupStatus?.setupComplete, router])
 
   // Loading state
-  if (isLoading) {
+  if (isLoading || sessionLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
@@ -31,7 +35,16 @@ export default function DashboardHomePage() {
     )
   }
 
-  // Error state
+  // Guest users see the PreSetupView landing directly (no error state for 401)
+  if (isGuest) {
+    return (
+      <div className="max-w-2xl mx-auto py-8">
+        <PreSetupView />
+      </div>
+    )
+  }
+
+  // Error state (only for authenticated users)
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
