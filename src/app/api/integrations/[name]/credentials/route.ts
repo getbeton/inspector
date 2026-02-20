@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 
-const SUPPORTED_INTEGRATIONS = ['posthog', 'attio']
+const SUPPORTED_INTEGRATIONS = ['posthog', 'attio', 'firecrawl']
 
 /**
  * GET /api/integrations/[name]/credentials
