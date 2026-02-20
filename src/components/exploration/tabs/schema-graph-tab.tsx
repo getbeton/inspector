@@ -121,6 +121,14 @@ function buildGraph(
     }
   }
 
+  // Fallback: place any unvisited nodes (cycles / disconnected) into an extra layer
+  const maxLayer = Math.max(...layers.values(), 0)
+  for (const id of tableIds) {
+    if (!visited.has(id)) {
+      layers.set(id, maxLayer + 1)
+    }
+  }
+
   // Group by layer
   const layerGroups = new Map<number, string[]>()
   for (const [id, layer] of layers) {
