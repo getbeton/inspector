@@ -29,7 +29,6 @@ export function useExplorationSessions(workspaceId: string | undefined) {
   const query = useQuery({
     queryKey: ['explorations', 'sessions', workspaceId ?? DEMO_WORKSPACE],
     queryFn: () => isDemo ? Promise.resolve(MOCK_SESSIONS) : getSessions(workspaceId!),
-    enabled: true,
     staleTime: isDemo ? Infinity : 30_000,
     refetchOnWindowFocus: !isDemo,
   })
@@ -40,7 +39,6 @@ export function useExplorationSessions(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['explorations', 'sessions', workspaceId ?? DEMO_WORKSPACE],
     queryFn: () => isDemo ? Promise.resolve(MOCK_SESSIONS) : getSessions(workspaceId!),
-    enabled: true,
     staleTime: isDemo ? Infinity : 30_000,
     refetchOnWindowFocus: !isDemo,
     refetchInterval: hasRunning ? 5_000 : false,
@@ -90,7 +88,6 @@ export function useWorkspaceEdaResults(workspaceId: string | undefined) {
       }
       return getWorkspaceEdaResults(workspaceId!)
     },
-    enabled: true,
     staleTime: isDemo ? Infinity : 60_000,
   })
 }
@@ -107,7 +104,6 @@ export function useWorkspaceWebsiteResult(workspaceId: string | undefined) {
       }
       return getWorkspaceWebsiteResult(workspaceId!)
     },
-    enabled: true,
     staleTime: isDemo ? Infinity : 60_000,
   })
 }
@@ -160,6 +156,9 @@ export function useUpdateWebsiteExploration(workspaceId: string, sessionId: stri
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['explorations', 'website', workspaceId, sessionId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['explorations', 'website', workspaceId, '__all__'],
       })
     },
   })
