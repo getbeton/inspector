@@ -4,10 +4,16 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { SetupWizard } from '@/components/setup'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
+import { useSession } from '@/components/auth/session-provider'
+import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 
 export default function SetupPage() {
   const router = useRouter()
   const { data: setupStatus, isLoading } = useSetupStatus()
+  const { session, loading: sessionLoading } = useSession()
+
+  // Guest guard
+  if (!sessionLoading && !session) return <GuestSignInPrompt message="Sign in to set up your workspace" />
 
   // If setup is already complete, redirect to home
   useEffect(() => {

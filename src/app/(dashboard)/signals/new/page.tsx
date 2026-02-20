@@ -11,6 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { EventPicker } from '@/components/signals/event-picker'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
+import { useSession } from '@/components/auth/session-provider'
+import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 
 const CONDITION_OPERATORS = [
   { id: 'gte', label: '>=' },
@@ -51,8 +53,11 @@ interface AttioListResult {
 
 export default function AddSignalPage() {
   const router = useRouter()
+  const { session, loading: sessionLoading } = useSession()
   const { data: setupStatus } = useSetupStatus()
   const attioConnected = setupStatus?.integrations?.attio ?? false
+
+  if (!sessionLoading && !session) return <GuestSignInPrompt message="Sign in to create custom signals" />
 
   // Form state
   const [name, setName] = useState('')
