@@ -78,8 +78,8 @@ async function getCachedResult(
 ): Promise<FetchUrlResult | null> {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
-    .from('agent_fetch_cache')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types yet
+  const { data, error } = await (supabase.from as any)('agent_fetch_cache')
     .select('content')
     .eq('session_id', sessionId)
     .eq('url', url)
@@ -88,7 +88,7 @@ async function getCachedResult(
 
   if (error || !data) return null
 
-  const content = data.content as Record<string, unknown>
+  const content = (data as { content: Record<string, unknown> }).content
   return {
     url,
     success: true,
@@ -107,8 +107,8 @@ async function cacheResult(
   const contentStr = JSON.stringify(data)
   const contentSizeBytes = new TextEncoder().encode(contentStr).length
 
-  await supabase
-    .from('agent_fetch_cache')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types yet
+  await (supabase.from as any)('agent_fetch_cache')
     .upsert(
       {
         session_id: sessionId,
@@ -116,7 +116,7 @@ async function cacheResult(
         operation,
         content: data as unknown as Json,
         content_size_bytes: contentSizeBytes,
-      } as never,
+      },
       { onConflict: 'session_id,url,operation' }
     )
 }
