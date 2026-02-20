@@ -13,8 +13,13 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { toastManager } from '@/components/ui/toast'
+import { useSession } from '@/components/auth/session-provider'
+import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 
 export default function SettingsDangerZonePage() {
+  const { session, loading } = useSession()
+  if (loading) return <div className="flex items-center justify-center min-h-[400px]"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+  if (!session) return <GuestSignInPrompt message="Sign in to access workspace settings" />
   const handleDeleteWorkspace = () => {
     // TODO: Call API to delete workspace
     toastManager.add({ type: 'success', title: 'Workspace deletion requested' })

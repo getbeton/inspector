@@ -1,12 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Routes that don't require authentication
-const publicRoutes = ['/login', '/auth/callback', '/api/health']
-
-// Routes that require authentication
-const protectedRoutes = ['/signals', '/settings', '/identities']
-
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
@@ -67,22 +61,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user }
   } = await supabase.auth.getUser()
-
-  // Check if route is protected
-  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route))
-
-  // Check if route is public
-  const isPublic = publicRoutes.some((route) => pathname.startsWith(route))
-
-  // Home page requires authentication
-  const isHome = pathname === '/'
-
-  // Redirect to login if accessing protected route without auth
-  // Use 301 (permanent) for root URL to avoid crawl budget waste from 307 chains
-  if ((isProtected || isHome) && !user) {
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl, { status: isHome ? 301 : 307 })
-  }
 
   // Redirect to home if accessing login while authenticated
   if (pathname === '/login' && user) {

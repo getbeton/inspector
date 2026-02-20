@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { useSession } from '@/components/auth/session-provider'
 import { trackDemoTourStarted, trackSetupStarted } from '@/lib/analytics'
 
 interface PreSetupViewProps {
@@ -50,6 +52,10 @@ const STEPS = [
 export function PreSetupView({ className }: PreSetupViewProps) {
   const router = useRouter()
   const { enterDemoMode } = useDemoMode()
+  const { session } = useSession()
+  const [isSigningIn, setIsSigningIn] = useState(false)
+
+  const isGuest = !session
 
   const handleDemoTour = () => {
     trackDemoTourStarted()
@@ -60,6 +66,16 @@ export function PreSetupView({ className }: PreSetupViewProps) {
   const handleConnectData = () => {
     trackSetupStarted()
     router.push('/setup')
+  }
+
+  const handleSignIn = async () => {
+    try {
+      setIsSigningIn(true)
+      const { signInWithGoogle } = await import('@/lib/auth/supabase')
+      await signInWithGoogle()
+    } catch {
+      setIsSigningIn(false)
+    }
   }
 
   return (
@@ -76,12 +92,25 @@ export function PreSetupView({ className }: PreSetupViewProps) {
             Turn product usage into pipeline, automatically.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <Button size="lg" onClick={handleConnectData}>
-              Get Started
-            </Button>
-            <Button size="lg" variant="outline" onClick={handleDemoTour}>
-              Explore Demo
-            </Button>
+            {isGuest ? (
+              <>
+                <Button size="lg" onClick={handleSignIn} disabled={isSigningIn}>
+                  {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+                </Button>
+                <Button size="lg" variant="outline" onClick={handleDemoTour}>
+                  Explore Demo
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="lg" onClick={handleConnectData}>
+                  Get Started
+                </Button>
+                <Button size="lg" variant="outline" onClick={handleDemoTour}>
+                  Explore Demo
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

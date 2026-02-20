@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import { toastManager } from '@/components/ui/toast'
+import { useSession } from '@/components/auth/session-provider'
+import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import {
@@ -297,6 +299,10 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
 // ---------------------------------------------------------------------------
 
 export default function SettingsIntegrationsPage() {
+  const { session, loading } = useSession()
+  if (loading) return <div className="flex items-center justify-center min-h-[400px]"><Spinner className="size-6" /></div>
+  if (!session) return <GuestSignInPrompt message="Sign in to manage integrations" />
+
   return (
     <Card>
       <CardHeader>
