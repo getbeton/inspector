@@ -17,6 +17,8 @@ export default function MemoryDbStructurePage() {
     () => sessions.find(s => s.status === 'completed'),
     [sessions]
   )
+  // Latest session of any status — used as save target for join edits
+  const latestSession = sessions[0] ?? null
   const { data: latestEdaResults = [] } = useWorkspaceEdaResults(workspaceId)
   const { data: latestChanges } = useLatestChanges(workspaceId)
 
@@ -38,7 +40,7 @@ export default function MemoryDbStructurePage() {
       </div>
 
       <JoinCandidatesSection
-        session={latestCompletedSession ?? null}
+        session={latestSession}
         edaResults={latestEdaResults}
         workspaceId={workspaceId}
         isDemo={isDemo}

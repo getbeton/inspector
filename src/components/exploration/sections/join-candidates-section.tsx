@@ -125,7 +125,7 @@ export function JoinCandidatesSection({
     setIsEditing(false)
   }
 
-  const canEdit = !!session
+  const canEdit = edaResults.length > 0
 
   if (edaResults.length === 0 && !session) {
     return (
