@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import {
   ReactFlow,
   MiniMap,
@@ -24,24 +24,7 @@ import type { ExplorationSession, JoinPair } from '@/lib/api/explorations'
 import type { EdaResult } from '@/lib/agent/types'
 
 // ---------------------------------------------------------------------------
-// dagre types — we load the library dynamically to avoid CJS/SSR conflicts
-// ---------------------------------------------------------------------------
-
-interface DagreLib {
-  graphlib: { Graph: new () => DagreGraph }
-  layout: (g: DagreGraph) => void
-}
-
-interface DagreGraph {
-  setGraph: (opts: Record<string, unknown>) => void
-  setDefaultEdgeLabel: (fn: () => Record<string, unknown>) => void
-  setNode: (id: string, opts: { width: number; height: number }) => void
-  setEdge: (a: string, b: string) => void
-  node: (id: string) => { x: number; y: number }
-}
-
-// ---------------------------------------------------------------------------
-// Layout helpers
+// Layout helpers — simple BFS-based layering (replaces dagre)
 // ---------------------------------------------------------------------------
 
 interface SchemaGraphTabProps {
@@ -52,12 +35,14 @@ interface SchemaGraphTabProps {
 
 const nodeTypes = { tableNode: TableNode }
 
+const X_GAP = 100
+const Y_GAP = 40
+
 function getNodeHeight(columnCount: number): number {
   return HEADER_HEIGHT + Math.max(columnCount, 1) * ROW_HEIGHT + 4
 }
 
 function buildGraph(
-  dagre: DagreLib,
   edaResults: Array<{
     table_id: string
     table_stats: Record<string, any> | null
@@ -95,37 +80,88 @@ function buildGraph(
     }
   }
 
-  // Dagre layout
-  const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', ranksep: 100, nodesep: 40 })
-  g.setDefaultEdgeLabel(() => ({}))
-
-  const tableIds = Array.from(tableMap.keys()).sort()
+  // --- BFS-based LR layering ---
+  const tableIds = Array.from(tableMap.keys())
+  const outgoing = new Map<string, string[]>()
+  const inDegree = new Map<string, number>()
 
   for (const id of tableIds) {
-    const data = tableMap.get(id)!
-    g.setNode(id, { width: NODE_WIDTH, height: getNodeHeight(data.columns.length) })
+    outgoing.set(id, [])
+    inDegree.set(id, 0)
   }
   for (const j of uniqueJoins) {
-    g.setEdge(j.table1, j.table2)
+    if (tableMap.has(j.table1) && tableMap.has(j.table2)) {
+      outgoing.get(j.table1)!.push(j.table2)
+      inDegree.set(j.table2, (inDegree.get(j.table2) ?? 0) + 1)
+    }
   }
 
-  dagre.layout(g)
+  // Roots = nodes with no incoming edges
+  const roots = tableIds.filter(id => (inDegree.get(id) ?? 0) === 0)
 
-  const nodes: Node<Record<string, unknown>>[] = tableIds.map((id) => {
-    const pos = g.node(id)
-    const data = tableMap.get(id)!
-    return {
-      id,
-      type: 'tableNode',
-      position: {
-        x: pos.x - NODE_WIDTH / 2,
-        y: pos.y - getNodeHeight(data.columns.length) / 2,
-      },
-      data: data as unknown as Record<string, unknown>,
+  // Assign layers via BFS (longest path from any root)
+  const layers = new Map<string, number>()
+  for (const id of tableIds) layers.set(id, 0)
+
+  const queue = [...roots]
+  const visited = new Set<string>(roots)
+
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    const currentLayer = layers.get(id)!
+    for (const target of outgoing.get(id) ?? []) {
+      const newLayer = currentLayer + 1
+      if (newLayer > (layers.get(target) ?? 0)) {
+        layers.set(target, newLayer)
+      }
+      if (!visited.has(target)) {
+        visited.add(target)
+        queue.push(target)
+      }
     }
-  })
+  }
 
+  // Group by layer
+  const layerGroups = new Map<number, string[]>()
+  for (const [id, layer] of layers) {
+    if (!layerGroups.has(layer)) layerGroups.set(layer, [])
+    layerGroups.get(layer)!.push(id)
+  }
+
+  // Calculate total height per layer for vertical centering
+  const layerHeights = new Map<number, number>()
+  for (const [layer, ids] of layerGroups) {
+    let h = 0
+    for (const id of ids) {
+      h += getNodeHeight(tableMap.get(id)!.columns.length)
+    }
+    h += Math.max(0, ids.length - 1) * Y_GAP
+    layerHeights.set(layer, h)
+  }
+
+  const maxHeight = Math.max(...layerHeights.values(), 0)
+
+  // Position nodes (LR direction, vertically centered per layer)
+  const nodes: Node<Record<string, unknown>>[] = []
+
+  for (const [layer, ids] of layerGroups) {
+    const totalHeight = layerHeights.get(layer)!
+    let y = (maxHeight - totalHeight) / 2
+
+    for (const id of ids.sort()) {
+      const data = tableMap.get(id)!
+      const height = getNodeHeight(data.columns.length)
+      nodes.push({
+        id,
+        type: 'tableNode',
+        position: { x: layer * (NODE_WIDTH + X_GAP), y },
+        data: data as unknown as Record<string, unknown>,
+      })
+      y += height + Y_GAP
+    }
+  }
+
+  // Build edges
   const edges: Edge[] = uniqueJoins.map((j, i) => ({
     id: `edge-${i}`,
     source: j.table1,
@@ -143,7 +179,7 @@ function buildGraph(
 }
 
 // ---------------------------------------------------------------------------
-// Inner component — only mounts once dagre + data are ready,
+// Inner component — mounts once data is ready,
 // so useNodesState initialises with the correct computed values.
 // ---------------------------------------------------------------------------
 
@@ -158,7 +194,7 @@ function SchemaGraphInner({
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
 
   return (
-    <div className="h-[500px] border rounded-lg overflow-hidden">
+    <div className="h-[500px] border overflow-hidden">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -179,37 +215,23 @@ function SchemaGraphInner({
 }
 
 // ---------------------------------------------------------------------------
-// Outer component — loads dagre, fetches data, renders inner when ready.
+// Outer component — fetches data and renders inner when ready.
 // ---------------------------------------------------------------------------
 
 export function SchemaGraphTab({ workspaceId, session, edaResults: externalEdaResults }: SchemaGraphTabProps) {
-  const { data: fetchedEdaResults = [], isLoading: fetchLoading } = useSessionEdaResults(
+  const { data: fetchedEdaResults = [], isLoading } = useSessionEdaResults(
     externalEdaResults ? undefined : workspaceId,
     externalEdaResults ? undefined : session?.id,
   )
   const edaResults = externalEdaResults ?? fetchedEdaResults
-  const isLoading = externalEdaResults ? false : fetchLoading
+  const loading = externalEdaResults ? false : isLoading
 
-  // Lazy-load dagre on client only (it uses CJS require() internally)
-  const [dagre, setDagre] = useState<DagreLib | null>(null)
+  const graph = useMemo(
+    () => buildGraph(edaResults, session?.confirmed_joins ?? null),
+    [edaResults, session?.confirmed_joins]
+  )
 
-  useEffect(() => {
-    let cancelled = false
-    import('@dagrejs/dagre').then((mod) => {
-      if (cancelled) return
-      // CJS default export: mod.default is the dagre object; fall back to mod itself
-      const lib = (mod.default ?? mod) as unknown as DagreLib
-      setDagre(lib)
-    })
-    return () => { cancelled = true }
-  }, [])
-
-  const graph = useMemo(() => {
-    if (!dagre) return null
-    return buildGraph(dagre, edaResults, session?.confirmed_joins ?? null)
-  }, [dagre, edaResults, session?.confirmed_joins])
-
-  if (isLoading || !dagre) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
