@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
+import { isIntegrationConfiguredAdmin } from '@/lib/integrations/credentials';
 import { randomUUID } from 'crypto';
 
 const log = createModuleLogger('[AgentService]');
@@ -56,6 +57,9 @@ export class AgentService {
             // Non-blocking: continue even if DB write fails
         }
 
+        // Check which integrations are available for this workspace
+        const firecrawlConfigured = await isIntegrationConfiguredAdmin(workspaceId, 'firecrawl');
+
         const promptText = `Analyze website: '${workspace.website_url}'. Use the Inspector callback URL to query PostHog data via proxy routes. Your session ID for Inspector callbacks is: ${sessionId}. Your workspace ID is: ${workspaceId}. Return JSON only.`;
 
         // 4. Create User/Session on Agent
@@ -79,6 +83,9 @@ export class AgentService {
                     inspector_callback_url: process.env.NEXT_PUBLIC_VERCEL_URL
                         ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
                         : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                    capabilities: {
+                        fetch_url: firecrawlConfigured,
+                    },
                 },
                 newMessage: {
                     role: 'user',

@@ -158,3 +158,16 @@ export async function isIntegrationConfigured(
   const credentials = await getIntegrationCredentials(workspaceId, integrationName)
   return credentials !== null && credentials.isActive
 }
+
+/**
+ * Check if an integration is configured using the admin (service-role) client.
+ *
+ * Use this variant in agent routes where there are no user cookies/session.
+ */
+export async function isIntegrationConfiguredAdmin(
+  workspaceId: string,
+  integrationName: string
+): Promise<boolean> {
+  const credentials = await getIntegrationCredentialsAdmin(workspaceId, integrationName)
+  return credentials !== null && credentials.isActive
+}
