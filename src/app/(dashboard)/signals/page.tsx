@@ -245,7 +245,7 @@ export default function SignalsPage() {
         onExport={handleExport}
       />
 
-      {/* Loading state */}
+      {/* Loading state (only for real data) */}
       {!isDemo && isLoading && (
         <Card>
           <CardContent className="py-12 text-center">
@@ -255,7 +255,7 @@ export default function SignalsPage() {
         </Card>
       )}
 
-      {/* Error state */}
+      {/* Error state (only for real data) */}
       {!isDemo && isError && (
         <Card>
           <CardContent className="py-12 text-center">
@@ -268,14 +268,14 @@ export default function SignalsPage() {
         </Card>
       )}
 
-      {/* Signals Table */}
-      {!isLoading && !isError && filteredSignals.length > 0 ? (
+      {/* Signals Table — in demo mode, ignore loading/error from the real-data hook */}
+      {(isDemo || (!isLoading && !isError)) && filteredSignals.length > 0 ? (
         <SignalsTable
           signals={filteredSignals}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
-      ) : !isLoading && !isError && (
+      ) : (isDemo || (!isLoading && !isError)) && (
         <Card>
           <CardContent className="py-12 text-center">
             <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">

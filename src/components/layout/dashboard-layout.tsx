@@ -13,7 +13,7 @@ interface DashboardLayoutProps {
     email: string
     name?: string
     workspace_name?: string
-  }
+  } | null
 }
 
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
@@ -35,8 +35,8 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Full-width banners — span across sidebar + content */}
       <TestModeBanner />
-      <DashboardThresholdBanner />
-      <SetupBanner />
+      {user && <DashboardThresholdBanner />}
+      <SetupBanner isGuest={!user} />
 
       {/* Sidebar + main content row */}
       <div className="flex-1 flex">
@@ -75,7 +75,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
       </div>
 
       {/* Access blocked overlay (when threshold exceeded without payment method) */}
-      <AccessBlockedOverlay />
+      {user && <AccessBlockedOverlay />}
     </div>
   )
 }

@@ -1,24 +1,42 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
+import { useSession } from '@/components/auth/session-provider'
 import { trackDemoTourCompleted } from '@/lib/analytics'
 
 /**
  * Persistent banner shown when the user is in demo mode.
- * Provides a way to exit demo mode and start connecting real data.
+ * For guests: always visible, CTA is "Sign in with Google".
+ * For authenticated users: visible when demo mode active, CTA is "Connect real data".
  */
 export function DemoBanner() {
   const { isDemoMode, exitDemoMode } = useDemoMode()
+  const { session } = useSession()
   const router = useRouter()
+  const [isSigningIn, setIsSigningIn] = useState(false)
 
-  if (!isDemoMode) return null
+  const isGuest = !session
+
+  // Show banner for guests (always) or authenticated users in demo mode
+  if (!isGuest && !isDemoMode) return null
 
   const handleExit = () => {
     trackDemoTourCompleted()
     exitDemoMode()
     router.push('/')
+  }
+
+  const handleSignIn = async () => {
+    try {
+      setIsSigningIn(true)
+      const { signInWithGoogle } = await import('@/lib/auth/supabase')
+      await signInWithGoogle()
+    } catch {
+      setIsSigningIn(false)
+    }
   }
 
   return (
@@ -31,9 +49,15 @@ export function DemoBanner() {
           Viewing demo data
         </span>
       </div>
-      <Button variant="outline" size="sm" onClick={handleExit}>
-        Connect real data
-      </Button>
+      {isGuest ? (
+        <Button variant="outline" size="sm" onClick={handleSignIn} disabled={isSigningIn}>
+          {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" onClick={handleExit}>
+          Connect real data
+        </Button>
+      )}
     </div>
   )
 }

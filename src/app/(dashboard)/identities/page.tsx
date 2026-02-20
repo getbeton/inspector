@@ -87,7 +87,7 @@ export default function IdentitiesPage() {
         <div>
           <h1 className="text-2xl font-bold">Identities</h1>
           <p className="text-muted-foreground">
-            Track and manage user identities from PostHog
+            Signal recipients. User properties fetched in runtime and deleted afterwards
           </p>
         </div>
         <RefreshButton syncType="posthog_events" />
@@ -97,7 +97,7 @@ export default function IdentitiesPage() {
       <div className="grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Identities</p>
+            <p className="text-sm text-muted-foreground">Signals Triggered</p>
             <p className="text-3xl font-bold mt-1">{stats.total}</p>
           </CardContent>
         </Card>

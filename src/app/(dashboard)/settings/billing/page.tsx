@@ -7,6 +7,8 @@ import { useBillingStatus, useCreatePortalSession } from '@/lib/hooks/use-billin
 import { Spinner } from '@/components/ui/spinner'
 import { MessageCircle } from 'lucide-react'
 import { RefreshButton } from '@/components/ui/refresh-button'
+import { useSession } from '@/components/auth/session-provider'
+import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 
 declare global {
   interface Window {
@@ -15,8 +17,12 @@ declare global {
 }
 
 export default function SettingsBillingPage() {
+  const { session, loading } = useSession()
   const { data: billingStatus, isLoading } = useBillingStatus()
   const portalSession = useCreatePortalSession()
+
+  if (loading) return <div className="flex items-center justify-center min-h-[400px]"><Spinner className="size-6" /></div>
+  if (!session) return <GuestSignInPrompt message="Sign in to manage billing" />
 
   const handleRefund = () => {
     if (typeof window !== 'undefined' && typeof window.Intercom === 'function') {
