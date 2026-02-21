@@ -56,6 +56,8 @@ interface IntegrationMeta {
   /** Additional config fields stored in config_json (not encrypted) */
   extraFields?: ExtraField[]
   helpUrl?: string
+  /** Hidden integrations are only shown when already configured */
+  hidden?: boolean
 }
 
 const INTEGRATIONS: IntegrationMeta[] = [
@@ -117,6 +119,7 @@ const INTEGRATIONS: IntegrationMeta[] = [
       },
     ],
     helpUrl: 'https://www.firecrawl.dev/app/api-keys',
+    hidden: true,
   },
 ]
 
@@ -141,15 +144,22 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
       ? 'connected'
       : 'not_connected'
 
+  // Hidden integrations are only shown when already configured
+  if (meta.hidden && !isLoading && !isConnected) return null
+
   const handleEdit = () => {
     setEditing(true)
     const values: Record<string, string> = {}
     meta.fields.forEach(field => {
       values[field.id] = ''
     })
-    // Set defaults for extra fields
+    // Pre-populate extra fields from saved config_json, falling back to defaults
+    const savedConfig = (data?.configJson ?? {}) as Record<string, unknown>
     meta.extraFields?.forEach(field => {
-      if (field.type === 'select' && field.options?.[0]) {
+      const saved = savedConfig[field.id]
+      if (saved !== undefined && saved !== null) {
+        values[field.id] = String(saved)
+      } else if (field.type === 'select' && field.options?.[0]) {
         values[field.id] = field.options[0].value
       } else {
         values[field.id] = ''

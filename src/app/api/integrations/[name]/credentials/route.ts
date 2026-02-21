@@ -42,6 +42,7 @@ export async function GET(
         integration: name,
         status: 'disconnected',
         credentials: null,
+        configJson: null,
       })
     }
 
@@ -49,6 +50,14 @@ export async function GET(
     const maskedKey = credentials.apiKey
       ? `${credentials.apiKey.substring(0, 8)}...${credentials.apiKey.substring(credentials.apiKey.length - 4)}`
       : null
+
+    // Fetch config_json for extra fields (mode, base_url, proxy, etc.)
+    const { data: configRow } = await supabase
+      .from('integration_configs')
+      .select('config_json')
+      .eq('workspace_id', membership.workspaceId)
+      .eq('integration_name', name)
+      .single() as { data: { config_json: Record<string, unknown> } | null }
 
     return NextResponse.json({
       integration: name,
@@ -60,6 +69,7 @@ export async function GET(
         region: credentials.region,
         host: credentials.host,
       },
+      configJson: configRow?.config_json ?? null,
     })
   } catch (error) {
     console.error('Error in GET /api/integrations/[name]/credentials:', error)

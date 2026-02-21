@@ -4,68 +4,13 @@ import { validateAgentRequest } from '@/lib/agent/auth'
 import { rateLimitResponse } from '@/lib/agent/rate-limit'
 import { resolveSession } from '@/lib/agent/session'
 import { getIntegrationCredentialsAdmin } from '@/lib/integrations/credentials'
-import { createFirecrawlClient, FirecrawlAuthError, FirecrawlRateLimitError, FirecrawlPaymentError, FirecrawlError } from '@/lib/integrations/firecrawl'
+import { createFirecrawlClient } from '@/lib/integrations/firecrawl'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { FetchUrlRequest, FetchUrlResult } from '@/lib/agent/types'
+import { validateUrl } from '@/lib/utils/ssrf'
 import type { Json } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[API][Agent][FetchURL]')
-
-// ============================================
-// SSRF prevention
-// ============================================
-
-const BLOCKED_HOSTNAME_PATTERNS = [
-  /^localhost$/i,
-  /^127\.\d+\.\d+\.\d+$/,
-  /^10\.\d+\.\d+\.\d+$/,
-  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
-  /^192\.168\.\d+\.\d+$/,
-  /^169\.254\.\d+\.\d+$/,
-  /^0\.0\.0\.0$/,
-  /^\[?::1\]?$/,
-  /^\[?fc[0-9a-f]{2}:/i,
-  /^\[?fd[0-9a-f]{2}:/i,
-  /^\[?fe80:/i,
-  /\.internal$/i,
-  /\.local$/i,
-  /\.localhost$/i,
-]
-
-const BLOCKED_HOSTS = new Set([
-  '169.254.169.254',           // AWS/GCP metadata
-  'metadata.google.internal',  // GCP metadata
-])
-
-/**
- * Validate a URL for SSRF safety. Returns error message or null if valid.
- */
-function validateUrl(rawUrl: string): string | null {
-  let parsed: URL
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    return 'Invalid URL format'
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return 'Only HTTP and HTTPS protocols are allowed'
-  }
-
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, '') // strip IPv6 brackets
-
-  if (BLOCKED_HOSTS.has(hostname)) {
-    return 'Access to this host is blocked (metadata endpoint)'
-  }
-
-  for (const pattern of BLOCKED_HOSTNAME_PATTERNS) {
-    if (pattern.test(hostname)) {
-      return 'Access to private/internal addresses is blocked'
-    }
-  }
-
-  return null
-}
 
 // ============================================
 // Cache helpers
@@ -226,6 +171,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing url or urls' }, { status: 400 })
     }
 
+    // Batch URL count cap — prevent a single request from firing hundreds of upstream calls
+    if (urls && urls.length > 10) {
+      return NextResponse.json(
+        { error: 'Maximum 10 URLs per batch request' },
+        { status: 400 }
+      )
+    }
+
     // Collect all URLs to process
     const allUrls = urls || (url ? [url] : [])
     const isBatch = !!urls
@@ -282,8 +235,8 @@ export async function POST(req: NextRequest) {
       proxy: (configJson.proxy as 'basic' | 'stealth') || null,
     })
 
-    // Audit log
-    log.warn(
+    // Audit log (info — this is an expected event, not a warning)
+    log.info(
       `[AUDIT] fetch-url workspace=${workspaceId} op=${body.operation || 'scrape'} urls=${allUrls.join(',')}`
     )
 
@@ -316,29 +269,8 @@ export async function POST(req: NextRequest) {
       results,
     })
   } catch (error) {
-    // Map Firecrawl-specific errors to appropriate HTTP status codes
-    if (error instanceof FirecrawlAuthError) {
-      return NextResponse.json({ error: 'Upstream authentication failure' }, { status: 502 })
-    }
-    if (error instanceof FirecrawlRateLimitError) {
-      return NextResponse.json(
-        { error: 'Upstream rate limit exceeded' },
-        {
-          status: 429,
-          headers: { 'Retry-After': String(error.retryAfter) },
-        }
-      )
-    }
-    if (error instanceof FirecrawlPaymentError) {
-      return NextResponse.json({ error: 'Firecrawl credits exhausted' }, { status: 402 })
-    }
-    if (error instanceof FirecrawlError) {
-      return NextResponse.json(
-        { error: `Upstream error: ${error.message}` },
-        { status: 502 }
-      )
-    }
-
+    // Only setup errors (resolveSession, getIntegrationCredentialsAdmin,
+    // createFirecrawlClient) reach here — fetchSingleUrl handles its own errors.
     log.error(`Fetch URL failed: ${error}`)
     const msg = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
