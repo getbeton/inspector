@@ -15,6 +15,8 @@ export interface IntegrationCredentialsResponse {
     region: string | null
     host: string | null
   } | null
+  /** Extra config (mode, base_url, proxy, etc.) from config_json — not encrypted */
+  configJson?: Record<string, unknown> | null
 }
 
 /**
