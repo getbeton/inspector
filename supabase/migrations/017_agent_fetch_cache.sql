@@ -18,12 +18,8 @@ CREATE TABLE agent_fetch_cache (
     UNIQUE (session_id, url, operation)
 );
 
--- ============================================
--- INDEX: fast lookups by session + url + operation
--- ============================================
-
-CREATE INDEX idx_agent_fetch_cache_lookup
-    ON agent_fetch_cache(session_id, url, operation);
+-- Note: the UNIQUE constraint above already creates a B-tree index on (session_id, url, operation),
+-- so no additional index is needed for lookups.
 
 -- ============================================
 -- ENABLE RLS (admin-only access via service role)

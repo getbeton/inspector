@@ -14,8 +14,8 @@ const MAX_CONTENT_BYTES = 500 * 1024
 /** Maximum pages per crawl operation */
 const MAX_CRAWL_PAGES = 20
 
-/** Maximum polling duration for async crawl (55s — under Vercel's 60s limit) */
-const MAX_POLL_DURATION_MS = 55_000
+/** Maximum polling duration for async crawl (45s — leave headroom for setup/response under Vercel's 60s limit) */
+const MAX_POLL_DURATION_MS = 45_000
 
 /** Polling interval for crawl status checks */
 const POLL_INTERVAL_MS = 2_000
@@ -303,6 +303,7 @@ export class FirecrawlClient {
 
     const response = await fetch(url, {
       ...options,
+      signal: options.signal ?? AbortSignal.timeout(this.defaultTimeout),
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
@@ -347,23 +348,22 @@ export class FirecrawlClient {
    */
   private truncateContent(data: ScrapeResult): ScrapeResult {
     let truncated = false
+    let markdown = data.markdown
+    let html = data.html
 
-    if (data.markdown && new Blob([data.markdown]).size > MAX_CONTENT_BYTES) {
-      // Truncate by character approximation (1 char ≈ 1 byte for ASCII/markdown)
-      data.markdown = data.markdown.slice(0, MAX_CONTENT_BYTES)
+    if (markdown && new Blob([markdown]).size > MAX_CONTENT_BYTES) {
+      markdown = markdown.slice(0, MAX_CONTENT_BYTES)
       truncated = true
     }
 
-    if (data.html && new Blob([data.html]).size > MAX_CONTENT_BYTES) {
-      data.html = data.html.slice(0, MAX_CONTENT_BYTES)
+    if (html && new Blob([html]).size > MAX_CONTENT_BYTES) {
+      html = html.slice(0, MAX_CONTENT_BYTES)
       truncated = true
     }
 
-    if (truncated) {
-      data.truncated = true
-    }
+    if (!truncated) return data
 
-    return data
+    return { ...data, markdown, html, truncated: true }
   }
 }
 
