@@ -25,6 +25,7 @@ import { FirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRa
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
+import { isPrivateHost } from '@/lib/utils/ssrf'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[Firecrawl Validate]')
@@ -87,34 +88,6 @@ function mapError(error: unknown): ErrorMapping {
 }
 
 // ============================================
-// SSRF validation for self-hosted base URL
-// ============================================
-
-const PRIVATE_HOST_PATTERNS = [
-  /^localhost$/i,
-  /^127\.\d+\.\d+\.\d+$/,
-  /^10\.\d+\.\d+\.\d+$/,
-  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
-  /^192\.168\.\d+\.\d+$/,
-  /^169\.254\.\d+\.\d+$/,
-  /^0\.0\.0\.0$/,
-  /^\[?::1\]?$/,
-  /\.internal$/i,
-  /\.local$/i,
-  /\.localhost$/i,
-]
-
-function isPrivateHost(urlStr: string): boolean {
-  try {
-    const parsed = new URL(urlStr)
-    const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
-    return PRIVATE_HOST_PATTERNS.some(p => p.test(hostname))
-  } catch {
-    return true // invalid URL treated as blocked
-  }
-}
-
-// ============================================
 // Route handler
 // ============================================
 
@@ -167,7 +140,8 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!api_key.startsWith('fc-')) {
+    // Cloud API keys always start with "fc-"; self-hosted instances may use any key format
+    if (mode !== 'self_hosted' && !api_key.startsWith('fc-')) {
       return NextResponse.json(
         {
           success: false,
