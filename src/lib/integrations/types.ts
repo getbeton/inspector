@@ -6,6 +6,38 @@ export interface IntegrationClient {
   testConnection(): Promise<boolean>
 }
 
+// ── Integration Definitions Registry ────────────────────────────
+
+export type IntegrationCategory =
+  | 'data_source'
+  | 'crm'
+  | 'billing'
+  | 'enrichment'
+  | 'web_scraping'
+
+/**
+ * A row from `integration_definitions`, enriched with workspace-specific
+ * connection status from `integration_configs`.
+ */
+export interface IntegrationDefinition {
+  id: string
+  name: string
+  display_name: string
+  description: string
+  category: IntegrationCategory
+  icon_url: string | null
+  icon_url_light: string | null
+  required: boolean
+  display_order: number
+  setup_step_key: string | null
+  supports_self_hosted: boolean
+  config_schema: Record<string, unknown> | null
+  /** Whether the workspace has a connected config for this integration */
+  is_connected: boolean
+  /** Last successful validation timestamp (ISO 8601) */
+  last_validated_at: string | null
+}
+
 export interface PostHogEvent {
   id: string
   distinct_id: string
