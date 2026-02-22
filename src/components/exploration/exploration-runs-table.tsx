@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { formatRelativeTime } from '@/lib/utils/format'
 import type { ExplorationSession } from '@/lib/api/explorations'
 
 export type SortColumn = 'status' | 'started' | 'duration' | 'tables'
@@ -20,24 +21,6 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'error' | 'warning'
   completed: 'success',
   failed: 'error',
   closed: 'secondary',
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60_000)
-
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 30) return `${diffDays}d ago`
-
-  return date.toLocaleDateString()
 }
 
 function formatDuration(startedAt: string | null, completedAt: string | null): string {
