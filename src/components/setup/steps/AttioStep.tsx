@@ -87,6 +87,8 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
    * Validate Attio credentials
    */
   const handleValidate = useCallback(async () => {
+    if (state === "validating") return;
+
     if (!apiKey.trim()) {
       setError("Please enter your API key.");
       return;
@@ -100,6 +102,7 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
       const validateResponse = await fetch("/api/integrations/attio/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           api_key: apiKey,
         }),
@@ -135,7 +138,7 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
         error_message: msg,
       });
     }
-  }, [apiKey, onSuccess, getErrorMessage]);
+  }, [apiKey, onSuccess, onWorkspaceName, getErrorMessage, state]);
 
   const isLoading = state === "validating";
   const isSuccess = state === "success";

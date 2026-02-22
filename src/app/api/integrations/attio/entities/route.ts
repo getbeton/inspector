@@ -44,6 +44,9 @@ const DEFAULT_MATCH: Record<string, string> = {
   people: 'email_addresses',
 }
 
+/** Allowed object_slug values. */
+const ALLOWED_OBJECT_SLUGS = new Set(['companies', 'people', 'deals'])
+
 /**
  * Build an Attio web URL for a record.
  * Requires the workspace slug (lowercase name from /self).
@@ -83,6 +86,19 @@ async function upsertWithRetry(
   return result.data
 }
 
+/**
+ * Resolve the workspace slug from the Attio API.
+ * Called once per request — no module-level caching.
+ */
+async function resolveWorkspaceSlug(apiKey: string): Promise<string | undefined> {
+  try {
+    const self = await validateConnection(apiKey)
+    return self.workspaceName?.toLowerCase().replace(/\s+/g, '-')
+  } catch {
+    return undefined
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/integrations/attio/entities
 // ---------------------------------------------------------------------------
@@ -98,12 +114,25 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
+    // Resolve workspace slug once per request (no cross-tenant caching)
+    const workspaceSlug = await resolveWorkspaceSlug(creds.apiKey)
+
     // Route: batch mode vs single entity
-    if ('create_company' in body || 'create_person' in body || 'create_deal' in body) {
-      return handleBatch(creds.apiKey, body as BatchEntityRequest)
+    if (body.create_company === true || body.create_person === true || body.create_deal === true) {
+      // Validate batch request fields
+      if (body.create_company === true && (!body.company_data || typeof body.company_data !== 'object')) {
+        return NextResponse.json({ error: 'company_data is required when create_company is true' }, { status: 400 })
+      }
+      if (body.create_person === true && (!body.person_data || typeof body.person_data !== 'object')) {
+        return NextResponse.json({ error: 'person_data is required when create_person is true' }, { status: 400 })
+      }
+      if (body.create_deal === true && (!body.deal_data || typeof body.deal_data !== 'object')) {
+        return NextResponse.json({ error: 'deal_data is required when create_deal is true' }, { status: 400 })
+      }
+      return handleBatch(creds.apiKey, body as BatchEntityRequest, workspaceSlug)
     }
 
-    return handleSingle(creds.apiKey, body as SingleEntityRequest)
+    return handleSingle(creds.apiKey, body as SingleEntityRequest, workspaceSlug)
   } catch (err) {
     if (err instanceof Error && err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -122,7 +151,8 @@ export async function POST(request: NextRequest) {
 
 async function handleSingle(
   apiKey: string,
-  body: SingleEntityRequest
+  body: SingleEntityRequest,
+  workspaceSlug: string | undefined
 ): Promise<NextResponse> {
   const { object_slug, attributes, matching_attribute } = body
 
@@ -133,12 +163,9 @@ async function handleSingle(
     )
   }
 
-  if (!['companies', 'people', 'deals'].includes(object_slug)) {
+  if (!ALLOWED_OBJECT_SLUGS.has(object_slug)) {
     return NextResponse.json({ error: 'Invalid object_slug' }, { status: 400 })
   }
-
-  // Resolve workspace slug for URL building
-  const workspaceSlug = await getWorkspaceSlug(apiKey)
 
   try {
     const match = matching_attribute ?? DEFAULT_MATCH[object_slug] ?? 'name'
@@ -166,7 +193,8 @@ async function handleSingle(
 
 async function handleBatch(
   apiKey: string,
-  body: BatchEntityRequest
+  body: BatchEntityRequest,
+  workspaceSlug: string | undefined
 ): Promise<NextResponse> {
   const results: {
     company?: EntityResult
@@ -175,8 +203,6 @@ async function handleBatch(
     error?: string
     partial?: boolean
   } = {}
-
-  const workspaceSlug = await getWorkspaceSlug(apiKey)
 
   // 1. Company (if requested)
   let companyRecordId: string | undefined
@@ -252,21 +278,4 @@ async function handleBatch(
   }
 
   return NextResponse.json({ results })
-}
-
-// ---------------------------------------------------------------------------
-// Workspace slug resolution (cached per request)
-// ---------------------------------------------------------------------------
-
-let _cachedSlug: string | undefined
-
-async function getWorkspaceSlug(apiKey: string): Promise<string | undefined> {
-  if (_cachedSlug) return _cachedSlug
-  try {
-    const self = await validateConnection(apiKey)
-    _cachedSlug = self.workspaceName?.toLowerCase().replace(/\s+/g, '-')
-    return _cachedSlug
-  } catch {
-    return undefined
-  }
 }

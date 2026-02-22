@@ -65,7 +65,7 @@ export function identifyUser(userId: string, properties?: Record<string, unknown
   pushToDataLayer({
     event: 'user_identified',
     user_id: userId,
-    ...properties
+    user_properties: properties,
   })
 }
 

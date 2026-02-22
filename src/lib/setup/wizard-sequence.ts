@@ -31,10 +31,14 @@ const BILLING_STEP: WizardStepDescriptor = {
  * Build the full wizard step sequence by merging integration definitions
  * (from API) with built-in system steps. Required steps are ordered first,
  * then optional steps — each group sorted by display_order.
+ *
+ * @param completedSteps - Optional set of step keys already completed.
+ *   When provided, built-in steps check `completedSteps.has(key)` to set `isConnected`.
  */
 export function buildStepSequence(
   definitions: IntegrationDefinition[],
-  billingEnabled: boolean
+  billingEnabled: boolean,
+  completedSteps?: Set<string>
 ): WizardStepDescriptor[] {
   // Integration steps from the DB (those with a setup_step_key)
   const integrationSteps = getOnboardingSteps(definitions).map((d) => ({
@@ -45,8 +49,18 @@ export function buildStepSequence(
     isConnected: d.is_connected,
   }))
 
-  const allSteps = [...integrationSteps, ...BUILT_IN_STEPS]
-  if (billingEnabled) allSteps.push(BILLING_STEP)
+  const builtIn = BUILT_IN_STEPS.map((s) => ({
+    ...s,
+    isConnected: completedSteps?.has(s.key) ?? s.isConnected,
+  }))
+
+  const allSteps = [...integrationSteps, ...builtIn]
+  if (billingEnabled) {
+    allSteps.push({
+      ...BILLING_STEP,
+      isConnected: completedSteps?.has(BILLING_STEP.key) ?? BILLING_STEP.isConnected,
+    })
+  }
 
   // Required first (sorted by displayOrder), then optional (sorted by displayOrder)
   const required = allSteps.filter((s) => !s.optional).sort((a, b) => a.displayOrder - b.displayOrder)

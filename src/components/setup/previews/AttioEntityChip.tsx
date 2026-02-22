@@ -34,7 +34,7 @@ export function AttioEntityChip({
 }: AttioEntityChipProps) {
   const href =
     linked && workspaceSlug && recordId
-      ? `https://app.attio.com/${workspaceSlug}/${objectSlug}/${recordId}`
+      ? `https://app.attio.com/${encodeURIComponent(workspaceSlug)}/${objectSlug}/${encodeURIComponent(recordId)}`
       : undefined
 
   const Wrapper = href ? "a" : "span"

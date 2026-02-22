@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { getWorkspaceMembership } from '@/lib/supabase/helpers'
+import { createClient, requireWorkspace } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { IntegrationCategory, IntegrationDefinition } from '@/lib/integrations/types'
 
@@ -85,21 +84,8 @@ const FALLBACK_DEFINITIONS: DefinitionRow[] = [
  */
 export async function GET() {
   try {
+    const { workspaceId } = await requireWorkspace()
     const supabase = await createClient()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    }
-
-    const membership = await getWorkspaceMembership()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
-    }
 
     // Two parallel queries: definitions (global) + configs (workspace-scoped)
     const [definitionsResult, configsResult] = await Promise.all([
@@ -112,7 +98,7 @@ export async function GET() {
       supabase
         .from('integration_configs')
         .select('integration_name, status, last_validated_at, is_active')
-        .eq('workspace_id', membership.workspaceId),
+        .eq('workspace_id', workspaceId),
     ])
 
     // Use DB rows when available; fall back to hardcoded definitions when the
@@ -160,6 +146,12 @@ export async function GET() {
 
     return NextResponse.json({ definitions: enriched })
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+    if (error instanceof Error && error.message.includes('No workspace')) {
+      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    }
     console.error('Error in GET /api/integrations/definitions:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
