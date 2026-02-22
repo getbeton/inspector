@@ -8,7 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Check, AlertCircle, Globe, Server, Eye, EyeOff } from "lucide-react";
-import { trackIntegrationConnected } from "@/lib/analytics";
+import {
+  trackIntegrationConnected,
+  trackIntegrationConnectionFailed,
+  trackPostHogSelfHostedSelected,
+} from "@/lib/analytics";
 import { isPrivateHost } from "@/lib/utils/ssrf";
 
 /**
@@ -222,7 +226,10 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
 
       setMtuCount(count);
       setState("success");
-      trackIntegrationConnected("posthog");
+      trackIntegrationConnected("posthog", {
+        mode,
+        category: "data_source",
+      });
 
       // Notify parent of success
       onSuccess({
@@ -231,7 +238,12 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       });
     } catch (err) {
       setState("error");
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      trackIntegrationConnectionFailed({
+        integration_name: "posthog",
+        error_message: msg,
+      });
     }
   }, [apiKey, projectId, region, mode, baseUrl, onSuccess, getErrorMessage]);
 
@@ -266,7 +278,10 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
           <Button
             variant={mode === "self_hosted" ? "default" : "outline"}
             size="sm"
-            onClick={() => setMode("self_hosted")}
+            onClick={() => {
+              setMode("self_hosted");
+              trackPostHogSelfHostedSelected();
+            }}
             disabled={isLoading || isSuccess}
             className="flex-1"
           >
