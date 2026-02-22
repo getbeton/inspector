@@ -3,6 +3,12 @@
  *
  * Shared validation for any server-side URL fetching — used by both
  * the agent fetch-url proxy and the Firecrawl validation endpoint.
+ *
+ * Note on DNS rebinding: these checks validate the literal hostname string,
+ * not the resolved IP. A domain that alternates DNS responses between a public
+ * IP and 127.0.0.1 could bypass these checks. This is an accepted risk here
+ * because Firecrawl (the actual fetcher) runs in its own network — the SSRF
+ * vector would be within Firecrawl's infra, not the Next.js server.
  */
 
 const BLOCKED_HOSTNAME_PATTERNS = [
@@ -17,6 +23,9 @@ const BLOCKED_HOSTNAME_PATTERNS = [
   /^\[?fc[0-9a-f]{2}:/i,
   /^\[?fd[0-9a-f]{2}:/i,
   /^\[?fe80:/i,
+  // IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1, ::ffff:10.0.0.1)
+  /^::ffff:(127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0)$/i,
+  /^\[?::ffff:(7f|0a|c0a8|a9fe)/i,
   /\.internal$/i,
   /\.local$/i,
   /\.localhost$/i,
