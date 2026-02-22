@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { resolveTemplate } from "../fields/TemplateInput"
-import type { SampleData } from "../steps/DealFieldMappingStep"
+import type { SampleData } from "@/lib/setup/sample-data"
 import type { DealMappingState } from "../steps/DealFieldMappingStep"
 
 interface CrmCardPreviewProps {
@@ -23,10 +23,9 @@ export function CrmCardPreview({
   attioWorkspaceName,
   className,
 }: CrmCardPreviewProps) {
-  const dataRecord = sampleData as unknown as Record<string, unknown>
   const resolvedName = resolveTemplate(
     mappingState.dealNameTemplate || "Untitled Deal",
-    dataRecord
+    sampleData
   )
 
   // Resolve all field mapping values
@@ -34,7 +33,7 @@ export function CrmCardPreview({
     .filter((m) => m.attioAttributeSlug)
     .map((m) => ({
       label: m.attioAttributeTitle || m.attioAttributeSlug || "Unknown",
-      value: resolveTemplate(m.valueTemplate, dataRecord),
+      value: resolveTemplate(m.valueTemplate, sampleData),
       type: m.attioAttributeType,
       objectSlug: m.attioObjectSlug,
     }))
