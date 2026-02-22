@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { useScrapingResultDetail } from '@/lib/hooks/use-scraping-results'
+import { formatRelativeTime, formatBytes } from '@/lib/utils/format'
 import type { ScrapingResultListItem } from '@/lib/api/scraping-results'
 
 // ============================================
@@ -28,32 +29,6 @@ const OPERATION_VARIANT: Record<string, 'secondary' | 'info' | 'default'> = {
   scrape: 'secondary',
   crawl: 'info',
   extract: 'default',
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60_000)
-
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 30) return `${diffDays}d ago`
-
-  return date.toLocaleDateString()
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  return `${mb.toFixed(1)} MB`
 }
 
 function truncateSessionId(id: string): string {
