@@ -42,13 +42,12 @@ export async function GET(
         return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
       log.error(`Failed to fetch scraping result detail: ${error.message}`)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     return NextResponse.json(data)
   } catch (e) {
     log.error(`Scraping result detail failed: ${e}`)
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

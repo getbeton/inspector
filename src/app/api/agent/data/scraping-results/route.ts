@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       log.error(`Failed to list scraping results: ${error.message}`)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     const results = data || []
@@ -85,7 +85,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (e) {
     log.error(`Scraping results list failed: ${e}`)
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
