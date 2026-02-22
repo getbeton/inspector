@@ -23,6 +23,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { createFirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRateLimitError } from '@/lib/integrations/firecrawl'
+import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import { isPrivateHost } from '@/lib/utils/ssrf'
@@ -123,7 +124,26 @@ export async function POST(request: Request) {
 
     // Parse request body
     const body = await request.json()
-    const { api_key, mode, base_url, proxy } = body
+    let { api_key } = body
+    const { mode, base_url, proxy } = body
+
+    // Resolve __use_stored__ sentinel — look up the real decrypted key
+    if (api_key === '__use_stored__') {
+      const credentials = await getIntegrationCredentials(membership.workspaceId, 'firecrawl')
+      if (!credentials?.apiKey) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'no_stored_credentials',
+              message: 'No stored Firecrawl credentials found. Please enter your API key.',
+            },
+          },
+          { status: 400 }
+        )
+      }
+      api_key = credentials.apiKey
+    }
 
     // Validate API key format
     if (!api_key || typeof api_key !== 'string') {

@@ -166,6 +166,7 @@ export class FirecrawlClient {
       onlyMainContent: opts.onlyMainContent ?? true,
     }
 
+    if (this.proxy) body.proxy = this.proxy
     if (opts.includeTags) body.includeTags = opts.includeTags
     if (opts.excludeTags) body.excludeTags = opts.excludeTags
     if (opts.timeout) body.timeout = opts.timeout
@@ -204,6 +205,7 @@ export class FirecrawlClient {
       },
     }
 
+    if (this.proxy) body.proxy = this.proxy
     if (opts.maxDepth) body.maxDepth = opts.maxDepth
     if (opts.excludePatterns) body.excludePaths = opts.excludePatterns
     if (opts.includePatterns) body.includePaths = opts.includePatterns
@@ -353,15 +355,22 @@ export class FirecrawlClient {
     let html = data.html
 
     const encoder = new TextEncoder()
+    const decoder = new TextDecoder()
 
-    if (markdown && encoder.encode(markdown).byteLength > MAX_CONTENT_BYTES) {
-      markdown = markdown.slice(0, MAX_CONTENT_BYTES)
-      truncated = true
+    if (markdown) {
+      const encoded = encoder.encode(markdown)
+      if (encoded.byteLength > MAX_CONTENT_BYTES) {
+        markdown = decoder.decode(encoded.slice(0, MAX_CONTENT_BYTES))
+        truncated = true
+      }
     }
 
-    if (html && encoder.encode(html).byteLength > MAX_CONTENT_BYTES) {
-      html = html.slice(0, MAX_CONTENT_BYTES)
-      truncated = true
+    if (html) {
+      const encoded = encoder.encode(html)
+      if (encoded.byteLength > MAX_CONTENT_BYTES) {
+        html = decoder.decode(encoded.slice(0, MAX_CONTENT_BYTES))
+        truncated = true
+      }
     }
 
     if (!truncated) return data
