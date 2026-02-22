@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireWorkspace } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
-import { FALLBACK_SAMPLE } from '@/lib/setup/sample-data'
+import { getDefaultSampleData } from '@/lib/setup/sample-data'
 
 /**
  * GET /api/integrations/attio/sample-data
@@ -35,23 +35,24 @@ export async function GET() {
         .limit(1)
         .maybeSingle()
 
+      const fallback = getDefaultSampleData()
       return NextResponse.json({
         sample: {
-          company_name: account.name || FALLBACK_SAMPLE.company_name,
-          company_domain: account.domain || FALLBACK_SAMPLE.company_domain,
-          user_email: FALLBACK_SAMPLE.user_email,
-          signal_name: signal?.name || FALLBACK_SAMPLE.signal_name,
-          signal_type: signal?.signal_type || FALLBACK_SAMPLE.signal_type,
-          health_score: account.health_score ?? FALLBACK_SAMPLE.health_score,
-          signal_count: account.signal_count ?? FALLBACK_SAMPLE.signal_count,
-          deal_value: FALLBACK_SAMPLE.deal_value,
-          detected_at: signal?.detected_at?.split('T')[0] || FALLBACK_SAMPLE.detected_at,
+          company_name: account.name || fallback.company_name,
+          company_domain: account.domain || fallback.company_domain,
+          user_email: fallback.user_email,
+          signal_name: signal?.name || fallback.signal_name,
+          signal_type: signal?.signal_type || fallback.signal_type,
+          health_score: account.health_score ?? fallback.health_score,
+          signal_count: account.signal_count ?? fallback.signal_count,
+          deal_value: fallback.deal_value,
+          detected_at: signal?.detected_at?.split('T')[0] || fallback.detected_at,
         },
       })
     }
 
     // No real data — use fallback
-    return NextResponse.json({ sample: FALLBACK_SAMPLE })
+    return NextResponse.json({ sample: getDefaultSampleData() })
   } catch (err) {
     if (err instanceof Error && err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -61,6 +62,6 @@ export async function GET() {
     }
     // On any error, still return fallback sample (non-critical endpoint)
     console.error('[Attio Sample Data] Error:', err)
-    return NextResponse.json({ sample: FALLBACK_SAMPLE })
+    return NextResponse.json({ sample: getDefaultSampleData() })
   }
 }

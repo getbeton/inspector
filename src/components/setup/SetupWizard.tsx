@@ -18,7 +18,7 @@ import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
 import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
-import { FALLBACK_SAMPLE, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
+import { getDefaultSampleData, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
 import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
@@ -180,7 +180,7 @@ export function SetupWizard({
   });
 
   // Sample data for previews
-  const [sampleData, setSampleData] = useState<SampleData>(FALLBACK_SAMPLE);
+  const [sampleData, setSampleData] = useState<SampleData>(getDefaultSampleData);
 
   // Selected Attio contact for preview enrichment (production mode only)
   const [selectedContactData, setSelectedContactData] = useState<SelectedContact | null>(null);
@@ -337,8 +337,7 @@ export function SetupWizard({
   );
 
   const handleAttioSuccess = useCallback(
-    (workspaceName?: string) => {
-      if (workspaceName) setAttioWorkspaceName(workspaceName);
+    () => {
       setAttioConnected(true);
       advanceFrom("completed");
     },

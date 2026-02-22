@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useStripe, useElements, PaymentElement } from "@stripe/react-stripe-js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -214,13 +214,22 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
     (last4: string) => {
       setCardLast4(last4);
       setState("success");
-      // Auto-proceed after showing success briefly
-      setTimeout(() => {
+    },
+    []
+  );
+
+  // Auto-proceed after showing success briefly — with proper cleanup
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    if (state === "success") {
+      successTimerRef.current = setTimeout(() => {
         onComplete();
       }, 1500);
-    },
-    [onComplete]
-  );
+    }
+    return () => {
+      clearTimeout(successTimerRef.current);
+    };
+  }, [state, onComplete]);
 
   /**
    * Handle card setup error

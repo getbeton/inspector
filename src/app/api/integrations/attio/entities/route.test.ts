@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 
@@ -10,6 +11,8 @@ import { POST } from './route'
  * BETON-280 TC4: Batch creation — partial (person only)
  * BETON-280 TC5: Entity creation fails — auth error
  * BETON-280 TC6: Entity creation fails — rate limit
+ * BETON-280 TC7: Per-request slug isolation (no cross-tenant caching)
+ * BETON-280 TC8: Validation — missing data, invalid types
  */
 
 // ---------------------------------------------------------------------------
@@ -248,8 +251,51 @@ describe('POST /api/integrations/attio/entities', () => {
     consoleSpy.mockRestore()
   })
 
-  // Workspace slug in URLs — _cachedSlug in the route means the first
-  // validateConnection result ("Test Workspace") is reused across all tests
+  // TC7: Per-request workspace slug isolation (no cross-tenant caching)
+  it('resolves workspace slug per request (no cross-tenant leak)', async () => {
+    mockUpsertRecord.mockResolvedValue({ recordId: 'rec-1' })
+
+    // First request: workspace "Alpha Team"
+    mockValidateConnection.mockResolvedValueOnce({ workspaceName: 'Alpha Team' })
+    const res1 = await POST(makeRequest({
+      object_slug: 'companies',
+      attributes: { name: [{ value: 'Test' }] },
+    }))
+    const body1 = await res1.json()
+    expect(body1.attio_url).toBe('https://app.attio.com/alpha-team/companies/rec-1')
+
+    // Second request: workspace "Beta Corp"
+    mockValidateConnection.mockResolvedValueOnce({ workspaceName: 'Beta Corp' })
+    mockRequireWorkspace.mockResolvedValue({ workspaceId: 'ws-2' })
+    mockGetCreds.mockResolvedValue({ apiKey: 'attio_key_2' })
+    const res2 = await POST(makeRequest({
+      object_slug: 'companies',
+      attributes: { name: [{ value: 'Test' }] },
+    }))
+    const body2 = await res2.json()
+    expect(body2.attio_url).toBe('https://app.attio.com/beta-corp/companies/rec-1')
+  })
+
+  // TC8: Validation — batch mode requires data when flag is true
+  it('rejects batch request with create_company=true but no company_data', async () => {
+    const res = await POST(makeRequest({
+      create_company: true,
+    }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('company_data')
+  })
+
+  it('rejects batch request with create_person=true but no person_data', async () => {
+    const res = await POST(makeRequest({
+      create_person: true,
+    }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('person_data')
+  })
+
+  // Workspace slug in URLs
   it('includes workspace slug in attio_url', async () => {
     mockUpsertRecord.mockResolvedValue({ recordId: 'rec-url-test' })
 

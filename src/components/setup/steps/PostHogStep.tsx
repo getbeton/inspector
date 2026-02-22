@@ -109,7 +109,8 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
   const [mtuCount, setMtuCount] = useState<number | null>(null);
 
   /**
-   * Map error response to user-friendly message
+   * Map error response to user-friendly message.
+   * The server already returns user-friendly messages — pass them through.
    */
   const getErrorMessage = useCallback((err: unknown): string => {
     if (err instanceof Error) {
@@ -118,19 +119,8 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
         return ERROR_MESSAGES.network;
       }
       // Pass through server error messages directly
-      if (err.message && !err.message.match(/^\d{3}$/)) {
-        return err.message;
-      }
+      return err.message;
     }
-
-    // Check for HTTP status codes in error
-    const errorStr = String(err);
-    for (const code of Object.keys(ERROR_MESSAGES)) {
-      if (errorStr.includes(code)) {
-        return ERROR_MESSAGES[code];
-      }
-    }
-
     return ERROR_MESSAGES.unknown;
   }, []);
 
@@ -138,6 +128,8 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
    * Validate PostHog credentials and calculate MTU
    */
   const handleValidate = useCallback(async () => {
+    if (state === "validating" || state === "calculating_mtu") return;
+
     if (!apiKey.trim() || !projectId.trim()) {
       setError("Please fill in all fields.");
       return;
@@ -245,7 +237,7 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
         error_message: msg,
       });
     }
-  }, [apiKey, projectId, region, mode, baseUrl, onSuccess, getErrorMessage]);
+  }, [apiKey, projectId, region, mode, baseUrl, onSuccess, getErrorMessage, state]);
 
   const isLoading = state === "validating" || state === "calculating_mtu";
   const isSuccess = state === "success";

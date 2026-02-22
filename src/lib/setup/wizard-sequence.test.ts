@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import type { IntegrationDefinition } from '@/lib/integrations/types'
 import { buildStepSequence, getInitialStepIndex, type WizardStepDescriptor } from './wizard-sequence'
 
