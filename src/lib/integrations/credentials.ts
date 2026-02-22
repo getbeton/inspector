@@ -68,13 +68,23 @@ export async function getIntegrationCredentials(
     projectId = (configJson.project_id as string) || null
   }
 
-  // For PostHog, always derive host from region to ensure /api path is included
-  // For other integrations, use the stored host value
+  // Derive the effective host:
+  // - PostHog self-hosted: use stored base_url + /api
+  // - PostHog cloud: derive from region
+  // - Other integrations: use stored host value
   const region = (configJson.region as string) || null
   const storedHost = (configJson.host as string) || null
-  const derivedHost = integrationName === 'posthog' && region
-    ? getPostHogHost(region)
-    : storedHost
+  const configMode = (configJson.mode as string) || null
+  const configBaseUrl = (configJson.base_url as string) || null
+
+  let derivedHost: string | null
+  if (integrationName === 'posthog' && configMode === 'self_hosted' && configBaseUrl) {
+    derivedHost = configBaseUrl.replace(/\/+$/, '') + '/api'
+  } else if (integrationName === 'posthog' && region) {
+    derivedHost = getPostHogHost(region)
+  } else {
+    derivedHost = storedHost
+  }
 
   return {
     apiKey,
@@ -130,9 +140,17 @@ export async function getIntegrationCredentialsAdmin(
 
   const region = (configJson.region as string) || null
   const storedHost = (configJson.host as string) || null
-  const derivedHost = integrationName === 'posthog' && region
-    ? getPostHogHost(region)
-    : storedHost
+  const configMode = (configJson.mode as string) || null
+  const configBaseUrl = (configJson.base_url as string) || null
+
+  let derivedHost: string | null
+  if (integrationName === 'posthog' && configMode === 'self_hosted' && configBaseUrl) {
+    derivedHost = configBaseUrl.replace(/\/+$/, '') + '/api'
+  } else if (integrationName === 'posthog' && region) {
+    derivedHost = getPostHogHost(region)
+  } else {
+    derivedHost = storedHost
+  }
 
   return {
     apiKey,
