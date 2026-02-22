@@ -5,6 +5,32 @@
  * Used by React Query hooks for data fetching and mutations.
  */
 
+import type { IntegrationDefinition } from '@/lib/integrations/types'
+
+// ── Definitions ─────────────────────────────────────────────────
+
+export interface IntegrationDefinitionsResponse {
+  definitions: IntegrationDefinition[]
+}
+
+/**
+ * Fetches integration definitions enriched with workspace connection status.
+ */
+export async function getIntegrationDefinitions(): Promise<IntegrationDefinitionsResponse> {
+  const response = await fetch('/api/integrations/definitions', {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// ── Credentials ─────────────────────────────────────────────────
+
 export interface IntegrationCredentialsResponse {
   integration: string
   status: string
