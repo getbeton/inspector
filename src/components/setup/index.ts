@@ -10,7 +10,7 @@
  */
 
 export { SetupWizard, type SetupWizardProps } from './SetupWizard';
-export { ProgressIndicator, type ProgressIndicatorProps } from './ProgressIndicator';
+export { ProgressIndicator, type ProgressIndicatorProps, type StepInfo } from './ProgressIndicator';
 export { PostHogStep, type PostHogStepProps } from './steps/PostHogStep';
 export { BillingStep, type BillingStepProps } from './steps/BillingStep';
 export { AttioStep, type AttioStepProps } from './steps/AttioStep';
