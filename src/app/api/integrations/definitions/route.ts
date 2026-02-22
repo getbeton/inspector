@@ -25,11 +25,63 @@ interface ConfigRow {
   is_active: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Hardcoded fallback — used when migration 018 has not been applied yet.
+// Once the `integration_definitions` table exists the DB rows take precedence.
+// ---------------------------------------------------------------------------
+const FALLBACK_DEFINITIONS: DefinitionRow[] = [
+  {
+    id: 'fallback-posthog',
+    name: 'posthog',
+    display_name: 'PostHog',
+    description: 'Product analytics and event tracking',
+    category: 'data_source',
+    icon_url: null,
+    icon_url_light: null,
+    required: true,
+    display_order: 10,
+    setup_step_key: 'posthog',
+    supports_self_hosted: true,
+    config_schema: null,
+  },
+  {
+    id: 'fallback-attio',
+    name: 'attio',
+    display_name: 'Attio',
+    description: 'CRM for relationship management',
+    category: 'crm',
+    icon_url: null,
+    icon_url_light: null,
+    required: true,
+    display_order: 20,
+    setup_step_key: 'attio',
+    supports_self_hosted: false,
+    config_schema: null,
+  },
+  {
+    id: 'fallback-firecrawl',
+    name: 'firecrawl',
+    display_name: 'Firecrawl',
+    description: 'Web scraping and crawling',
+    category: 'web_scraping',
+    icon_url: null,
+    icon_url_light: null,
+    required: false,
+    display_order: 60,
+    setup_step_key: 'firecrawl',
+    supports_self_hosted: true,
+    config_schema: null,
+  },
+]
+
 /**
  * GET /api/integrations/definitions
  *
  * Returns all integration definitions from the registry, enriched with
  * the current workspace's connection status from integration_configs.
+ *
+ * Falls back to hardcoded definitions when the `integration_definitions`
+ * table does not yet exist (pre-migration 018).
  */
 export async function GET() {
   try {
@@ -63,24 +115,30 @@ export async function GET() {
         .eq('workspace_id', membership.workspaceId),
     ])
 
+    // Use DB rows when available; fall back to hardcoded definitions when the
+    // integration_definitions table doesn't exist yet (pre-migration 018).
+    const definitions: DefinitionRow[] = definitionsResult.error
+      ? FALLBACK_DEFINITIONS
+      : (definitionsResult.data as DefinitionRow[])
+
     if (definitionsResult.error) {
-      console.error('Error fetching integration definitions:', definitionsResult.error)
-      return NextResponse.json(
-        { error: 'Failed to fetch integration definitions' },
-        { status: 500 }
+      console.warn(
+        'integration_definitions table unavailable, using fallback:',
+        definitionsResult.error.message
       )
     }
+
+    // Configs table may also be missing; treat as empty (no connections).
+    const configs: ConfigRow[] = configsResult.error
+      ? []
+      : (configsResult.data as ConfigRow[])
 
     if (configsResult.error) {
-      console.error('Error fetching integration configs:', configsResult.error)
-      return NextResponse.json(
-        { error: 'Failed to fetch integration configs' },
-        { status: 500 }
+      console.warn(
+        'integration_configs query failed, assuming no connections:',
+        configsResult.error.message
       )
     }
-
-    const definitions = definitionsResult.data as DefinitionRow[]
-    const configs = configsResult.data as ConfigRow[]
 
     // Build a lookup map: integration_name → config
     const configMap = new Map(

@@ -253,10 +253,10 @@ describe('GET /api/integrations/definitions', () => {
     expect(posthog.is_connected).toBe(false) // status not "connected"
   })
 
-  it('returns 500 when definitions query fails', async () => {
+  it('falls back to hardcoded definitions when definitions table is missing', async () => {
     const supabase = createSupabaseMock({
       definitionsData: null,
-      definitionsError: { message: 'DB error' },
+      definitionsError: { message: 'relation "integration_definitions" does not exist' },
     })
     mockCreateClient.mockResolvedValue(supabase)
     mockGetWorkspaceMembership.mockResolvedValue({
@@ -264,16 +264,19 @@ describe('GET /api/integrations/definitions', () => {
       role: 'owner',
     })
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const res = await GET()
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({
-      error: 'Failed to fetch integration definitions',
-    })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    // Should return the 3 hardcoded fallback definitions
+    expect(body.definitions).toHaveLength(3)
+    const names = body.definitions.map((d: { name: string }) => d.name)
+    expect(names).toEqual(['posthog', 'attio', 'firecrawl'])
     consoleSpy.mockRestore()
   })
 
-  it('returns 500 when configs query fails', async () => {
+  it('returns 200 with no connections when configs query fails', async () => {
     const supabase = createSupabaseMock({
       configsData: null,
       configsError: { message: 'DB error' },
@@ -284,12 +287,13 @@ describe('GET /api/integrations/definitions', () => {
       role: 'owner',
     })
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const res = await GET()
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({
-      error: 'Failed to fetch integration configs',
-    })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    // All definitions present but none connected
+    expect(body.definitions.every((d: { is_connected: boolean }) => !d.is_connected)).toBe(true)
     consoleSpy.mockRestore()
   })
 
