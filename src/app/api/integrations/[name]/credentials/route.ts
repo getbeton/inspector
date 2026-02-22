@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
-
-const SUPPORTED_INTEGRATIONS = ['posthog', 'attio', 'firecrawl']
+import { SUPPORTED_INTEGRATIONS } from '@/lib/integrations/supported'
 
 /**
  * GET /api/integrations/[name]/credentials

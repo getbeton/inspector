@@ -3,8 +3,7 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/supabase/types'
 import { encryptCredentials } from '@/lib/crypto/encryption'
-
-const SUPPORTED_INTEGRATIONS = ['posthog', 'stripe', 'attio', 'apollo', 'firecrawl']
+import { SUPPORTED_INTEGRATIONS } from '@/lib/integrations/supported'
 
 /**
  * GET /api/integrations/[name]
@@ -147,14 +146,16 @@ export async function POST(
     if (existing) {
       result = await supabase
         .from('integration_configs')
-        .update(configData as never)
+        // @ts-expect-error — Supabase PostgREST narrows .update() param to `never`; configData shape is manually verified as IntegrationConfigInsert
+        .update(configData)
         .eq('id', existing.id)
         .select()
         .single()
     } else {
       result = await supabase
         .from('integration_configs')
-        .insert(configData as never)
+        // @ts-expect-error — Supabase PostgREST narrows .insert() param to `never`; configData shape is manually verified as IntegrationConfigInsert
+        .insert(configData)
         .select()
         .single()
     }

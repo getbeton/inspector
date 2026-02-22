@@ -21,7 +21,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
-import { FirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRateLimitError } from '@/lib/integrations/firecrawl'
+import { createFirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRateLimitError } from '@/lib/integrations/firecrawl'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
     }
 
     // Create client and test connection
-    const client = new FirecrawlClient({
+    const client = createFirecrawlClient({
       apiKey: api_key,
       mode: mode || 'cloud',
       baseUrl: base_url,
@@ -230,7 +230,8 @@ export async function POST(request: Request) {
 
     const result = await supabase
       .from('integration_configs')
-      .upsert(configData as never, {
+      // @ts-expect-error — Supabase PostgREST narrows .upsert() param to `never`; configData shape is manually verified as IntegrationConfigInsert
+      .upsert(configData, {
         onConflict: 'workspace_id,integration_name',
       })
       .select()
