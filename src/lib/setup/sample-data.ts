@@ -16,7 +16,6 @@ export interface SampleData extends Record<string, unknown> {
   signal_name: string
   signal_type: string
   health_score: number
-  concrete_grade: string
   signal_count: number
   deal_value: number
   detected_at: string
@@ -31,7 +30,6 @@ export const FALLBACK_SAMPLE: SampleData = {
   signal_name: "Product Qualified Lead",
   signal_type: "pql",
   health_score: 85,
-  concrete_grade: "M75",
   signal_count: 12,
   deal_value: 48000,
   detected_at: new Date().toISOString().split("T")[0],

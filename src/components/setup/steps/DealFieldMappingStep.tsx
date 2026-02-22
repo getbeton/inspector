@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { TemplateInput, BETON_VARIABLES } from "../fields/TemplateInput"
 import { DealFieldRow } from "../fields/DealFieldRow"
-import { CreateFieldDialog } from "../fields/CreateFieldDialog"
+import { validateFieldValue } from "../fields/validation"
 import type { ComboboxOption } from "@/components/ui/combobox"
 import { Plus, AlertCircle, FileText } from "lucide-react"
 
@@ -17,6 +17,8 @@ interface AttioAttribute {
   title: string
   type: string
   isWritable: boolean
+  /** Predefined options for select/status type fields */
+  selectOptions?: Array<{ value: string; label: string }>
 }
 
 interface AttioObject {
@@ -38,13 +40,73 @@ interface FieldMapping {
 
 export interface DealMappingState {
   dealNameTemplate: string
+  notificationText: string
   fieldMappings: FieldMapping[]
+}
+
+/** Mock Attio schema used in demo mode */
+const DEMO_OBJECTS: AttioObject[] = [
+  { id: "1", slug: "deals", singularNoun: "deal", pluralNoun: "deals" },
+  { id: "2", slug: "companies", singularNoun: "company", pluralNoun: "companies" },
+  { id: "3", slug: "people", singularNoun: "person", pluralNoun: "people" },
+]
+
+const DEMO_ATTRIBUTES: Record<string, AttioAttribute[]> = {
+  deals: [
+    { id: "d1", slug: "name", title: "Name", type: "text", isWritable: true },
+    {
+      id: "d2",
+      slug: "stage",
+      title: "Stage",
+      type: "select",
+      isWritable: true,
+      selectOptions: [
+        { value: "new", label: "New" },
+        { value: "qualified", label: "Qualified" },
+        { value: "proposal", label: "Proposal" },
+        { value: "negotiation", label: "Negotiation" },
+        { value: "won", label: "Won" },
+        { value: "lost", label: "Lost" },
+      ],
+    },
+    { id: "d3", slug: "value", title: "Deal Value", type: "currency", isWritable: true },
+    { id: "d4", slug: "close_date", title: "Close Date", type: "date", isWritable: true },
+    { id: "d5", slug: "source", title: "Source", type: "text", isWritable: true },
+    { id: "d6", slug: "probability", title: "Probability", type: "number", isWritable: true },
+    {
+      id: "d7",
+      slug: "priority",
+      title: "Priority",
+      type: "select",
+      isWritable: true,
+      selectOptions: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High" },
+        { value: "urgent", label: "Urgent" },
+      ],
+    },
+  ],
+  companies: [
+    { id: "c1", slug: "name", title: "Company Name", type: "text", isWritable: true },
+    { id: "c2", slug: "domain", title: "Domain", type: "text", isWritable: true },
+    { id: "c3", slug: "industry", title: "Industry", type: "text", isWritable: true },
+    { id: "c4", slug: "employee_count", title: "Employee Count", type: "number", isWritable: true },
+    { id: "c5", slug: "health_score", title: "Health Score", type: "number", isWritable: true },
+  ],
+  people: [
+    { id: "p1", slug: "name", title: "Full Name", type: "text", isWritable: true },
+    { id: "p2", slug: "email", title: "Email", type: "email", isWritable: true },
+    { id: "p3", slug: "title", title: "Job Title", type: "text", isWritable: true },
+  ],
 }
 
 export interface DealFieldMappingStepProps {
   onSuccess: (mapping: DealMappingState) => void
   /** Live callback for real-time preview updates */
   onMappingChange?: (mapping: DealMappingState) => void
+  /** Demo mode: use mock schema, skip API calls */
+  demoMode?: boolean
   className?: string
 }
 
@@ -53,13 +115,13 @@ export interface DealFieldMappingStepProps {
  *
  * Users configure how Beton creates deals in Attio:
  * - Deal name template (e.g., "{{company_name}} — {{signal_name}}")
+ * - Slack notification text template
  * - Dynamic field mapping rows: Attio field → value template
  * - Fields grouped from ALL Attio objects (deals, companies, people)
- * - Inline "Create new field" dialog
  *
  * Returns both config (left panel) and preview data for CrmCardPreview (right panel).
  */
-export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: DealFieldMappingStepProps) {
+export function DealFieldMappingStep({ onSuccess, onMappingChange, demoMode = false, className }: DealFieldMappingStepProps) {
   const idCounter = useRef(0)
   const genId = useCallback(() => `field_${++idCounter.current}`, [])
 
@@ -75,18 +137,24 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
 
   // Mapping state
   const [dealNameTemplate, setDealNameTemplate] = useState("{{company_name}} — {{signal_name}}")
+  const [notificationText, setNotificationText] = useState("New deal signal detected")
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([])
-
-  // Create field dialog
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   // Notify parent of mapping changes for live preview
   useEffect(() => {
-    onMappingChange?.({ dealNameTemplate, fieldMappings })
-  }, [dealNameTemplate, fieldMappings, onMappingChange])
+    onMappingChange?.({ dealNameTemplate, notificationText, fieldMappings })
+  }, [dealNameTemplate, notificationText, fieldMappings, onMappingChange])
 
   // Load Attio objects and attributes on mount
   useEffect(() => {
+    // In demo mode, use mock data immediately
+    if (demoMode) {
+      setObjects(DEMO_OBJECTS)
+      setAttributesByObject(DEMO_ATTRIBUTES)
+      setIsLoading(false)
+      return
+    }
+
     async function loadSchema() {
       try {
         // 1. Fetch objects
@@ -140,7 +208,7 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
       }
     }
     loadSchema()
-  }, [])
+  }, [demoMode])
 
   // Build grouped combobox options from all objects' attributes
   const comboboxOptions: ComboboxOption[] = useMemo(() => {
@@ -162,9 +230,10 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
       for (const attr of attrs) {
         opts.push({
           value: `${objSlug}::${attr.slug}`,
-          label: `${attr.title}`,
+          label: attr.title,
           group: groupLabel,
           type: attr.type,
+          selectOptions: attr.selectOptions,
         })
       }
     }
@@ -199,6 +268,8 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
                 attioObjectSlug: objectSlug,
                 attioAttributeTitle: title,
                 attioAttributeType: type,
+                // Clear value when switching to a different field type
+                valueTemplate: m.attioAttributeType !== type ? "" : m.valueTemplate,
               }
             : m
         )
@@ -219,32 +290,25 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
     setFieldMappings((prev) => prev.filter((m) => m.id !== id))
   }, [])
 
-  // Handle field creation from dialog
-  const handleFieldCreated = useCallback(
-    (field: { slug: string; title: string; type: string; objectSlug: string }) => {
-      // Add the new attribute to our local cache
-      setAttributesByObject((prev) => {
-        const existing = prev[field.objectSlug] || []
-        return {
-          ...prev,
-          [field.objectSlug]: [
-            ...existing,
-            {
-              id: "",
-              slug: field.slug,
-              title: field.title,
-              type: field.type,
-              isWritable: true,
-            },
-          ],
-        }
-      })
-    },
-    []
+  // Check if any mapped field has a validation error
+  const hasValidationErrors = useMemo(
+    () =>
+      fieldMappings.some(
+        (m) =>
+          m.attioAttributeSlug &&
+          validateFieldValue(m.valueTemplate, m.attioAttributeType) !== null
+      ),
+    [fieldMappings]
   )
 
   // Save mapping
   const handleSave = async () => {
+    // In demo mode, skip API call and report success immediately
+    if (demoMode) {
+      onSuccess({ dealNameTemplate, notificationText, fieldMappings })
+      return
+    }
+
     setIsSaving(true)
     setError(null)
 
@@ -253,6 +317,7 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         _type: "deal_mapping",
         _object: primaryObject,
         dealNameTemplate,
+        notificationText,
         fieldMappings: fieldMappings
           .filter((m) => m.attioAttributeSlug)
           .map((m) => ({
@@ -275,7 +340,7 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         throw new Error(data?.error || "Failed to save field mapping")
       }
 
-      onSuccess({ dealNameTemplate, fieldMappings })
+      onSuccess({ dealNameTemplate, notificationText, fieldMappings })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save")
     } finally {
@@ -306,8 +371,8 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         </div>
         <p className="text-sm text-muted-foreground">
           Define how Beton creates deals in Attio when signals are detected.
-          Use <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">{"{{variables}}"}</code> to
-          insert dynamic values.
+          Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">/</code> in
+          any input to insert dynamic variables.
         </p>
       </div>
 
@@ -330,9 +395,21 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         <TemplateInput
           value={dealNameTemplate}
           onChange={setDealNameTemplate}
-          placeholder='e.g., "{{company_name}} — {{signal_name}}"'
-          showVariables={true}
+          placeholder='Type / to insert variables'
         />
+      </div>
+
+      {/* Notification Text Template */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium block">Slack Notification Text</label>
+        <TemplateInput
+          value={notificationText}
+          onChange={setNotificationText}
+          placeholder='Type / to insert variables'
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Message body shown in the Slack notification when a signal is detected.
+        </p>
       </div>
 
       {/* Field Mappings */}
@@ -366,7 +443,6 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
               }
               onValueChange={(val) => updateMappingValue(mapping.id, val)}
               onDelete={() => deleteMapping(mapping.id)}
-              onCreateNew={() => setCreateDialogOpen(true)}
             />
           ))}
         </div>
@@ -387,6 +463,9 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
       <div className="rounded-lg border border-border p-3 bg-muted/30">
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
           Available Variables
+          <span className="ml-2 font-normal normal-case tracking-normal">
+            — Type <kbd className="rounded border border-border bg-background px-1 py-0.5 font-mono">/</kbd> to insert
+          </span>
         </p>
         <div className="flex flex-wrap gap-1">
           {BETON_VARIABLES.map((v) => (
@@ -408,29 +487,25 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         </Alert>
       )}
 
+      {/* Validation hint */}
+      {hasValidationErrors && (
+        <p className="text-destructive text-xs text-center">
+          Fix validation errors above to save
+        </p>
+      )}
+
       {/* Actions */}
-      <Button onClick={handleSave} disabled={isSaving} className="w-full">
+      <Button onClick={handleSave} disabled={isSaving || hasValidationErrors} className="w-full">
         {isSaving ? "Saving..." : "Save Deal Mapping"}
       </Button>
 
       <button
         type="button"
-        onClick={() => onSuccess({ dealNameTemplate: "", fieldMappings: [] })}
+        onClick={() => onSuccess({ dealNameTemplate: "", notificationText: "", fieldMappings: [] })}
         className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         Skip for now
       </button>
-
-      {/* Create Field Dialog */}
-      <CreateFieldDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        objectSlug={primaryObject}
-        objectLabel={
-          objects.find((o) => o.slug === primaryObject)?.singularNoun || primaryObject
-        }
-        onCreated={handleFieldCreated}
-      />
     </div>
   )
 }

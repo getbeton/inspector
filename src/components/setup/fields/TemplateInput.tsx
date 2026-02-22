@@ -1,9 +1,9 @@
 "use client"
 
-import { useRef, useCallback } from "react"
+import { useRef, useCallback, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { SlashCommandMenu, filterVariables } from "./SlashCommandMenu"
 
 /**
  * Available Beton template variables for deal field mapping.
@@ -15,7 +15,6 @@ export const BETON_VARIABLES = [
   { key: "signal_name", label: "Signal Name" },
   { key: "signal_type", label: "Signal Type" },
   { key: "health_score", label: "Health Score" },
-  { key: "concrete_grade", label: "Concrete Grade" },
   { key: "signal_count", label: "Signal Count" },
   { key: "deal_value", label: "Deal Value" },
   { key: "detected_at", label: "Detected At" },
@@ -28,83 +27,169 @@ export interface TemplateInputProps {
   onChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
-  showVariables?: boolean
   className?: string
 }
 
 /**
- * Text input that supports {{variable}} token insertion.
+ * Text input that supports {{variable}} token insertion via slash commands.
  *
- * Clickable variable chips below the input insert tokens at the cursor position.
- * The preview panel resolves these tokens against sample data via simple
- * string replacement: `{{company_name}}` → `"Acme Corp"`.
+ * Typing `/` opens an inline autocomplete dropdown filtered by the text after
+ * the slash. Arrow keys navigate, Enter/click selects, Escape dismisses.
+ * On selection, the `/query` text is replaced with `{{variable_name}}`.
  */
 export function TemplateInput({
   value,
   onChange,
-  placeholder = "Enter value or use {{variables}}...",
+  placeholder = "Type / to insert variables...",
   disabled = false,
-  showVariables = true,
   className,
 }: TemplateInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const insertVariable = useCallback(
+  // Slash-command state
+  const [slashActive, setSlashActive] = useState(false)
+  const [slashStart, setSlashStart] = useState(-1)
+  const [slashQuery, setSlashQuery] = useState("")
+  const [highlightIndex, setHighlightIndex] = useState(0)
+
+  /** Insert a {{variable}} token, replacing the `/query` range. */
+  const handleSlashSelect = useCallback(
     (varKey: string) => {
       const token = `{{${varKey}}}`
       const input = inputRef.current
-      if (!input) {
-        // Fallback: append to end
-        onChange(value + token)
+
+      // Replace from slashStart (the `/`) to current cursor
+      const cursorPos = input?.selectionStart ?? value.length
+      const newValue =
+        value.slice(0, slashStart) + token + value.slice(cursorPos)
+      onChange(newValue)
+
+      // Close menu and restore cursor
+      setSlashActive(false)
+      setSlashQuery("")
+      setHighlightIndex(0)
+
+      requestAnimationFrame(() => {
+        if (input) {
+          const newPos = slashStart + token.length
+          input.setSelectionRange(newPos, newPos)
+          input.focus()
+        }
+      })
+    },
+    [value, onChange, slashStart]
+  )
+
+  /** Detect `/` trigger on every input change. */
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value
+      onChange(newValue)
+
+      const cursor = e.target.selectionStart ?? newValue.length
+
+      // Walk backward from cursor to find an unmatched `/`
+      let foundSlash = -1
+      for (let i = cursor - 1; i >= 0; i--) {
+        const ch = newValue[i]
+        if (ch === "/") {
+          foundSlash = i
+          break
+        }
+        // Stop scanning if we hit whitespace before finding `/`
+        if (/\s/.test(ch)) break
+      }
+
+      if (foundSlash >= 0) {
+        const query = newValue.slice(foundSlash + 1, cursor)
+        setSlashActive(true)
+        setSlashStart(foundSlash)
+        setSlashQuery(query)
+        // Clamp highlight index to filtered list length
+        const count = filterVariables(query).length
+        setHighlightIndex((prev) => (prev >= count ? Math.max(0, count - 1) : prev))
+      } else {
+        setSlashActive(false)
+        setSlashQuery("")
+        setHighlightIndex(0)
+      }
+    },
+    [onChange]
+  )
+
+  /** Keyboard navigation when the slash menu is open. */
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!slashActive) return
+
+      const filtered = filterVariables(slashQuery)
+      if (filtered.length === 0) {
+        if (e.key === "Escape") {
+          setSlashActive(false)
+          setSlashQuery("")
+          setHighlightIndex(0)
+        }
         return
       }
 
-      const start = input.selectionStart ?? value.length
-      const end = input.selectionEnd ?? value.length
-      const newValue = value.slice(0, start) + token + value.slice(end)
-      onChange(newValue)
-
-      // Restore cursor position after the inserted token
-      requestAnimationFrame(() => {
-        const newPos = start + token.length
-        input.setSelectionRange(newPos, newPos)
-        input.focus()
-      })
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault()
+          setHighlightIndex((prev) => (prev + 1) % filtered.length)
+          break
+        case "ArrowUp":
+          e.preventDefault()
+          setHighlightIndex((prev) =>
+            prev <= 0 ? filtered.length - 1 : prev - 1
+          )
+          break
+        case "Enter":
+          e.preventDefault()
+          handleSlashSelect(filtered[highlightIndex].key)
+          break
+        case "Escape":
+          e.preventDefault()
+          setSlashActive(false)
+          setSlashQuery("")
+          setHighlightIndex(0)
+          break
+      }
     },
-    [value, onChange]
+    [slashActive, slashQuery, highlightIndex, handleSlashSelect]
   )
 
+  /** Prevent input blur when clicking menu items. */
+  const handleMenuMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+  }, [])
+
+  /** Close menu on blur (unless clicking the menu, handled by onMouseDown). */
+  const handleBlur = useCallback(() => {
+    setSlashActive(false)
+    setSlashQuery("")
+    setHighlightIndex(0)
+  }, [])
+
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("relative", className)}>
       <Input
         ref={inputRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
         className="font-mono text-xs"
       />
 
-      {showVariables && !disabled && (
-        <div className="flex flex-wrap gap-1">
-          {BETON_VARIABLES.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              onClick={() => insertVariable(v.key)}
-              className="inline-flex"
-            >
-              <Badge
-                variant="outline"
-                size="sm"
-                className="cursor-pointer hover:bg-muted/80 transition-colors font-mono text-[10px]"
-              >
-                {`{{${v.key}}}`}
-              </Badge>
-            </button>
-          ))}
-        </div>
-      )}
+      <SlashCommandMenu
+        query={slashQuery}
+        highlightIndex={highlightIndex}
+        onSelect={handleSlashSelect}
+        onMouseDown={handleMenuMouseDown}
+        visible={slashActive && !disabled}
+      />
     </div>
   )
 }
