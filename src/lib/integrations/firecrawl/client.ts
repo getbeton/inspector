@@ -279,15 +279,16 @@ export class FirecrawlClient {
   }
 
   /**
-   * Test the connection by scraping example.com.
+   * Test the connection by hitting a read-only endpoint.
+   *
+   * Uses GET /v1/crawl (list crawl jobs) which requires valid auth but
+   * does NOT consume any scrape credits — unlike the old approach of
+   * scraping example.com.
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      const result = await this.scrape('https://example.com', {
-        formats: ['markdown'],
-        onlyMainContent: true,
-      })
-      return { success: result.success }
+      await this.request<{ success: boolean }>('/v1/crawl', { method: 'GET' })
+      return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       return { success: false, error: message }
