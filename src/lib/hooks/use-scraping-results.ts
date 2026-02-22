@@ -36,10 +36,13 @@ export function useScrapingResults(
     ],
     queryFn: () => {
       if (isDemo) {
+        const filtered = filters.operation
+          ? MOCK_SCRAPING_RESULTS.filter((r) => r.operation === filters.operation)
+          : MOCK_SCRAPING_RESULTS
         return Promise.resolve({
-          results: MOCK_SCRAPING_RESULTS,
+          results: filtered,
           next_cursor: null,
-          total_count: MOCK_SCRAPING_RESULTS.length,
+          total_count: filtered.length,
         })
       }
       return getScrapingResults(workspaceId!, filters)
