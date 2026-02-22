@@ -1,30 +1,26 @@
 /**
  * POST /api/integrations/posthog/validate
  *
- * Validate PostHog credentials and store them encrypted on success
+ * Validate PostHog credentials and store them encrypted on success.
  *
- * Request:
+ * Request (cloud mode):
  * {
  *   "api_key": "phx_...",
  *   "project_id": "12345",
- *   "region": "us" | "eu",
- *   "host": "..." (deprecated - ignored, always derived from region)
+ *   "mode": "cloud",
+ *   "region": "us" | "eu"
  * }
  *
- * Response (success):
+ * Request (self-hosted mode):
  * {
- *   "success": true,
- *   "project_name": "My Project"
+ *   "api_key": "phx_...",
+ *   "project_id": "12345",
+ *   "mode": "self_hosted",
+ *   "base_url": "https://posthog.example.com"
  * }
  *
- * Response (error):
- * {
- *   "success": false,
- *   "error": {
- *     "code": "invalid_api_key" | "project_not_found" | "rate_limited" | "network_error",
- *     "message": "User-friendly error message"
- *   }
- * }
+ * Response (success): { "success": true }
+ * Response (error):   { "success": false, "error": { "code": "...", "message": "..." } }
  */
 
 import { NextResponse } from 'next/server'
@@ -36,6 +32,7 @@ import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { validatePostHogCredentials } from '@/lib/integrations/validation'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
+import { validateUrl } from '@/lib/utils/ssrf'
 import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[PostHog Validate]')
@@ -159,13 +156,13 @@ export async function POST(request: Request) {
 
     // Parse request body
     const body = await request.json()
-    const { api_key, project_id, region, host: providedHost } = body
+    const { api_key, project_id, region, mode, base_url } = body
 
     // Validate credential formats before making API calls
     const validation = validatePostHogCredentials({
       apiKey: api_key,
       projectId: project_id,
-      region,
+      region: mode === 'self_hosted' ? undefined : region,
     })
 
     if (!validation.valid) {
@@ -181,9 +178,43 @@ export async function POST(request: Request) {
       )
     }
 
-    // Always derive host from region - don't trust client-provided host
-    // getPostHogHost() includes the /api path needed for API calls
-    const host = getPostHogHost(region)
+    // Derive the PostHog API host based on deployment mode
+    let host: string
+    if (mode === 'self_hosted') {
+      if (!base_url || typeof base_url !== 'string') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'invalid_request',
+              message: 'Self-hosted mode requires a base_url.',
+            },
+          },
+          { status: 400 }
+        )
+      }
+
+      // SSRF check: block private/internal addresses
+      const ssrfError = validateUrl(base_url)
+      if (ssrfError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'invalid_url',
+              message: ssrfError,
+            },
+          },
+          { status: 400 }
+        )
+      }
+
+      // Self-hosted: use the provided URL with /api appended
+      host = base_url.replace(/\/+$/, '') + '/api'
+    } else {
+      // Cloud: derive host from region (includes /api path)
+      host = getPostHogHost(region)
+    }
 
     // Create PostHog client and test connection
     const client = new PostHogClient({
@@ -221,7 +252,12 @@ export async function POST(request: Request) {
       integration_name: 'posthog',
       api_key_encrypted: apiKeyEncrypted,
       project_id_encrypted: projectIdEncrypted,
-      config_json: { region: region || 'us', host },
+      config_json: {
+        mode: mode || 'cloud',
+        region: mode === 'self_hosted' ? null : (region || 'us'),
+        base_url: mode === 'self_hosted' ? base_url : null,
+        host,
+      },
       status: 'connected',
       is_active: true,
       last_validated_at: new Date().toISOString(),

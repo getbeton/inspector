@@ -1,7 +1,8 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Check, ExternalLink } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Check, ExternalLink, Server } from "lucide-react"
 
 interface PostHogPreviewProps {
   isConnected: boolean
@@ -13,6 +14,7 @@ interface PostHogPreviewProps {
 /**
  * Right panel preview for the PostHog connection step.
  * Shows PostHog branding + MTU count after successful connection.
+ * Handles both cloud (US/EU) and self-hosted modes.
  */
 export function PostHogPreview({
   isConnected,
@@ -20,6 +22,8 @@ export function PostHogPreview({
   region,
   className,
 }: PostHogPreviewProps) {
+  const isSelfHosted = region === "self_hosted"
+
   return (
     <div
       className={cn(
@@ -58,11 +62,18 @@ export function PostHogPreview({
               </div>
             )}
 
-            {/* Region info */}
+            {/* Region / Self-hosted info */}
             {region && (
               <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-foreground/5 pt-3">
-                <span>Region</span>
-                <span className="font-medium text-foreground uppercase">{region}</span>
+                <span>{isSelfHosted ? "Deployment" : "Region"}</span>
+                {isSelfHosted ? (
+                  <Badge variant="outline" size="sm">
+                    <Server className="h-3 w-3" />
+                    Self-Hosted
+                  </Badge>
+                ) : (
+                  <span className="font-medium text-foreground uppercase">{region}</span>
+                )}
               </div>
             )}
 
