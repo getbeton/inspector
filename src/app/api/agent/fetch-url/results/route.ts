@@ -71,8 +71,10 @@ export async function GET(req: NextRequest) {
 
       if (error) {
         log.error(`Cross-session lookup failed: ${error.message}`)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
       }
+
+      log.info(`[AUDIT] Cross-session lookup: session=${sessionId} url=${singleUrl} found=true source_session=${data.session_id}`)
 
       return NextResponse.json({
         found: true,
@@ -103,7 +105,7 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types yet
     const { data, error } = await (supabase as any)
       .from('agent_fetch_cache')
-      .select('url, operation, session_id, created_at, content')
+      .select('url, operation, session_id, created_at')
       .eq('workspace_id', workspaceId)
       .in('url', urlList)
       .eq('operation', operation)
@@ -112,11 +114,11 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       log.error(`Batch cross-session lookup failed: ${error.message}`)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     // Build results map — first occurrence per URL is the latest (ordered DESC)
-    const resultsMap: Record<string, { found: boolean; session_id?: string; created_at?: string; data?: unknown }> = {}
+    const resultsMap: Record<string, { found: boolean; session_id?: string; created_at?: string }> = {}
 
     for (const u of urlList) {
       resultsMap[u] = { found: false }
@@ -128,15 +130,16 @@ export async function GET(req: NextRequest) {
           found: true,
           session_id: row.session_id,
           created_at: row.created_at,
-          data: row.content,
         }
       }
     }
 
+    const foundCount = Object.values(resultsMap).filter((r) => r.found).length
+    log.info(`[AUDIT] Batch cross-session lookup: session=${sessionId} urls=${urlList.length} found=${foundCount}`)
+
     return NextResponse.json({ results: resultsMap })
   } catch (e) {
     log.error(`Cross-session lookup failed: ${e}`)
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
