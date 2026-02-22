@@ -171,10 +171,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing url or urls' }, { status: 400 })
     }
 
-    // Batch URL count cap — prevent a single request from firing hundreds of upstream calls
-    if (urls && urls.length > 10) {
+    // Batch URL count cap — prevent a single request from firing too many upstream calls.
+    // Capped at 5 to stay within Vercel's 60s function timeout (each scrape can take 5–30s).
+    if (urls && urls.length > 5) {
       return NextResponse.json(
-        { error: 'Maximum 10 URLs per batch request' },
+        { error: 'Maximum 5 URLs per batch request' },
         { status: 400 }
       )
     }
@@ -265,10 +266,18 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Batch mode — process sequentially to avoid holding the Vercel function open
-    // with 10 concurrent 5–30s scrape calls (would easily exceed the 60s limit).
+    // Batch mode — process sequentially with a wall-clock budget.
+    // Abort remaining URLs if we approach Vercel's 60s function timeout.
+    const BATCH_BUDGET_MS = 50_000
+    const batchStart = Date.now()
     const results: FetchUrlResult[] = []
+
     for (const u of allUrls) {
+      if (Date.now() - batchStart > BATCH_BUDGET_MS) {
+        // Budget exhausted — mark remaining URLs as timed out
+        results.push({ url: u, success: false, cached: false, error: 'Batch wall-clock budget exceeded' })
+        continue
+      }
       results.push(await fetchSingleUrl(client, u, body, session_id))
     }
 
