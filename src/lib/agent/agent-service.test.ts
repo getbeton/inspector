@@ -27,6 +27,10 @@ vi.mock('@/lib/agent/session', () => ({
   updateSessionStatus: vi.fn(),
 }));
 
+vi.mock('@/lib/integrations/credentials', () => ({
+  isIntegrationConfiguredAdmin: vi.fn(),
+}));
+
 vi.mock('@/lib/utils/logger', () => ({
   createModuleLogger: () => ({
     debug: vi.fn(),
@@ -38,10 +42,12 @@ vi.mock('@/lib/utils/logger', () => ({
 
 import { createClient } from '@/lib/supabase/server';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
+import { isIntegrationConfiguredAdmin } from '@/lib/integrations/credentials';
 
 const mockCreateClient = createClient as ReturnType<typeof vi.fn>;
 const mockCreateSession = createSession as ReturnType<typeof vi.fn>;
 const mockUpdateSessionStatus = updateSessionStatus as ReturnType<typeof vi.fn>;
+const mockIsIntegrationConfigured = isIntegrationConfiguredAdmin as ReturnType<typeof vi.fn>;
 
 // Capture fetch calls
 const originalFetch = globalThis.fetch;
@@ -84,6 +90,7 @@ describe('AgentService.triggerAnalysis', () => {
     vi.stubEnv('AGENT_API_URL', 'https://agent.test.com');
     mockCreateSession.mockResolvedValue(undefined);
     mockUpdateSessionStatus.mockResolvedValue(undefined);
+    mockIsIntegrationConfigured.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -130,6 +137,7 @@ describe('AgentService.triggerAnalysis', () => {
     expect(runBody.context.workspace_id).toBe('ws-123');
     expect(runBody.context.session_id).toMatch(/^s_/);
     expect(runBody.context.inspector_callback_url).toBeDefined();
+    expect(runBody.context.capabilities).toBeDefined();
     expect(runBody.context.posthog).toBeUndefined();
 
     // Prompt should contain the website URL

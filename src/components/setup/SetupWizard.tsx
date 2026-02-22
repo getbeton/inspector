@@ -315,7 +315,7 @@ export function SetupWizard({
         setCurrentStepIndex(nextIndex);
       }
     },
-    [currentStepIndex, steps, router, demoMode, markStep, stepStatuses, posthogConnected, attioConnected, firecrawlConnected, posthogRegion]
+    [currentStepIndex, steps, router, demoMode, markStep, stepStatuses, posthogConnected, attioConnected, firecrawlConnected, posthogRegion, firecrawlMode, firecrawlProxy]
   );
 
   const goToPrevStep = useCallback(() => {
