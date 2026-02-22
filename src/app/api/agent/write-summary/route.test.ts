@@ -53,14 +53,25 @@ function makeRequest(body: Record<string, unknown>) {
 
 function createSupabaseMock(overrides?: {
   upsertResult?: { error: null | { message: string } };
+  sessionRow?: { id: string } | null;
 }) {
-  const chain: Record<string, ReturnType<typeof vi.fn>> = {
+  const upsertChain: Record<string, ReturnType<typeof vi.fn>> = {
     upsert: vi.fn().mockResolvedValue(overrides?.upsertResult ?? { error: null }),
   };
 
+  const selectChain: Record<string, ReturnType<typeof vi.fn>> = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: overrides?.sessionRow ?? { id: 'session-uuid' }, error: null }),
+  };
+
   return {
-    from: vi.fn().mockReturnValue(chain),
-    _chain: chain,
+    from: vi.fn().mockImplementation((table: string) => {
+      if (table === 'workspace_agent_sessions') return selectChain;
+      return upsertChain;
+    }),
+    _chain: upsertChain,
+    _selectChain: selectChain,
   };
 }
 

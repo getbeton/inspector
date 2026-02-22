@@ -102,7 +102,7 @@ describe('getDefaultSampleData', () => {
 describe('deep link URL construction', () => {
   // TC3: PostHog deep link (cloud)
   it('builds PostHog US deep link from region', () => {
-    const region = 'us'
+    const region: string = 'us'
     const host = region === 'eu' ? 'https://eu.posthog.com' : 'https://us.posthog.com'
     expect(host).toBe('https://us.posthog.com')
   })

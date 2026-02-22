@@ -30,7 +30,7 @@ function createChainableMock() {
 
   const createChain = () => {
     const chain: Record<string, unknown> = {}
-    const methods = ['select', 'eq', 'single', 'insert', 'delete']
+    const methods = ['select', 'eq', 'single', 'insert', 'delete', 'update']
 
     methods.forEach((method) => {
       chain[method] = vi.fn().mockImplementation(() => chain)
