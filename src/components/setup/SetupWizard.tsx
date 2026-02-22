@@ -9,7 +9,8 @@ import { ProgressIndicator } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
-import { DealFieldMappingStep, type DealMappingState, type SampleData } from "./steps/DealFieldMappingStep";
+import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
+import { FALLBACK_SAMPLE, type SampleData } from "@/lib/setup/sample-data";
 import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
 import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
@@ -41,20 +42,6 @@ interface StepPanels {
   preview: ReactNode;
 }
 
-/**
- * Default sample data for previews (loaded from API or fallback)
- */
-const DEFAULT_SAMPLE: SampleData = {
-  company_name: "Acme Corp",
-  company_domain: "acme.com",
-  signal_name: "Product Qualified Lead",
-  signal_type: "pql",
-  health_score: 85,
-  concrete_grade: "M75",
-  signal_count: 12,
-  deal_value: 48000,
-  detected_at: new Date().toISOString().split("T")[0],
-};
 
 export interface SetupWizardProps {
   billingEnabled?: boolean;
@@ -86,8 +73,10 @@ export function SetupWizard({
     if (!setupStatus) return "posthog";
     if (!setupStatus.integrations.posthog) return "posthog";
     if (!setupStatus.integrations.attio) return "attio";
-    if (billingEnabled && !setupStatus.billing.configured) return "billing";
-    return "complete";
+    // Resume into mapping/website steps — these don't have persistent
+    // completion flags yet, so always show them after Attio connects.
+    // TODO: Track attio_mapping + website completion in setupStatus
+    return "attio_mapping";
   };
 
   const [currentStep, setCurrentStep] = useState<WizardStep>(getInitialStep);
@@ -110,7 +99,7 @@ export function SetupWizard({
   });
 
   // Sample data for previews
-  const [sampleData, setSampleData] = useState<SampleData>(DEFAULT_SAMPLE);
+  const [sampleData, setSampleData] = useState<SampleData>(FALLBACK_SAMPLE);
 
   // Load sample data on mount
   useEffect(() => {
@@ -148,21 +137,6 @@ export function SetupWizard({
       const next = getNextStep(step);
       if (next === "complete") {
         trackOnboardingCompleted();
-
-        // Phase 8: Trigger agent session on completion
-        try {
-          await fetch("/api/agent/sessions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              session_type: "setup_complete",
-              trigger: "onboarding_wizard",
-            }),
-          });
-        } catch {
-          // Non-blocking — don't prevent redirect if agent trigger fails
-        }
-
         router.push("/signals");
       } else {
         setCurrentStep(next);
@@ -227,7 +201,7 @@ export function SetupWizard({
         return {
           config: (
             <AttioStep
-              onSuccess={() => handleAttioSuccess()}
+              onSuccess={handleAttioSuccess}
               onWorkspaceName={setAttioWorkspaceName}
             />
           ),

@@ -1,22 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireWorkspace } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
-
-/**
- * Hardcoded fallback sample data for preview population.
- * Used when no real account data exists in the workspace.
- */
-const FALLBACK_SAMPLE = {
-  company_name: 'Acme Corp',
-  company_domain: 'acme.com',
-  signal_name: 'Product Qualified Lead',
-  signal_type: 'pql',
-  health_score: 85,
-  concrete_grade: 'M75',
-  signal_count: 12,
-  deal_value: 48000,
-  detected_at: new Date().toISOString().split('T')[0],
-}
+import { FALLBACK_SAMPLE } from '@/lib/setup/sample-data'
 
 /**
  * GET /api/integrations/attio/sample-data
@@ -33,18 +18,19 @@ export async function GET() {
     // Note: `as any` cast needed because Supabase types may not include all tables yet
     const { data: account } = await (supabase as any)
       .from('accounts')
-      .select('name, domain, health_score, signal_count, concrete_grade')
+      .select('id, name, domain, health_score, signal_count, concrete_grade')
       .eq('workspace_id', workspaceId)
       .order('signal_count', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (account?.name) {
-      // Also try to get the latest signal for this account
+      // Fetch the latest signal scoped to this specific account
       const { data: signal } = await (supabase as any)
         .from('signals')
         .select('name, signal_type, detected_at')
         .eq('workspace_id', workspaceId)
+        .eq('account_id', account.id)
         .order('detected_at', { ascending: false })
         .limit(1)
         .maybeSingle()
