@@ -5,13 +5,42 @@ import { cn } from "@/lib/utils"
 import { Popover, PopoverTrigger, PopoverPopup } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ChevronDown, Search, Plus } from "lucide-react"
+import {
+  ChevronDown,
+  Search,
+  Type,
+  Hash,
+  Calendar,
+  DollarSign,
+  CheckSquare,
+  List,
+  Mail,
+  Phone,
+  Link2,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+
+/** Map Attio field types to icons */
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  text: Type,
+  number: Hash,
+  currency: DollarSign,
+  date: Calendar,
+  checkbox: CheckSquare,
+  select: List,
+  status: List,
+  email: Mail,
+  phone: Phone,
+  url: Link2,
+}
 
 export interface ComboboxOption {
   value: string
   label: string
   group?: string
   type?: string
+  /** Predefined values for select/status fields */
+  selectOptions?: Array<{ value: string; label: string }>
 }
 
 export interface ComboboxProps {
@@ -20,8 +49,6 @@ export interface ComboboxProps {
   options: ComboboxOption[]
   placeholder?: string
   searchable?: boolean
-  onCreateNew?: () => void
-  createNewLabel?: string
   disabled?: boolean
   className?: string
 }
@@ -30,11 +57,11 @@ export interface ComboboxProps {
  * Searchable single-select dropdown with grouped options.
  *
  * Follows the EventPicker pattern (Popover + Input + ScrollArea)
- * but supports:
- * - Option grouping (e.g., "Deal fields", "Company fields")
- * - Single-select mode
- * - "Create new..." action at the bottom
- * - Keyboard navigation
+ * and supports:
+ * - Option grouping (e.g., "Deal", "Company", "Person" subsections)
+ * - Type icons next to each option (text, number, date, etc.)
+ * - "Group → Label" display in the closed trigger
+ * - Keyboard navigation (arrows, enter, escape)
  */
 export function Combobox({
   value,
@@ -42,8 +69,6 @@ export function Combobox({
   options,
   placeholder = "Select...",
   searchable = true,
-  onCreateNew,
-  createNewLabel = "Create new...",
   disabled = false,
   className,
 }: ComboboxProps) {
@@ -90,7 +115,6 @@ export function Combobox({
     if (open) {
       setSearch("")
       setHighlightIndex(-1)
-      // Focus the search input after popover opens
       requestAnimationFrame(() => {
         searchRef.current?.focus()
       })
@@ -143,8 +167,13 @@ export function Combobox({
     [flatFiltered, highlightIndex, handleSelect]
   )
 
-  // Get selected option label
-  const selectedLabel = options.find((o) => o.value === value)?.label
+  // Selected option — used for trigger display and type info
+  const selectedOption = options.find((o) => o.value === value)
+  const displayLabel = selectedOption
+    ? selectedOption.group
+      ? `${selectedOption.group} \u2192 ${selectedOption.label}`
+      : selectedOption.label
+    : null
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -162,19 +191,20 @@ export function Combobox({
       >
         <span
           className={cn(
-            "truncate",
-            !selectedLabel && "text-muted-foreground"
+            "truncate text-xs",
+            !displayLabel && "text-muted-foreground"
           )}
         >
-          {selectedLabel || placeholder}
+          {displayLabel || placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </PopoverTrigger>
 
       <PopoverPopup
         side="bottom"
         align="start"
-        className="w-[var(--anchor-width)] max-h-[20rem]"
+        className="min-w-[var(--anchor-width)] w-72"
+        viewportClassName="py-2"
       >
         <div onKeyDown={handleKeyDown}>
           {/* Search input */}
@@ -184,7 +214,7 @@ export function Combobox({
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   ref={searchRef}
-                  placeholder="Search..."
+                  placeholder="Search fields..."
                   value={search}
                   onChange={(e) => {
                     setSearch((e.target as HTMLInputElement).value)
@@ -222,6 +252,7 @@ export function Combobox({
                       const flatIdx = flatFiltered.indexOf(opt)
                       const isHighlighted = flatIdx === highlightIndex
                       const isSelected = opt.value === value
+                      const TypeIcon = TYPE_ICONS[opt.type || "text"] || Type
                       return (
                         <button
                           key={opt.value}
@@ -229,19 +260,15 @@ export function Combobox({
                           data-combobox-item
                           onClick={() => handleSelect(opt.value)}
                           className={cn(
-                            "w-full text-left px-2 py-1.5 rounded-md text-sm transition-colors",
+                            "w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors",
                             "flex items-center gap-2",
                             isSelected && "bg-primary/10 font-medium",
                             isHighlighted && !isSelected && "bg-muted",
                             !isSelected && !isHighlighted && "hover:bg-muted/50"
                           )}
                         >
+                          <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           <span className="truncate">{opt.label}</span>
-                          {opt.type && (
-                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
-                              {opt.type}
-                            </span>
-                          )}
                         </button>
                       )
                     })}
@@ -250,23 +277,6 @@ export function Combobox({
               )}
             </div>
           </ScrollArea>
-
-          {/* Create new action */}
-          {onCreateNew && (
-            <div className="px-1 pt-1 mt-1 border-t border-border">
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false)
-                  onCreateNew()
-                }}
-                className="w-full text-left px-2 py-1.5 rounded-md text-sm text-primary hover:bg-primary/5 transition-colors flex items-center gap-2"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {createNewLabel}
-              </button>
-            </div>
-          )}
         </div>
       </PopoverPopup>
     </Popover>

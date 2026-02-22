@@ -50,6 +50,10 @@ export interface SetupWizardProps {
     billing: { configured: boolean };
   };
   websiteUrl?: string | null;
+  /** Demo mode: mock data, no API calls, free prev/next navigation */
+  demoMode?: boolean;
+  /** Auth bypass mode: show skip buttons on each step */
+  authBypass?: boolean;
   className?: string;
 }
 
@@ -65,6 +69,8 @@ export function SetupWizard({
   billingEnabled = false,
   setupStatus,
   websiteUrl,
+  demoMode = false,
+  authBypass = false,
   className,
 }: SetupWizardProps) {
   const router = useRouter();
@@ -79,30 +85,36 @@ export function SetupWizard({
     return "attio_mapping";
   };
 
-  const [currentStep, setCurrentStep] = useState<WizardStep>(getInitialStep);
+  const [currentStep, setCurrentStep] = useState<WizardStep>(
+    demoMode ? "posthog" : getInitialStep
+  );
 
   // Data passed between steps
-  const [mtuCount, setMtuCount] = useState<number>(0);
-  const [posthogRegion, setPosthogRegion] = useState<string>("");
-  const [attioWorkspaceName, setAttioWorkspaceName] = useState<string>("");
+  const [mtuCount, setMtuCount] = useState<number>(demoMode ? 1_420 : 0);
+  const [posthogRegion, setPosthogRegion] = useState<string>(demoMode ? "US" : "");
+  const [attioWorkspaceName, setAttioWorkspaceName] = useState<string>(
+    demoMode ? "Acme Sales" : ""
+  );
   const [posthogConnected, setPosthogConnected] = useState(
-    setupStatus?.integrations.posthog ?? false
+    demoMode || (setupStatus?.integrations.posthog ?? false)
   );
   const [attioConnected, setAttioConnected] = useState(
-    setupStatus?.integrations.attio ?? false
+    demoMode || (setupStatus?.integrations.attio ?? false)
   );
 
   // Deal mapping state for live preview
   const [dealMappingState, setDealMappingState] = useState<DealMappingState>({
     dealNameTemplate: "{{company_name}} — {{signal_name}}",
+    notificationText: "New deal signal detected",
     fieldMappings: [],
   });
 
   // Sample data for previews
   const [sampleData, setSampleData] = useState<SampleData>(FALLBACK_SAMPLE);
 
-  // Load sample data on mount
+  // Load sample data on mount (skip in demo mode)
   useEffect(() => {
+    if (demoMode || authBypass) return;
     fetch("/api/integrations/attio/sample-data")
       .then((res) => res.json())
       .then((data) => {
@@ -111,7 +123,7 @@ export function SetupWizard({
       .catch(() => {
         // Keep default sample on error
       });
-  }, []);
+  }, [demoMode, authBypass]);
 
   const steps = useMemo(() => {
     const base: WizardStep[] = ["posthog", "attio", "attio_mapping", "website"];
@@ -131,18 +143,31 @@ export function SetupWizard({
     [steps]
   );
 
+  const getPrevStep = useCallback(
+    (current: WizardStep): WizardStep | null => {
+      const currentIndex = steps.indexOf(current);
+      if (currentIndex <= 0) return null;
+      return steps[currentIndex - 1];
+    },
+    [steps]
+  );
+
   const advanceFrom = useCallback(
     async (step: WizardStep) => {
-      trackSetupStepCompleted(step);
+      if (!demoMode) trackSetupStepCompleted(step);
       const next = getNextStep(step);
       if (next === "complete") {
+        if (demoMode) {
+          // In demo mode, just stay on the last step
+          return;
+        }
         trackOnboardingCompleted();
         router.push("/signals");
       } else {
         setCurrentStep(next);
       }
     },
-    [getNextStep, router]
+    [getNextStep, router, demoMode]
   );
 
   // Step handlers
@@ -181,6 +206,17 @@ export function SetupWizard({
     advanceFrom("billing");
   }, [advanceFrom]);
 
+  // Skip button shown on each step when auth is bypassed
+  const skipButton = authBypass ? (
+    <button
+      type="button"
+      onClick={() => advanceFrom(currentStep)}
+      className="w-full mt-4 py-2 text-xs font-medium text-muted-foreground border-2 border-dashed border-foreground/10 rounded-lg hover:border-foreground/20 hover:text-foreground transition-colors"
+    >
+      Skip step (auth bypass)
+    </button>
+  ) : null;
+
   /**
    * Render dual-panel content for the current step
    */
@@ -188,7 +224,35 @@ export function SetupWizard({
     switch (currentStep) {
       case "posthog":
         return {
-          config: <PostHogStep onSuccess={handlePostHogSuccess} />,
+          config: demoMode ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-5 rounded bg-[#1D4AFF] flex items-center justify-center">
+                  <span className="text-white font-bold text-[10px]">P</span>
+                </div>
+                <span className="font-medium">Connect PostHog</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Enter your PostHog API key and project ID to sync product analytics data.
+              </p>
+              <div className="space-y-3 opacity-60 pointer-events-none">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">API Key</label>
+                  <div className="h-9 rounded border-2 border-foreground/20 bg-muted/30 px-3 flex items-center text-xs text-muted-foreground font-mono">phx_demo_key_xxxxx</div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Project ID</label>
+                  <div className="h-9 rounded border-2 border-foreground/20 bg-muted/30 px-3 flex items-center text-xs text-muted-foreground font-mono">12345</div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                <p className="text-sm text-green-800 font-medium">Connected (demo)</p>
+                <p className="text-xs text-green-600 mt-1">1,420 MTUs tracked &middot; US region</p>
+              </div>
+            </div>
+          ) : (
+            <div><PostHogStep onSuccess={handlePostHogSuccess} />{skipButton}</div>
+          ),
           preview: (
             <PostHogPreview
               isConnected={posthogConnected}
@@ -199,11 +263,36 @@ export function SetupWizard({
         };
       case "attio":
         return {
-          config: (
-            <AttioStep
-              onSuccess={handleAttioSuccess}
-              onWorkspaceName={setAttioWorkspaceName}
-            />
+          config: demoMode ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-5 rounded bg-[#5B5FC7] flex items-center justify-center">
+                  <span className="text-white font-bold text-[10px]">A</span>
+                </div>
+                <span className="font-medium">Connect Attio CRM</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Enter your Attio API key to sync signals and create deals in your CRM.
+              </p>
+              <div className="space-y-3 opacity-60 pointer-events-none">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">API Key</label>
+                  <div className="h-9 rounded border-2 border-foreground/20 bg-muted/30 px-3 flex items-center text-xs text-muted-foreground font-mono">attio_demo_key_xxxxx</div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                <p className="text-sm text-green-800 font-medium">Connected (demo)</p>
+                <p className="text-xs text-green-600 mt-1">Workspace: Acme Sales</p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <AttioStep
+                onSuccess={handleAttioSuccess}
+                onWorkspaceName={setAttioWorkspaceName}
+              />
+              {skipButton}
+            </div>
           ),
           preview: (
             <AttioConnectionPreview
@@ -215,15 +304,20 @@ export function SetupWizard({
       case "attio_mapping":
         return {
           config: (
-            <DealFieldMappingStep
-              onSuccess={handleFieldMappingSuccess}
-              onMappingChange={setDealMappingState}
-            />
+            <div>
+              <DealFieldMappingStep
+                onSuccess={handleFieldMappingSuccess}
+                onMappingChange={setDealMappingState}
+                demoMode={demoMode || authBypass}
+              />
+              {skipButton}
+            </div>
           ),
           preview: (
             <div className="space-y-4">
               <SlackNotificationPreview
                 dealNameTemplate={dealMappingState.dealNameTemplate}
+                notificationText={dealMappingState.notificationText}
                 sampleData={sampleData}
               />
               <CrmCardPreview
@@ -236,7 +330,7 @@ export function SetupWizard({
         };
       case "website":
         return {
-          config: <WebsiteStep initialUrl={websiteUrl} onSuccess={handleWebsiteSuccess} />,
+          config: <div><WebsiteStep initialUrl={websiteUrl} onSuccess={handleWebsiteSuccess} />{skipButton}</div>,
           preview: (
             <div className="rounded-lg border-2 border-foreground/10 bg-background p-4">
               <div className="flex items-center gap-3 mb-4">
@@ -265,7 +359,7 @@ export function SetupWizard({
         };
       case "billing":
         return {
-          config: <BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />,
+          config: <div><BillingStep mtuCount={mtuCount} onComplete={handleBillingComplete} />{skipButton}</div>,
           preview: (
             <div className="rounded-lg border-2 border-foreground/10 bg-background p-4 space-y-4">
               <div className="text-center py-4">
@@ -316,10 +410,40 @@ export function SetupWizard({
         </div>
       </div>
 
-      {/* Step counter */}
-      <p className="mt-4 text-center text-xs text-muted-foreground">
-        Step {steps.indexOf(currentStep) + 1} of {steps.length}
-      </p>
+      {/* Demo mode navigation */}
+      {demoMode && (
+        <div className="mt-6 flex items-center justify-between rounded-lg border-2 border-dashed border-foreground/10 bg-muted/20 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              const prev = getPrevStep(currentStep);
+              if (prev) setCurrentStep(prev);
+            }}
+            disabled={!getPrevStep(currentStep)}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            &larr; Previous
+          </button>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Demo Mode &middot; Step {steps.indexOf(currentStep) + 1}/{steps.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => advanceFrom(currentStep)}
+            disabled={steps.indexOf(currentStep) >= steps.length - 1}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Next &rarr;
+          </button>
+        </div>
+      )}
+
+      {/* Step counter (non-demo) */}
+      {!demoMode && (
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Step {steps.indexOf(currentStep) + 1} of {steps.length}
+        </p>
+      )}
     </div>
   );
 }
