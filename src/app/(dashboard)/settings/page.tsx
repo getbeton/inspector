@@ -67,7 +67,6 @@ interface ExtraField {
 interface SelfHostableConfig {
   cloudUrl: string
   urlPlaceholder?: string
-  selfHostedHelpPath?: string
 }
 
 interface IntegrationFieldConfig {
@@ -86,9 +85,8 @@ const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
     selfHostable: {
       cloudUrl: 'us.posthog.com',
       urlPlaceholder: 'https://posthog.example.com',
-      selfHostedHelpPath: '/settings/user-api-keys',
     },
-    helpUrl: 'https://us.posthog.com/settings/project#variables',
+    helpUrl: 'https://us.posthog.com/settings/user-api-keys',
   },
   attio: {
     fields: [
@@ -149,10 +147,16 @@ function isValidInstanceUrl(raw: string): boolean {
   }
 }
 
-function buildHelpUrl(raw: string, path: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, '')
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-  return withProtocol.replace(/\/+$/, '') + path
+/** Extract pathname + hash from a cloud helpUrl, then graft it onto a self-hosted base. */
+function buildHelpUrl(instanceRaw: string, cloudHelpUrl: string): string {
+  const base = instanceRaw.trim().replace(/\/+$/, '')
+  const withProtocol = /^https?:\/\//i.test(base) ? base : `https://${base}`
+  try {
+    const cloud = new URL(cloudHelpUrl)
+    return withProtocol.replace(/\/+$/, '') + cloud.pathname + cloud.hash
+  } catch {
+    return withProtocol
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,10 +465,9 @@ function IntegrationCard({
               {/* Help link — with live URL validation for self-hosted */}
               {(() => {
                 const isSelfHosted = definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted'
-                if (isSelfHosted) {
-                  const path = fieldConfig.selfHostable!.selfHostedHelpPath ?? ''
+                if (isSelfHosted && fieldConfig.helpUrl) {
                   const raw = editValues.base_url || ''
-                  const helpHref = raw.trim() ? buildHelpUrl(raw, path) : ''
+                  const helpHref = raw.trim() ? buildHelpUrl(raw, fieldConfig.helpUrl) : ''
                   const valid = raw.trim() ? isValidInstanceUrl(raw) : false
 
                   if (valid) {
@@ -475,8 +478,7 @@ function IntegrationCard({
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                       >
-                        Get your API key{path && <span className="text-muted-foreground ml-0.5 font-mono">{path}</span>}
-                        {' '}<ExternalLink className="h-3 w-3" />
+                        Get your API key <ExternalLink className="h-3 w-3" />
                       </a>
                     )
                   }
