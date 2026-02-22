@@ -7,7 +7,6 @@ import { Trash2 } from "lucide-react"
 
 export interface DealFieldRowProps {
   attioAttributeSlug: string | null
-  attioObjectSlug: string
   valueTemplate: string
   options: ComboboxOption[]
   onAttributeChange: (slug: string | null, objectSlug: string, title: string, type: string) => void

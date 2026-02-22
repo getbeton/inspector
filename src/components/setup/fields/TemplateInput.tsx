@@ -79,7 +79,7 @@ export function TemplateInput({
       <Input
         ref={inputRef}
         value={value}
-        onChange={(e) => onChange((e.target as HTMLInputElement).value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         className="font-mono text-xs"

@@ -74,6 +74,11 @@ export function CreateFieldDialog({
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_|_$/g, "")
 
+    if (!slug) {
+      setError("Field name must contain at least one letter or number")
+      return
+    }
+
     setIsCreating(true)
     setError(null)
 
@@ -133,7 +138,7 @@ export function CreateFieldDialog({
               <Input
                 id="field-name"
                 value={fieldName}
-                onChange={(e) => setFieldName((e.target as HTMLInputElement).value)}
+                onChange={(e) => setFieldName(e.target.value)}
                 placeholder="e.g., Health Score"
                 disabled={isCreating}
               />
