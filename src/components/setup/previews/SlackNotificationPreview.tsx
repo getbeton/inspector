@@ -6,6 +6,7 @@ import type { SampleData } from "@/lib/setup/sample-data"
 
 interface SlackNotificationPreviewProps {
   dealNameTemplate: string
+  notificationText: string
   sampleData: SampleData
   className?: string
 }
@@ -17,10 +18,12 @@ interface SlackNotificationPreviewProps {
  */
 export function SlackNotificationPreview({
   dealNameTemplate,
+  notificationText,
   sampleData,
   className,
 }: SlackNotificationPreviewProps) {
   const resolvedName = resolveTemplate(dealNameTemplate || "New Signal Detected", sampleData)
+  const resolvedNotification = resolveTemplate(notificationText || "New deal signal detected", sampleData)
 
   return (
     <div className={cn("rounded-lg border-2 border-foreground/10 bg-white overflow-hidden", className)}>
@@ -46,9 +49,9 @@ export function SlackNotificationPreview({
           </div>
         </div>
 
-        {/* Signal notification */}
+        {/* Signal notification — resolved from user-editable template */}
         <div className="text-sm text-gray-800">
-          New deal signal detected
+          {resolvedNotification}
         </div>
 
         {/* Embedded deal card */}
@@ -62,17 +65,6 @@ export function SlackNotificationPreview({
             <div className="flex items-center gap-2 text-xs">
               <span className="text-gray-500 w-20">Signal</span>
               <span className="text-gray-800">{sampleData.signal_name}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-gray-500 w-20">Grade</span>
-              <span className={cn(
-                "font-bold",
-                sampleData.concrete_grade === "M100" && "text-green-600",
-                sampleData.concrete_grade === "M75" && "text-blue-600",
-                sampleData.concrete_grade === "M50" && "text-yellow-600",
-              )}>
-                {sampleData.concrete_grade}
-              </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
               <span className="text-gray-500 w-20">Health</span>
