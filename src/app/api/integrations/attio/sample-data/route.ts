@@ -39,6 +39,7 @@ export async function GET() {
         sample: {
           company_name: account.name || FALLBACK_SAMPLE.company_name,
           company_domain: account.domain || FALLBACK_SAMPLE.company_domain,
+          user_email: FALLBACK_SAMPLE.user_email,
           signal_name: signal?.name || FALLBACK_SAMPLE.signal_name,
           signal_type: signal?.signal_type || FALLBACK_SAMPLE.signal_type,
           health_score: account.health_score ?? FALLBACK_SAMPLE.health_score,

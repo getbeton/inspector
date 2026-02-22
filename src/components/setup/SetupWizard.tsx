@@ -11,7 +11,8 @@ import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
-import { FALLBACK_SAMPLE, type SampleData } from "@/lib/setup/sample-data";
+import { FALLBACK_SAMPLE, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
+import { useSession } from "@/components/auth/session-provider";
 import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
 import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
@@ -150,6 +151,7 @@ export function SetupWizard({
   className,
 }: SetupWizardProps) {
   const router = useRouter();
+  const { session } = useSession();
 
   // Fetch integration definitions (skip in demo mode)
   const { data: definitions, isLoading: definitionsLoading } = useIntegrationDefinitions();
@@ -234,6 +236,33 @@ export function SetupWizard({
         // Keep default sample on error
       });
   }, [demoMode, authBypass]);
+
+  // Enrich sample data with user's email-derived company info
+  const enrichedSampleData = useMemo<SampleData>(() => {
+    const base = { ...sampleData };
+    if (!demoMode && session?.email && session.sub !== "auth-bypass") {
+      const { companyName, companyDomain } = deriveCompanyFromEmail(session.email);
+      base.company_name = companyName;
+      base.company_domain = companyDomain;
+      base.user_email = session.email;
+    }
+    return base;
+  }, [sampleData, session, demoMode]);
+
+  // Derive PostHog host from region for deep links
+  const posthogHost = useMemo(() => {
+    if (!posthogConnected || !posthogRegion) return null;
+    if (posthogRegion === "self_hosted") return null; // No standard deep link for self-hosted
+    return posthogRegion === "eu"
+      ? "https://eu.posthog.com"
+      : "https://us.posthog.com";
+  }, [posthogConnected, posthogRegion]);
+
+  // Attio workspace slug (derived from name — lowercase, hyphenated)
+  const attioWorkspaceSlug = useMemo(() => {
+    if (!attioConnected || !attioWorkspaceName) return null;
+    return attioWorkspaceName.toLowerCase().replace(/\s+/g, "-");
+  }, [attioConnected, attioWorkspaceName]);
 
   // Sync posthogConnected from definitions
   useEffect(() => {
@@ -449,12 +478,14 @@ export function SetupWizard({
               <SlackNotificationPreview
                 dealNameTemplate={dealMappingState.dealNameTemplate}
                 notificationText={dealMappingState.notificationText}
-                sampleData={sampleData}
+                sampleData={enrichedSampleData}
+                posthogHost={posthogHost}
               />
               <CrmCardPreview
                 mappingState={dealMappingState}
-                sampleData={sampleData}
+                sampleData={enrichedSampleData}
                 attioWorkspaceName={attioWorkspaceName}
+                attioWorkspaceSlug={attioWorkspaceSlug}
               />
             </div>
           ),

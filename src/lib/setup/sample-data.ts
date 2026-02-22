@@ -13,6 +13,7 @@
 export interface SampleData extends Record<string, unknown> {
   company_name: string
   company_domain: string
+  user_email: string
   signal_name: string
   signal_type: string
   health_score: number
@@ -24,9 +25,27 @@ export interface SampleData extends Record<string, unknown> {
 /**
  * Hardcoded fallback when no real account data exists in the workspace.
  */
+/**
+ * Derive company info from a user email address.
+ * e.g. user@acme.com → { companyName: "Acme", companyDomain: "acme.com" }
+ */
+export function deriveCompanyFromEmail(email: string): {
+  companyName: string
+  companyDomain: string
+} {
+  const domain = email.split("@")[1] || ""
+  const name = domain.split(".")[0] || "Company"
+  const companyName = name.charAt(0).toUpperCase() + name.slice(1)
+  return { companyName, companyDomain: domain }
+}
+
+/**
+ * Hardcoded fallback when no real account data exists in the workspace.
+ */
 export const FALLBACK_SAMPLE: SampleData = {
   company_name: "Acme Corp",
   company_domain: "acme.com",
+  user_email: "user@acme.com",
   signal_name: "Product Qualified Lead",
   signal_type: "pql",
   health_score: 85,

@@ -8,6 +8,8 @@ interface SlackNotificationPreviewProps {
   dealNameTemplate: string
   notificationText: string
   sampleData: SampleData
+  /** PostHog host URL for building the user deep link (e.g., "https://us.posthog.com") */
+  posthogHost?: string | null
   className?: string
 }
 
@@ -15,11 +17,14 @@ interface SlackNotificationPreviewProps {
  * Slack notification mockup for the preview panel.
  * Shows what a Beton signal notification looks like in Slack.
  * Resolves template variables against sample data.
+ *
+ * Displays company domain, user email, and PostHog deep link icon.
  */
 export function SlackNotificationPreview({
   dealNameTemplate,
   notificationText,
   sampleData,
+  posthogHost,
   className,
 }: SlackNotificationPreviewProps) {
   const resolvedName = resolveTemplate(dealNameTemplate || "New Signal Detected", sampleData)
@@ -58,9 +63,51 @@ export function SlackNotificationPreview({
         <div className="border-l-4 border-primary rounded bg-gray-50 p-3 space-y-2">
           <div className="font-semibold text-sm text-gray-900">{resolvedName}</div>
           <div className="space-y-1">
+            {/* Company with domain */}
             <div className="flex items-center gap-2 text-xs">
               <span className="text-gray-500 w-20">Company</span>
               <span className="text-gray-800 font-medium">{sampleData.company_name}</span>
+              <span className="text-gray-400 font-mono text-[10px]">{sampleData.company_domain}</span>
+            </div>
+            {/* User with email + PostHog icon */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500 w-20">User</span>
+              <span className="text-gray-800 font-mono text-[10px]">{sampleData.user_email}</span>
+              {posthogHost ? (
+                <a
+                  href={posthogHost}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  title="View in PostHog"
+                >
+                  <picture>
+                    <source
+                      srcSet="https://cdn.brandfetch.io/id2veLU_gI/theme/dark/symbol.svg"
+                      media="(prefers-color-scheme: dark)"
+                    />
+                    <img
+                      src="https://cdn.brandfetch.io/id2veLU_gI/theme/light/symbol.svg"
+                      alt="PostHog"
+                      className="h-4 w-4"
+                    />
+                  </picture>
+                </a>
+              ) : (
+                <span className="inline-flex items-center opacity-40" title="Connect PostHog to enable deep links">
+                  <picture>
+                    <source
+                      srcSet="https://cdn.brandfetch.io/id2veLU_gI/theme/dark/symbol.svg"
+                      media="(prefers-color-scheme: dark)"
+                    />
+                    <img
+                      src="https://cdn.brandfetch.io/id2veLU_gI/theme/light/symbol.svg"
+                      alt=""
+                      className="h-4 w-4"
+                    />
+                  </picture>
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-xs">
               <span className="text-gray-500 w-20">Signal</span>
