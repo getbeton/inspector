@@ -1,7 +1,8 @@
 /**
  * POST /api/integrations/firecrawl/validate
  *
- * Validate Firecrawl credentials and store them encrypted on success.
+ * Dry-run validation of Firecrawl credentials — does NOT store anything.
+ * Credential storage is handled by the generic POST /api/integrations/[name].
  *
  * Request:
  * {
@@ -22,11 +23,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { createFirecrawlClient, FirecrawlAuthError, FirecrawlPaymentError, FirecrawlRateLimitError } from '@/lib/integrations/firecrawl'
-import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 import { isPrivateHost } from '@/lib/utils/ssrf'
-import type { IntegrationConfigInsert } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[Firecrawl Validate]')
 
@@ -208,49 +207,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // Connection successful — encrypt and store credentials
-    const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
-      apiKey: api_key,
-    })
-
-    const configData: IntegrationConfigInsert = {
-      workspace_id: membership.workspaceId,
-      integration_name: 'firecrawl',
-      api_key_encrypted: apiKeyEncrypted,
-      project_id_encrypted: projectIdEncrypted,
-      config_json: {
-        mode: mode || 'cloud',
-        base_url: base_url || null,
-        proxy: proxy || null,
-      },
-      status: 'connected',
-      is_active: true,
-      last_validated_at: new Date().toISOString(),
-    }
-
-    const result = await supabase
-      .from('integration_configs')
-      // @ts-expect-error — Supabase PostgREST narrows .upsert() param to `never`; configData shape is manually verified as IntegrationConfigInsert
-      .upsert(configData, {
-        onConflict: 'workspace_id,integration_name',
-      })
-      .select()
-      .single()
-
-    if (result.error) {
-      log.error('Error saving config:', result.error)
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'storage_error',
-            message: 'Failed to save configuration. Please try again.',
-          },
-        },
-        { status: 500 }
-      )
-    }
-
+    // Validation passed — credential storage is handled by
+    // the generic POST /api/integrations/[name] route.
     return NextResponse.json({
       success: true,
       message: 'Firecrawl connected successfully',

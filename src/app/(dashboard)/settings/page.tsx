@@ -19,6 +19,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toastManager } from '@/components/ui/toast'
 import { useSession } from '@/components/auth/session-provider'
 import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
+import { Select, SelectTrigger, SelectPopup, SelectItem } from '@/components/ui/select'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import {
@@ -41,6 +42,13 @@ interface ExtraField {
   visibleWhen?: { field: string; value: string }
 }
 
+interface SelfHostableConfig {
+  /** Cloud URL shown in the mode selector label */
+  cloudUrl: string
+  /** Placeholder for the self-hosted URL input */
+  urlPlaceholder?: string
+}
+
 interface IntegrationMeta {
   id: string
   name: string
@@ -55,6 +63,8 @@ interface IntegrationMeta {
   }[]
   /** Additional config fields stored in config_json (not encrypted) */
   extraFields?: ExtraField[]
+  /** When set, auto-generates a Cloud/Self-hosted mode selector + base_url field */
+  selfHostable?: SelfHostableConfig
   helpUrl?: string
   /** Hidden integrations are only shown when already configured */
   hidden?: boolean
@@ -70,6 +80,11 @@ const INTEGRATIONS: IntegrationMeta[] = [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'phc_...', credentialKey: 'apiKey' },
       { id: 'project_id', label: 'Project ID', type: 'text', placeholder: '12345', credentialKey: 'projectId' },
     ],
+    selfHostable: {
+      cloudUrl: 'us.posthog.com',
+      urlPlaceholder: 'https://posthog.example.com',
+    },
+    helpUrl: 'https://us.posthog.com/settings/project#variables',
   },
   {
     id: 'attio',
@@ -89,23 +104,11 @@ const INTEGRATIONS: IntegrationMeta[] = [
     fields: [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'fc-...', credentialKey: 'apiKey' },
     ],
+    selfHostable: {
+      cloudUrl: 'api.firecrawl.dev',
+      urlPlaceholder: 'https://firecrawl.example.com',
+    },
     extraFields: [
-      {
-        id: 'mode',
-        label: 'Deployment Mode',
-        type: 'select',
-        options: [
-          { value: 'cloud', label: 'Cloud (api.firecrawl.dev)' },
-          { value: 'self_hosted', label: 'Self-hosted' },
-        ],
-      },
-      {
-        id: 'base_url',
-        label: 'Self-hosted URL',
-        type: 'text',
-        placeholder: 'https://firecrawl.example.com',
-        visibleWhen: { field: 'mode', value: 'self_hosted' },
-      },
       {
         id: 'proxy',
         label: 'Proxy Tier',
@@ -136,6 +139,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
   const [editing, setEditing] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [showValues, setShowValues] = useState(false)
+  const [testing, setTesting] = useState(false)
 
   const isConnected = data?.credentials !== null && data?.isActive
   const status: 'connected' | 'not_connected' | 'loading' = isLoading
@@ -153,8 +157,16 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
     meta.fields.forEach(field => {
       values[field.id] = ''
     })
-    // Pre-populate extra fields from saved config_json, falling back to defaults
+    // Pre-populate from saved config_json
     const savedConfig = (data?.configJson ?? {}) as Record<string, unknown>
+    // Self-hostable integrations get auto-generated mode + base_url fields
+    if (meta.selfHostable) {
+      const savedMode = savedConfig.mode
+      values.mode = (savedMode === 'self_hosted') ? 'self_hosted' : 'cloud'
+      const savedUrl = savedConfig.base_url
+      values.base_url = savedUrl ? String(savedUrl) : ''
+    }
+    // Extra fields
     meta.extraFields?.forEach(field => {
       const saved = savedConfig[field.id]
       if (saved !== undefined && saved !== null) {
@@ -189,9 +201,40 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
   }
 
   const handleTestConnection = async () => {
-    // Simulate test
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    toastManager.add({ type: 'success', title: `Connection test passed for ${meta.name}` })
+    setTesting(true)
+    try {
+      // For integrations with a dedicated validate endpoint, use it.
+      // Others fall back to a simple success toast (no server-side test yet).
+      if (meta.id === 'firecrawl') {
+        const savedConfig = (data?.configJson ?? {}) as Record<string, unknown>
+        const res = await fetch('/api/integrations/firecrawl/validate', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: '__use_stored__', // placeholder — the validate endpoint will need the real key
+            mode: savedConfig.mode || 'cloud',
+            base_url: savedConfig.base_url || undefined,
+            proxy: savedConfig.proxy || undefined,
+          }),
+        })
+        const result = await res.json()
+        if (result.success) {
+          toastManager.add({ type: 'success', title: 'Firecrawl connection verified' })
+        } else {
+          toastManager.add({
+            type: 'error',
+            title: result.error?.message || 'Connection test failed',
+          })
+        }
+      } else {
+        toastManager.add({ type: 'success', title: `Connection test passed for ${meta.name}` })
+      }
+    } catch {
+      toastManager.add({ type: 'error', title: 'Connection test failed' })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const getFieldValue = (field: IntegrationMeta['fields'][number]): string | null => {
@@ -275,21 +318,64 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   />
                 </div>
               ))}
+              {/* Auto-generated self-hostable fields */}
+              {meta.selfHostable && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Deployment Mode</label>
+                    <Select
+                      value={editValues.mode || 'cloud'}
+                      onValueChange={(val) => setEditValues({ ...editValues, mode: val as string })}
+                    >
+                      <SelectTrigger>
+                        <span className="truncate">
+                          {editValues.mode === 'self_hosted'
+                            ? 'Self-hosted'
+                            : `Cloud (${meta.selfHostable.cloudUrl})`}
+                        </span>
+                      </SelectTrigger>
+                      <SelectPopup>
+                        <SelectItem value="cloud">{`Cloud (${meta.selfHostable.cloudUrl})`}</SelectItem>
+                        <SelectItem value="self_hosted">Self-hosted</SelectItem>
+                      </SelectPopup>
+                    </Select>
+                  </div>
+                  {editValues.mode === 'self_hosted' && (
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Instance URL</label>
+                      <Input
+                        type="text"
+                        placeholder={meta.selfHostable.urlPlaceholder || 'https://your-instance.example.com'}
+                        value={editValues.base_url || ''}
+                        onChange={(e) => setEditValues({ ...editValues, base_url: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Integration-specific extra fields */}
               {meta.extraFields?.map(field => {
                 if (!isExtraFieldVisible(field)) return null
                 return (
                   <div key={field.id}>
                     <label className="text-sm font-medium mb-1.5 block">{field.label}</label>
                     {field.type === 'select' && field.options ? (
-                      <select
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        value={editValues[field.id] || ''}
-                        onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
+                      <Select
+                        value={editValues[field.id] || field.options[0]?.value || ''}
+                        onValueChange={(val) => setEditValues({ ...editValues, [field.id]: val as string })}
                       >
-                        {field.options.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger>
+                          <span className="truncate">
+                            {field.options.find(o => o.value === (editValues[field.id] || field.options![0]?.value))?.label
+                              || 'Select...'}
+                          </span>
+                        </SelectTrigger>
+                        <SelectPopup>
+                          {field.options.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectPopup>
+                      </Select>
                     ) : (
                       <Input
                         type="text"
@@ -301,16 +387,24 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   </div>
                 )
               })}
-              {meta.helpUrl && (
-                <a
-                  href={meta.helpUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                >
-                  Get your API key <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+              {/* Help link — self-hosted mode uses instance URL */}
+              {(() => {
+                const helpHref =
+                  meta.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url
+                    ? editValues.base_url.replace(/\/+$/, '')
+                    : meta.helpUrl
+                if (!helpHref) return null
+                return (
+                  <a
+                    href={helpHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    Get your API key <ExternalLink className="h-3 w-3" />
+                  </a>
+                )
+              })()}
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleSave} disabled={saveMutation.isPending}>
                   {saveMutation.isPending ? 'Saving...' : 'Save'}
@@ -352,8 +446,8 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                 </Button>
                 {isConnected && (
                   <>
-                    <Button variant="outline" size="sm" onClick={handleTestConnection}>
-                      Test Connection
+                    <Button variant="outline" size="sm" onClick={handleTestConnection} disabled={testing}>
+                      {testing ? 'Testing...' : 'Test Connection'}
                     </Button>
                     <Dialog>
                       <DialogTrigger

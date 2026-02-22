@@ -152,11 +152,30 @@ interface SidebarProps {
 export function Sidebar({ className, onClose }: SidebarProps) {
   const pathname = usePathname()
 
-  // Expanded sections state — initialised from localStorage + auto-expand for active route
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => ({
-    ...loadExpandedSections(),
-    ...getAutoExpandedSections(pathname),
-  }))
+  // Expanded sections state — start with only auto-expand (pathname-based,
+  // safe for SSR) to avoid hydration mismatch from localStorage reads.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    getAutoExpandedSections(pathname)
+  )
+
+  // After mount, merge in any localStorage-persisted state (client-only).
+  // This runs once and won't cause a visible flicker because sections that
+  // the user previously expanded will open on the next paint.
+  useEffect(() => {
+    const saved = loadExpandedSections()
+    if (Object.keys(saved).length === 0) return
+    setExpanded((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const [label, isOpen] of Object.entries(saved)) {
+        if (isOpen && !prev[label]) {
+          next[label] = true
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [])
 
   // Persist expanded state to localStorage whenever it changes
   useEffect(() => {
