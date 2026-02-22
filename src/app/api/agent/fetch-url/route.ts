@@ -46,7 +46,8 @@ async function cacheResult(
   sessionId: string,
   url: string,
   operation: string,
-  data: FetchUrlResult['data']
+  data: FetchUrlResult['data'],
+  workspaceId: string
 ): Promise<void> {
   const supabase = createAdminClient()
   const contentStr = JSON.stringify(data)
@@ -61,6 +62,7 @@ async function cacheResult(
         operation,
         content: data as unknown as Json,
         content_size_bytes: contentSizeBytes,
+        workspace_id: workspaceId,
       },
       { onConflict: 'session_id,url,operation' }
     )
@@ -74,7 +76,8 @@ async function fetchSingleUrl(
   client: ReturnType<typeof createFirecrawlClient>,
   url: string,
   body: FetchUrlRequest,
-  sessionId: string
+  sessionId: string,
+  workspaceId: string
 ): Promise<FetchUrlResult> {
   const operation = body.operation || 'scrape'
 
@@ -138,7 +141,7 @@ async function fetchSingleUrl(
     }
 
     // Cache the result
-    await cacheResult(sessionId, url, operation, data).catch(err => {
+    await cacheResult(sessionId, url, operation, data, workspaceId).catch(err => {
       log.warn(`Failed to cache result for ${url}: ${err}`)
     })
 
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
     // Process URLs
     if (!isBatch) {
       // Single URL mode
-      const result = await fetchSingleUrl(client, allUrls[0], body, session_id)
+      const result = await fetchSingleUrl(client, allUrls[0], body, session_id, workspaceId)
 
       if (!result.success) {
         return NextResponse.json(
@@ -278,7 +281,7 @@ export async function POST(req: NextRequest) {
         results.push({ url: u, success: false, cached: false, error: 'Batch wall-clock budget exceeded' })
         continue
       }
-      results.push(await fetchSingleUrl(client, u, body, session_id))
+      results.push(await fetchSingleUrl(client, u, body, session_id, workspaceId))
     }
 
     return NextResponse.json({
