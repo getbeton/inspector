@@ -1,21 +1,22 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
+
+/**
+ * Rich step descriptor for the progress indicator.
+ * Carries metadata about optional/skipped status for visual differentiation.
+ */
+export interface StepInfo {
+  key: string;
+  label: string;
+  optional?: boolean;
+  status: "pending" | "completed" | "skipped";
+}
 
 export interface ProgressIndicatorProps {
-  /**
-   * Array of step labels to display
-   * For self-hosted mode, omit the Billing step
-   */
-  steps: string[];
-  /**
-   * The current active step (must match a value in steps array)
-   */
-  current: string;
-  /**
-   * Optional CSS class for the container
-   */
+  steps: StepInfo[];
+  currentIndex: number;
   className?: string;
 }
 
@@ -23,20 +24,17 @@ export interface ProgressIndicatorProps {
  * Visual progress indicator for the setup wizard
  *
  * Shows a horizontal step indicator with:
- * - Completed steps (checkmark icon, filled circle)
- * - Current step (highlighted, pulsing indicator)
- * - Upcoming steps (outline circle)
- *
- * Adapts to self-hosted mode by accepting a dynamic steps array
- * (Billing step is omitted for self-hosted deployments)
+ * - Completed steps: checkmark icon, filled circle
+ * - Skipped steps: dash icon, muted circle
+ * - Current step: highlighted, primary outline
+ * - Upcoming steps: outline circle
+ * - Optional steps: dashed border circle + "(Optional)" suffix
  */
 export function ProgressIndicator({
   steps,
-  current,
+  currentIndex,
   className,
 }: ProgressIndicatorProps) {
-  const currentIndex = steps.indexOf(current);
-
   return (
     <div
       className={cn("flex items-center justify-center gap-2", className)}
@@ -45,19 +43,22 @@ export function ProgressIndicator({
       aria-label="Setup progress"
     >
       {steps.map((step, index) => {
-        const isCompleted = index < currentIndex;
+        const isCompleted = step.status === "completed";
+        const isSkipped = step.status === "skipped";
         const isCurrent = index === currentIndex;
-        const isUpcoming = index > currentIndex;
+        const isUpcoming = index > currentIndex && !isCompleted && !isSkipped;
 
         return (
-          <div key={step} className="flex items-center">
+          <div key={step.key} className="flex items-center">
             {/* Step indicator */}
             <div className="flex flex-col items-center">
               {/* Circle with status */}
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300",
+                  "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300",
+                  step.optional ? "border-2 border-dashed" : "border-2",
                   isCompleted && "border-primary bg-primary text-primary-foreground",
+                  isSkipped && "border-muted-foreground/30 bg-muted/30 text-muted-foreground",
                   isCurrent && "border-primary bg-primary/10 text-primary",
                   isUpcoming && "border-muted-foreground/30 bg-transparent text-muted-foreground/50"
                 )}
@@ -65,6 +66,8 @@ export function ProgressIndicator({
               >
                 {isCompleted ? (
                   <Check className="h-4 w-4" aria-hidden="true" />
+                ) : isSkipped ? (
+                  <Minus className="h-4 w-4" aria-hidden="true" />
                 ) : (
                   <span className="text-sm font-medium">{index + 1}</span>
                 )}
@@ -75,11 +78,17 @@ export function ProgressIndicator({
                 className={cn(
                   "mt-2 text-xs font-medium transition-colors duration-300",
                   isCompleted && "text-primary",
+                  isSkipped && "text-muted-foreground/50",
                   isCurrent && "text-foreground",
                   isUpcoming && "text-muted-foreground/50"
                 )}
               >
-                {step}
+                {step.label}
+                {step.optional && (
+                  <span className="block text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+                    Optional
+                  </span>
+                )}
               </span>
             </div>
 
