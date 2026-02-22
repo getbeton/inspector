@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { resolveTemplate } from "../fields/TemplateInput"
+import { AttioEntityChip } from "./AttioEntityChip"
 import type { SampleData } from "@/lib/setup/sample-data"
 import type { DealMappingState } from "../steps/DealFieldMappingStep"
 
@@ -9,6 +10,8 @@ interface CrmCardPreviewProps {
   mappingState: DealMappingState
   sampleData: SampleData
   attioWorkspaceName?: string
+  /** Attio workspace slug (lowercase, URL-safe) for building deep links */
+  attioWorkspaceSlug?: string | null
   className?: string
 }
 
@@ -16,11 +19,15 @@ interface CrmCardPreviewProps {
  * Attio-branded deal card preview for the right panel.
  * Shows all mapped fields with resolved template values.
  * Updates live as the user changes the mapping.
+ *
+ * Linked entities section shows company, contact, and deal chips
+ * with deep links to Attio.
  */
 export function CrmCardPreview({
   mappingState,
   sampleData,
   attioWorkspaceName,
+  attioWorkspaceSlug,
   className,
 }: CrmCardPreviewProps) {
   const resolvedName = resolveTemplate(
@@ -49,9 +56,17 @@ export function CrmCardPreview({
       <div className="flex items-center gap-2 px-4 py-3 border-b border-foreground/10 bg-muted/30">
         <div className="flex items-center gap-2">
           {/* Attio icon */}
-          <div className="h-5 w-5 rounded bg-[#5B5FC7] flex items-center justify-center">
-            <span className="text-white font-bold text-[10px]">A</span>
-          </div>
+          <picture>
+            <source
+              srcSet="https://cdn.brandfetch.io/idZA7HYRWK/theme/dark/symbol.svg"
+              media="(prefers-color-scheme: dark)"
+            />
+            <img
+              src="https://cdn.brandfetch.io/idZA7HYRWK/theme/light/symbol.svg"
+              alt=""
+              className="h-5 w-5"
+            />
+          </picture>
           <span className="text-xs font-medium text-muted-foreground">
             {attioWorkspaceName || "Attio"} &middot; Deal
           </span>
@@ -59,9 +74,10 @@ export function CrmCardPreview({
         <span className="ml-auto text-[10px] text-muted-foreground/60">Preview</span>
       </div>
 
-      {/* Deal title */}
+      {/* Deal title + company domain */}
       <div className="px-4 pt-4 pb-2">
         <h3 className="font-semibold text-base leading-tight">{resolvedName}</h3>
+        <span className="text-xs text-muted-foreground font-mono">{sampleData.company_domain}</span>
       </div>
 
       {/* Field values */}
@@ -83,16 +99,42 @@ export function CrmCardPreview({
           ))
         )}
 
-        {/* Linked entities (always show) */}
-        <div className="pt-2 mt-2 border-t border-foreground/5">
+        {/* User email row */}
+        {sampleData.user_email && (
+          <div className="flex items-start gap-3 text-sm">
+            <span className="text-muted-foreground text-xs w-28 shrink-0 pt-0.5">
+              Contact
+            </span>
+            <span className="text-foreground text-xs font-mono">
+              {sampleData.user_email}
+            </span>
+          </div>
+        )}
+
+        {/* Linked entities */}
+        <div className="pt-3 mt-2 border-t border-foreground/5 space-y-2">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold block">
+            Linked Entities
+          </span>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
-              Linked
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-              {sampleData.company_name}
-            </span>
+            <AttioEntityChip
+              name={sampleData.company_name}
+              objectSlug="companies"
+              workspaceSlug={attioWorkspaceSlug}
+              linked={!!attioWorkspaceSlug}
+            />
+            <AttioEntityChip
+              name={sampleData.user_email.split("@")[0] || "Contact"}
+              objectSlug="people"
+              workspaceSlug={attioWorkspaceSlug}
+              linked={false}
+            />
+            <AttioEntityChip
+              name={resolvedName}
+              objectSlug="deals"
+              workspaceSlug={attioWorkspaceSlug}
+              linked={false}
+            />
           </div>
         </div>
       </div>
