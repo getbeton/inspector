@@ -61,11 +61,13 @@ interface ExtraField {
   options?: { value: string; label: string }[]
   placeholder?: string
   visibleWhen?: { field: string; value: string }
+  hint?: string
 }
 
 interface SelfHostableConfig {
   cloudUrl: string
   urlPlaceholder?: string
+  selfHostedHelpPath?: string
 }
 
 interface IntegrationFieldConfig {
@@ -84,6 +86,7 @@ const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
     selfHostable: {
       cloudUrl: 'us.posthog.com',
       urlPlaceholder: 'https://posthog.example.com',
+      selfHostedHelpPath: '/settings/user-api-keys',
     },
     helpUrl: 'https://us.posthog.com/settings/project#variables',
   },
@@ -112,10 +115,15 @@ const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
           { value: 'stealth', label: 'Stealth' },
         ],
         visibleWhen: { field: 'mode', value: 'cloud' },
+        hint: 'Higher proxy tiers bypass bot detection but use more credits',
       },
     ],
     helpUrl: 'https://www.firecrawl.dev/app/api-keys',
   },
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '')
 }
 
 // ---------------------------------------------------------------------------
@@ -426,15 +434,22 @@ function IntegrationCard({
                         onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
                       />
                     )}
+                    {field.hint && (
+                      <p className="text-xs text-muted-foreground mt-1.5">{field.hint}</p>
+                    )}
                   </div>
                 )
               })}
               {/* Help link */}
               {(() => {
-                const helpHref =
-                  definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url
-                    ? editValues.base_url.replace(/\/+$/, '')
-                    : fieldConfig.helpUrl
+                let helpHref: string | undefined
+                if (definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url) {
+                  const base = normalizeBaseUrl(editValues.base_url)
+                  const path = fieldConfig.selfHostable.selfHostedHelpPath ?? ''
+                  helpHref = base + path
+                } else {
+                  helpHref = fieldConfig.helpUrl
+                }
                 if (!helpHref) return null
                 return (
                   <a
