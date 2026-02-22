@@ -27,10 +27,32 @@ import {
   useSaveIntegration,
   useDisconnectIntegration,
 } from '@/lib/hooks/use-integrations'
+import { useIntegrationDefinitions } from '@/lib/hooks/use-integration-definitions'
+import type { IntegrationCategory, IntegrationDefinition } from '@/lib/integrations/types'
 
 // ---------------------------------------------------------------------------
-// Integration metadata (static — never changes)
+// Category display labels
 // ---------------------------------------------------------------------------
+
+const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
+  data_source: 'Data Sources',
+  crm: 'CRM',
+  billing: 'Billing',
+  enrichment: 'Enrichment',
+  web_scraping: 'Web Scraping',
+}
+
+// ---------------------------------------------------------------------------
+// Code-side field config (credential fields tightly coupled to API response)
+// ---------------------------------------------------------------------------
+
+interface FieldDef {
+  id: string
+  label: string
+  type: 'text' | 'password'
+  placeholder: string
+  credentialKey: string
+}
 
 interface ExtraField {
   id: string
@@ -38,44 +60,23 @@ interface ExtraField {
   type: 'select' | 'text'
   options?: { value: string; label: string }[]
   placeholder?: string
-  /** Show this field only when another field has a specific value */
   visibleWhen?: { field: string; value: string }
 }
 
 interface SelfHostableConfig {
-  /** Cloud URL shown in the mode selector label */
   cloudUrl: string
-  /** Placeholder for the self-hosted URL input */
   urlPlaceholder?: string
 }
 
-interface IntegrationMeta {
-  id: string
-  name: string
-  description: string
-  icon: string
-  fields: {
-    id: string
-    label: string
-    type: 'text' | 'password'
-    placeholder: string
-    credentialKey: string // maps to the credential response key
-  }[]
-  /** Additional config fields stored in config_json (not encrypted) */
+interface IntegrationFieldConfig {
+  fields: FieldDef[]
   extraFields?: ExtraField[]
-  /** When set, auto-generates a Cloud/Self-hosted mode selector + base_url field */
   selfHostable?: SelfHostableConfig
   helpUrl?: string
-  /** Hidden integrations are only shown when already configured */
-  hidden?: boolean
 }
 
-const INTEGRATIONS: IntegrationMeta[] = [
-  {
-    id: 'posthog',
-    name: 'PostHog',
-    description: 'Product analytics and event tracking',
-    icon: 'P',
+const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
+  posthog: {
     fields: [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'phc_...', credentialKey: 'apiKey' },
       { id: 'project_id', label: 'Project ID', type: 'text', placeholder: '12345', credentialKey: 'projectId' },
@@ -86,21 +87,13 @@ const INTEGRATIONS: IntegrationMeta[] = [
     },
     helpUrl: 'https://us.posthog.com/settings/project#variables',
   },
-  {
-    id: 'attio',
-    name: 'Attio',
-    description: 'CRM integration for syncing accounts and contacts',
-    icon: 'A',
+  attio: {
     fields: [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'attio_...', credentialKey: 'apiKey' },
     ],
     helpUrl: 'https://app.attio.com/settings/api-keys',
   },
-  {
-    id: 'firecrawl',
-    name: 'Firecrawl',
-    description: 'Web scraping to enrich agent analysis with web data',
-    icon: 'F',
+  firecrawl: {
     fields: [
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'fc-...', credentialKey: 'apiKey' },
     ],
@@ -122,16 +115,66 @@ const INTEGRATIONS: IntegrationMeta[] = [
       },
     ],
     helpUrl: 'https://www.firecrawl.dev/app/api-keys',
-    hidden: true,
   },
-]
+}
 
 // ---------------------------------------------------------------------------
-// Per-integration card (uses real data)
+// IntegrationIcon — brandfetch CDN with fallback
 // ---------------------------------------------------------------------------
 
-function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
-  const { data, isLoading } = useIntegrationCredentials(meta.id)
+function IntegrationIcon({
+  definition,
+  size = 32,
+}: {
+  definition: IntegrationDefinition
+  size?: number
+}) {
+  const [error, setError] = useState(false)
+
+  if (error || (!definition.icon_url && !definition.icon_url_light)) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-md border-2 border-border bg-muted font-bold text-muted-foreground"
+        style={{ width: size, height: size }}
+      >
+        {definition.display_name[0]}
+      </div>
+    )
+  }
+
+  return (
+    <picture>
+      {definition.icon_url_light && (
+        <source
+          srcSet={definition.icon_url_light}
+          media="(prefers-color-scheme: light)"
+        />
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={definition.icon_url || definition.icon_url_light!}
+        alt={definition.display_name}
+        width={size}
+        height={size}
+        className="rounded-md object-contain"
+        onError={() => setError(true)}
+      />
+    </picture>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Per-integration card
+// ---------------------------------------------------------------------------
+
+function IntegrationCard({
+  definition,
+  fieldConfig,
+}: {
+  definition: IntegrationDefinition
+  fieldConfig?: IntegrationFieldConfig
+}) {
+  const { data, isLoading } = useIntegrationCredentials(definition.name)
   const saveMutation = useSaveIntegration()
   const disconnectMutation = useDisconnectIntegration()
 
@@ -148,26 +191,23 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
       ? 'connected'
       : 'not_connected'
 
-  // Hidden integrations are only shown when already configured
-  if (meta.hidden && !isLoading && !isConnected) return null
+  const hasFieldConfig = !!fieldConfig
 
   const handleEdit = () => {
+    if (!fieldConfig) return
     setEditing(true)
     const values: Record<string, string> = {}
-    meta.fields.forEach(field => {
+    fieldConfig.fields.forEach(field => {
       values[field.id] = ''
     })
-    // Pre-populate from saved config_json
     const savedConfig = (data?.configJson ?? {}) as Record<string, unknown>
-    // Self-hostable integrations get auto-generated mode + base_url fields
-    if (meta.selfHostable) {
+    if (definition.supports_self_hosted && fieldConfig.selfHostable) {
       const savedMode = savedConfig.mode
       values.mode = (savedMode === 'self_hosted') ? 'self_hosted' : 'cloud'
       const savedUrl = savedConfig.base_url
       values.base_url = savedUrl ? String(savedUrl) : ''
     }
-    // Extra fields
-    meta.extraFields?.forEach(field => {
+    fieldConfig.extraFields?.forEach(field => {
       const saved = savedConfig[field.id]
       if (saved !== undefined && saved !== null) {
         values[field.id] = String(saved)
@@ -182,7 +222,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
 
   const handleSave = async () => {
     try {
-      await saveMutation.mutateAsync({ name: meta.id, config: editValues })
+      await saveMutation.mutateAsync({ name: definition.name, config: editValues })
       setEditing(false)
       setEditValues({})
       toastManager.add({ type: 'success', title: 'Configuration saved' })
@@ -193,7 +233,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
 
   const handleDisconnect = async () => {
     try {
-      await disconnectMutation.mutateAsync(meta.id)
+      await disconnectMutation.mutateAsync(definition.name)
       toastManager.add({ type: 'success', title: 'Integration disconnected' })
     } catch {
       toastManager.add({ type: 'error', title: 'Failed to disconnect' })
@@ -203,16 +243,14 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
   const handleTestConnection = async () => {
     setTesting(true)
     try {
-      // For integrations with a dedicated validate endpoint, use it.
-      // Others fall back to a simple success toast (no server-side test yet).
-      if (meta.id === 'firecrawl') {
+      if (definition.name === 'firecrawl') {
         const savedConfig = (data?.configJson ?? {}) as Record<string, unknown>
         const res = await fetch('/api/integrations/firecrawl/validate', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            api_key: '__use_stored__', // placeholder — the validate endpoint will need the real key
+            api_key: '__use_stored__',
             mode: savedConfig.mode || 'cloud',
             base_url: savedConfig.base_url || undefined,
             proxy: savedConfig.proxy || undefined,
@@ -228,7 +266,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
           })
         }
       } else {
-        toastManager.add({ type: 'success', title: `Connection test passed for ${meta.name}` })
+        toastManager.add({ type: 'success', title: `Connection test passed for ${definition.display_name}` })
       }
     } catch {
       toastManager.add({ type: 'error', title: 'Connection test failed' })
@@ -237,7 +275,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
     }
   }
 
-  const getFieldValue = (field: IntegrationMeta['fields'][number]): string | null => {
+  const getFieldValue = (field: FieldDef): string | null => {
     if (!data?.credentials) return null
     const creds = data.credentials as Record<string, string | null>
     return creds[field.credentialKey] ?? null
@@ -257,7 +295,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
   return (
     <div
       className={cn(
-        'border border-border rounded-lg transition-all',
+        'border-2 border-border rounded-lg transition-all',
         expanded ? 'ring-1 ring-primary/50' : ''
       )}
     >
@@ -267,17 +305,17 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-3">
-          <div className={cn(
-            'w-10 h-10 rounded-sm flex items-center justify-center font-semibold',
-            status === 'connected' ? 'bg-success/10 text-success' :
-            status === 'loading' ? 'bg-muted text-muted-foreground' :
-            'bg-muted text-muted-foreground'
-          )}>
-            {meta.icon}
+          <div className="flex items-center justify-center w-10 h-10 rounded-md border-2 border-border bg-background p-1">
+            <IntegrationIcon definition={definition} size={28} />
           </div>
           <div>
-            <p className="font-medium">{meta.name}</p>
-            <p className="text-sm text-muted-foreground">{meta.description}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-bold">{definition.display_name}</p>
+              {definition.required && (
+                <Badge size="sm">Required</Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">{definition.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -304,12 +342,16 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
 
       {/* Expanded Config */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-border pt-4">
-          {editing ? (
+        <div className="px-4 pb-4 border-t-2 border-border pt-4">
+          {!hasFieldConfig ? (
+            <p className="text-sm text-muted-foreground italic">
+              Configuration not yet available. Coming soon.
+            </p>
+          ) : editing ? (
             <div className="space-y-4">
-              {meta.fields.map(field => (
+              {fieldConfig.fields.map(field => (
                 <div key={field.id}>
-                  <label className="text-sm font-medium mb-1.5 block">{field.label}</label>
+                  <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">{field.label}</label>
                   <Input
                     type={field.type}
                     placeholder={field.placeholder}
@@ -318,11 +360,11 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   />
                 </div>
               ))}
-              {/* Auto-generated self-hostable fields */}
-              {meta.selfHostable && (
+              {/* Self-hostable fields (driven by definition.supports_self_hosted) */}
+              {definition.supports_self_hosted && fieldConfig.selfHostable && (
                 <>
                   <div>
-                    <label className="text-sm font-medium mb-1.5 block">Deployment Mode</label>
+                    <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">Deployment Mode</label>
                     <Select
                       value={editValues.mode || 'cloud'}
                       onValueChange={(val) => setEditValues({ ...editValues, mode: val as string })}
@@ -331,21 +373,21 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                         <span className="truncate">
                           {editValues.mode === 'self_hosted'
                             ? 'Self-hosted'
-                            : `Cloud (${meta.selfHostable.cloudUrl})`}
+                            : `Cloud (${fieldConfig.selfHostable.cloudUrl})`}
                         </span>
                       </SelectTrigger>
                       <SelectPopup>
-                        <SelectItem value="cloud">{`Cloud (${meta.selfHostable.cloudUrl})`}</SelectItem>
+                        <SelectItem value="cloud">{`Cloud (${fieldConfig.selfHostable.cloudUrl})`}</SelectItem>
                         <SelectItem value="self_hosted">Self-hosted</SelectItem>
                       </SelectPopup>
                     </Select>
                   </div>
                   {editValues.mode === 'self_hosted' && (
                     <div>
-                      <label className="text-sm font-medium mb-1.5 block">Instance URL</label>
+                      <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">Instance URL</label>
                       <Input
                         type="text"
-                        placeholder={meta.selfHostable.urlPlaceholder || 'https://your-instance.example.com'}
+                        placeholder={fieldConfig.selfHostable.urlPlaceholder || 'https://your-instance.example.com'}
                         value={editValues.base_url || ''}
                         onChange={(e) => setEditValues({ ...editValues, base_url: e.target.value })}
                       />
@@ -353,12 +395,12 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   )}
                 </>
               )}
-              {/* Integration-specific extra fields */}
-              {meta.extraFields?.map(field => {
+              {/* Extra fields */}
+              {fieldConfig.extraFields?.map(field => {
                 if (!isExtraFieldVisible(field)) return null
                 return (
                   <div key={field.id}>
-                    <label className="text-sm font-medium mb-1.5 block">{field.label}</label>
+                    <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">{field.label}</label>
                     {field.type === 'select' && field.options ? (
                       <Select
                         value={editValues[field.id] || field.options[0]?.value || ''}
@@ -387,12 +429,12 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                   </div>
                 )
               })}
-              {/* Help link — self-hosted mode uses instance URL */}
+              {/* Help link */}
               {(() => {
                 const helpHref =
-                  meta.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url
+                  definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url
                     ? editValues.base_url.replace(/\/+$/, '')
-                    : meta.helpUrl
+                    : fieldConfig.helpUrl
                 if (!helpHref) return null
                 return (
                   <a
@@ -416,7 +458,7 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {meta.fields.map(field => {
+              {fieldConfig.fields.map(field => {
                 const realValue = getFieldValue(field)
                 return (
                   <div key={field.id} className="flex items-center justify-between">
@@ -459,9 +501,9 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
                       />
                       <DialogPopup>
                         <DialogHeader>
-                          <DialogTitle>Disconnect {meta.name}?</DialogTitle>
+                          <DialogTitle>Disconnect {definition.display_name}?</DialogTitle>
                           <DialogDescription>
-                            This will remove the stored credentials and stop syncing data from {meta.name}.
+                            This will remove the stored credentials and stop syncing data from {definition.display_name}.
                           </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
@@ -491,13 +533,57 @@ function IntegrationCard({ meta }: { meta: IntegrationMeta }) {
 }
 
 // ---------------------------------------------------------------------------
+// Category section
+// ---------------------------------------------------------------------------
+
+function CategorySection({
+  category,
+  definitions,
+}: {
+  category: IntegrationCategory
+  definitions: IntegrationDefinition[]
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b-2 border-border pb-2">
+        {CATEGORY_LABELS[category]}
+      </h3>
+      {definitions.map((def) => (
+        <IntegrationCard
+          key={def.id}
+          definition={def}
+          fieldConfig={FIELD_CONFIGS[def.name]}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function SettingsIntegrationsPage() {
   const { session, loading } = useSession()
+  const { data: definitions, isLoading: defsLoading } = useIntegrationDefinitions()
+
   if (loading) return <div className="flex items-center justify-center min-h-[400px]"><Spinner className="size-6" /></div>
   if (!session) return <GuestSignInPrompt message="Sign in to manage integrations" />
+
+  // Group definitions by category, preserving display_order within each group
+  const grouped = new Map<IntegrationCategory, IntegrationDefinition[]>()
+  if (definitions) {
+    for (const def of definitions) {
+      const group = grouped.get(def.category) || []
+      group.push(def)
+      grouped.set(def.category, group)
+    }
+  }
+
+  // Order categories by the lowest display_order in each group
+  const sortedCategories = [...grouped.entries()].sort(
+    ([, a], [, b]) => a[0].display_order - b[0].display_order
+  )
 
   return (
     <Card>
@@ -507,10 +593,18 @@ export default function SettingsIntegrationsPage() {
           Connect your data sources and destinations to enable signal detection and syncing
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {INTEGRATIONS.map(meta => (
-          <IntegrationCard key={meta.id} meta={meta} />
-        ))}
+      <CardContent className="space-y-6">
+        {defsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="size-6" />
+          </div>
+        ) : sortedCategories.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No integrations available.</p>
+        ) : (
+          sortedCategories.map(([category, defs]) => (
+            <CategorySection key={category} category={category} definitions={defs} />
+          ))
+        )}
       </CardContent>
     </Card>
   )
