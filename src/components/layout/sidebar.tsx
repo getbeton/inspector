@@ -87,6 +87,7 @@ const navEntries: NavEntry[] = [
       { href: '/memory', label: 'Logs' },
       { href: '/memory/assumptions', label: 'Business Model' },
       { href: '/memory/db-structure', label: 'DB & Joins' },
+      { href: '/memory/scraping-results', label: 'Scraping' },
     ],
   },
   {
