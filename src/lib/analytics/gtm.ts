@@ -139,17 +139,84 @@ export function trackSetupStarted(): void {
 }
 
 /**
- * Track completion of individual setup wizard steps.
+ * Track when a setup wizard step becomes active (visible to the user).
  */
-export function trackSetupStepCompleted(step: string): void {
-  pushToDataLayer({ event: 'setup_step_completed', step })
+export function trackOnboardingStepViewed(props: {
+  step_key: string
+  step_name: string
+  is_optional: boolean
+  step_index: number
+}): void {
+  pushToDataLayer({ event: 'onboarding_step_viewed', ...props })
+}
+
+/**
+ * Track completion of individual setup wizard steps.
+ * Enhanced with timing and metadata for funnel analysis.
+ */
+export function trackSetupStepCompleted(
+  step: string,
+  props?: {
+    step_name?: string
+    is_optional?: boolean
+    duration_ms?: number
+  }
+): void {
+  pushToDataLayer({ event: 'setup_step_completed', step, ...props })
+}
+
+/**
+ * Track when a user skips an optional setup step.
+ */
+export function trackOnboardingStepSkipped(props: {
+  step_key: string
+  step_name: string
+}): void {
+  pushToDataLayer({ event: 'onboarding_step_skipped', ...props })
 }
 
 /**
  * Track when an integration is successfully connected during setup.
+ * Enhanced with deployment mode and category for segmentation.
  */
-export function trackIntegrationConnected(integration: string): void {
-  pushToDataLayer({ event: 'integration_connected', integration })
+export function trackIntegrationConnected(
+  integration: string,
+  props?: {
+    mode?: 'cloud' | 'self_hosted'
+    category?: string
+  }
+): void {
+  pushToDataLayer({
+    event: 'integration_connected',
+    integration,
+    ...props,
+  })
+}
+
+/**
+ * Track when an integration connection attempt fails.
+ * No PII — only error codes and sanitized messages.
+ */
+export function trackIntegrationConnectionFailed(props: {
+  integration_name: string
+  error_code?: string
+  error_message?: string
+}): void {
+  pushToDataLayer({ event: 'integration_connection_failed', ...props })
+}
+
+/**
+ * Track when user toggles to PostHog self-hosted mode.
+ */
+export function trackPostHogSelfHostedSelected(): void {
+  pushToDataLayer({ event: 'posthog_self_hosted_selected' })
+}
+
+/**
+ * Track when user selects a Firecrawl proxy tier.
+ */
+export function trackFirecrawlProxyTierSelected(proxy_tier: string): void {
+  pushToDataLayer({ event: 'firecrawl_proxy_tier_selected', proxy_tier })
 }
 
 /**
@@ -173,9 +240,71 @@ export function trackFirstSignalViewed(signalId: string): void {
 
 /**
  * Track when the full onboarding flow is completed.
+ * Enhanced with aggregate stats for funnel analysis and Intercom forwarding.
  */
-export function trackOnboardingCompleted(): void {
-  pushToDataLayer({ event: 'onboarding_completed' })
+export function trackOnboardingCompleted(props?: {
+  total_duration_ms?: number
+  steps_completed?: number
+  steps_skipped?: number
+  integrations?: string[]
+}): void {
+  pushToDataLayer({ event: 'onboarding_completed', ...props })
+}
+
+// ---------------------------------------------------------------------------
+// Attio entity events
+// ---------------------------------------------------------------------------
+
+/**
+ * Track when an Attio entity (company, person, deal) is created.
+ */
+export function trackAttioEntityCreated(props: {
+  object_type: 'company' | 'person' | 'deal'
+  context: 'onboarding' | 'standalone'
+}): void {
+  pushToDataLayer({ event: 'attio_entity_created', ...props })
+}
+
+/**
+ * Track when an Attio entity creation fails.
+ */
+export function trackAttioEntityCreationFailed(props: {
+  object_type: 'company' | 'person' | 'deal'
+  error_code?: string
+}): void {
+  pushToDataLayer({ event: 'attio_entity_creation_failed', ...props })
+}
+
+/**
+ * Track when user selects a contact from the Attio contact picker.
+ */
+export function trackAttioContactPickerUsed(result_count: number): void {
+  pushToDataLayer({ event: 'attio_contact_picker_used', result_count })
+}
+
+// ---------------------------------------------------------------------------
+// User properties (forwarded via GTM to PostHog $set)
+// ---------------------------------------------------------------------------
+
+/**
+ * Push user properties to dataLayer for GTM to forward as PostHog $set.
+ * Called on onboarding completion to set persistent user traits.
+ */
+export function setOnboardingUserProperties(props: {
+  onboarding_completed_at: string
+  integrations_connected: string[]
+  has_self_hosted_posthog: boolean
+  has_firecrawl: boolean
+}): void {
+  pushToDataLayer({
+    event: 'set_user_properties',
+    user_properties_set: {
+      onboarding_completed_at: props.onboarding_completed_at,
+      integrations_connected: props.integrations_connected,
+      has_self_hosted_posthog: props.has_self_hosted_posthog,
+      has_firecrawl: props.has_firecrawl,
+    },
+  })
 }
 
 // ---------------------------------------------------------------------------

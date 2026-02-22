@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Search, User, Loader2 } from "lucide-react"
+import { trackAttioContactPickerUsed } from "@/lib/analytics"
 
 interface AttioPersonResult {
   id: string
@@ -98,13 +99,15 @@ export function ContactPicker({ onSelect, disabled, className }: ContactPickerPr
       setSearch(person.name)
       setOpen(false)
 
+      trackAttioContactPickerUsed(results.length)
+
       onSelect({
         personId: person.id,
         personName: person.name,
         email: person.email,
       })
     },
-    [onSelect]
+    [onSelect, results.length]
   )
 
   return (

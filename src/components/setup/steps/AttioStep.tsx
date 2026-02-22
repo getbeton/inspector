@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Check, AlertCircle, Eye, EyeOff, Link2 } from "lucide-react";
-import { trackIntegrationConnected } from "@/lib/analytics";
+import { trackIntegrationConnected, trackIntegrationConnectionFailed } from "@/lib/analytics";
 
 /**
  * Component state machine
@@ -114,7 +114,10 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
       const wsName = data.workspace_name ?? data.workspaceName ?? "";
       setWorkspaceName(wsName);
       setState("success");
-      trackIntegrationConnected("attio");
+      trackIntegrationConnected("attio", {
+        mode: "cloud",
+        category: "crm",
+      });
 
       // Report workspace name to parent for preview panel
       if (onWorkspaceName && wsName) {
@@ -125,7 +128,12 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
       onSuccess();
     } catch (err) {
       setState("error");
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      trackIntegrationConnectionFailed({
+        integration_name: "attio",
+        error_message: msg,
+      });
     }
   }, [apiKey, onSuccess, getErrorMessage]);
 
