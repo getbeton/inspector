@@ -12,6 +12,10 @@ interface CrmCardPreviewProps {
   attioWorkspaceName?: string
   /** Attio workspace slug (lowercase, URL-safe) for building deep links */
   attioWorkspaceSlug?: string | null
+  /** Attio record ID for the selected contact (enables deep link on people chip) */
+  contactRecordId?: string | null
+  /** Display name for the selected contact */
+  contactName?: string | null
   className?: string
 }
 
@@ -28,6 +32,8 @@ export function CrmCardPreview({
   sampleData,
   attioWorkspaceName,
   attioWorkspaceSlug,
+  contactRecordId,
+  contactName,
   className,
 }: CrmCardPreviewProps) {
   const resolvedName = resolveTemplate(
@@ -124,10 +130,11 @@ export function CrmCardPreview({
               linked={!!attioWorkspaceSlug}
             />
             <AttioEntityChip
-              name={sampleData.user_email.split("@")[0] || "Contact"}
+              name={contactName || sampleData.user_email.split("@")[0] || "Contact"}
               objectSlug="people"
               workspaceSlug={attioWorkspaceSlug}
-              linked={false}
+              recordId={contactRecordId}
+              linked={!!contactRecordId && !!attioWorkspaceSlug}
             />
             <AttioEntityChip
               name={resolvedName}
