@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { resolveTemplate } from "../fields/TemplateInput"
-import type { SampleData } from "../steps/DealFieldMappingStep"
+import type { SampleData } from "@/lib/setup/sample-data"
 
 interface SlackNotificationPreviewProps {
   dealNameTemplate: string
@@ -20,7 +20,7 @@ export function SlackNotificationPreview({
   sampleData,
   className,
 }: SlackNotificationPreviewProps) {
-  const resolvedName = resolveTemplate(dealNameTemplate || "New Signal Detected", sampleData as unknown as Record<string, unknown>)
+  const resolvedName = resolveTemplate(dealNameTemplate || "New Signal Detected", sampleData)
 
   return (
     <div className={cn("rounded-lg border-2 border-foreground/10 bg-white overflow-hidden", className)}>
@@ -81,14 +81,14 @@ export function SlackNotificationPreview({
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          <button className="px-3 py-1 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50">
+        {/* Action buttons (decorative — part of the Slack mockup) */}
+        <div className="flex gap-2" aria-hidden="true">
+          <span className="px-3 py-1 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700">
             View in Attio
-          </button>
-          <button className="px-3 py-1 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50">
+          </span>
+          <span className="px-3 py-1 text-xs font-medium border border-gray-300 rounded bg-white text-gray-700">
             View Signal
-          </button>
+          </span>
         </div>
       </div>
     </div>

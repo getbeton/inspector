@@ -111,13 +111,13 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
       }
 
       const data = await validateResponse.json();
-      const wsName = data.workspace_name ?? data.workspaceName ?? "Connected";
+      const wsName = data.workspace_name ?? data.workspaceName ?? "";
       setWorkspaceName(wsName);
       setState("success");
       trackIntegrationConnected("attio");
 
       // Report workspace name to parent for preview panel
-      if (onWorkspaceName && wsName !== "Connected") {
+      if (onWorkspaceName && wsName) {
         onWorkspaceName(wsName);
       }
 
@@ -194,7 +194,7 @@ export function AttioStep({ onSuccess, onWorkspaceName, className }: AttioStepPr
           <AlertTitle>Connected!</AlertTitle>
           <AlertDescription>
             Successfully connected to Attio
-            {workspaceName && workspaceName !== "Connected" && (
+            {workspaceName && (
               <>
                 {" "}
                 workspace: <strong>{workspaceName}</strong>

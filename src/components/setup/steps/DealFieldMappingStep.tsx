@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -49,27 +49,6 @@ export interface DealFieldMappingStepProps {
 }
 
 /**
- * Sample data returned by /api/integrations/attio/sample-data.
- * Used for the live preview on the right panel.
- */
-export interface SampleData {
-  company_name: string
-  company_domain: string
-  signal_name: string
-  signal_type: string
-  health_score: number
-  concrete_grade: string
-  signal_count: number
-  deal_value: number
-  detected_at: string
-}
-
-let nextId = 0
-function genId() {
-  return `field_${++nextId}_${Date.now()}`
-}
-
-/**
  * Deal-focused field mapping step — replaces the old AttioFieldMappingStep.
  *
  * Users configure how Beton creates deals in Attio:
@@ -81,6 +60,9 @@ function genId() {
  * Returns both config (left panel) and preview data for CrmCardPreview (right panel).
  */
 export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: DealFieldMappingStepProps) {
+  const idCounter = useRef(0)
+  const genId = useCallback(() => `field_${++idCounter.current}`, [])
+
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -203,7 +185,7 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
         isNew: false,
       },
     ])
-  }, [])
+  }, [genId])
 
   // Update a mapping row's attribute selection
   const updateMappingAttribute = useCallback(
@@ -377,7 +359,6 @@ export function DealFieldMappingStep({ onSuccess, onMappingChange, className }: 
             <DealFieldRow
               key={mapping.id}
               attioAttributeSlug={mapping.attioAttributeSlug}
-              attioObjectSlug={mapping.attioObjectSlug}
               valueTemplate={mapping.valueTemplate}
               options={comboboxOptions}
               onAttributeChange={(slug, objSlug, title, type) =>
