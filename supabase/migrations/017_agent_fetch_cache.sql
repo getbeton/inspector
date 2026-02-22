@@ -26,3 +26,6 @@ CREATE TABLE agent_fetch_cache (
 -- ============================================
 
 ALTER TABLE agent_fetch_cache ENABLE ROW LEVEL SECURITY;
+
+-- No user-facing RLS policies: access is intentionally restricted to the service role.
+-- Direct user access to this table is not supported.

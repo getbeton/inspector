@@ -351,12 +351,14 @@ export class FirecrawlClient {
     let markdown = data.markdown
     let html = data.html
 
-    if (markdown && new Blob([markdown]).size > MAX_CONTENT_BYTES) {
+    const encoder = new TextEncoder()
+
+    if (markdown && encoder.encode(markdown).byteLength > MAX_CONTENT_BYTES) {
       markdown = markdown.slice(0, MAX_CONTENT_BYTES)
       truncated = true
     }
 
-    if (html && new Blob([html]).size > MAX_CONTENT_BYTES) {
+    if (html && encoder.encode(html).byteLength > MAX_CONTENT_BYTES) {
       html = html.slice(0, MAX_CONTENT_BYTES)
       truncated = true
     }

@@ -204,7 +204,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 404 })
     }
 
-    // Rate limit per workspace (15 req/min for fetch — scraping is expensive)
+    // Rate limit per workspace (15 req/min for fetch — scraping is expensive).
+    // Note: this is an in-memory counter, so the effective limit is 15 × N instances
+    // on Vercel serverless. Acceptable tradeoff — Firecrawl's own rate limits are the
+    // real backstop.
     const limited = rateLimitResponse(workspaceId, { maxRequests: 15 })
     if (limited) return limited
 
@@ -235,9 +238,12 @@ export async function POST(req: NextRequest) {
       proxy: (configJson.proxy as 'basic' | 'stealth') || null,
     })
 
-    // Audit log (info — this is an expected event, not a warning)
+    // Audit log — redact query strings to avoid leaking tokens/PII
+    const redactedUrls = allUrls.map(u => {
+      try { const p = new URL(u); return `${p.origin}${p.pathname}` } catch { return '[invalid]' }
+    })
     log.info(
-      `[AUDIT] fetch-url workspace=${workspaceId} op=${body.operation || 'scrape'} urls=${allUrls.join(',')}`
+      `[AUDIT] fetch-url workspace=${workspaceId} op=${body.operation || 'scrape'} count=${allUrls.length} urls=${redactedUrls.join(',')}`
     )
 
     // Process URLs
@@ -259,10 +265,12 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Batch mode — process all URLs
-    const results = await Promise.all(
-      allUrls.map(u => fetchSingleUrl(client, u, body, session_id))
-    )
+    // Batch mode — process sequentially to avoid holding the Vercel function open
+    // with 10 concurrent 5–30s scrape calls (would easily exceed the 60s limit).
+    const results: FetchUrlResult[] = []
+    for (const u of allUrls) {
+      results.push(await fetchSingleUrl(client, u, body, session_id))
+    }
 
     return NextResponse.json({
       success: true,
