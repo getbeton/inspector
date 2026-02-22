@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
-import { Check, AlertCircle, Globe, Eye, EyeOff } from "lucide-react";
+import { Check, AlertCircle, Globe, Server, Eye, EyeOff } from "lucide-react";
 import { trackIntegrationConnected } from "@/lib/analytics";
+import { isPrivateHost } from "@/lib/utils/ssrf";
 
 /**
  * PostHog region configuration
@@ -32,6 +33,7 @@ const REGIONS = [
 ] as const;
 
 type Region = (typeof REGIONS)[number]["id"];
+type DeployMode = "cloud" | "self_hosted";
 
 /**
  * Component state machine
@@ -67,10 +69,19 @@ export interface PostHogStepProps {
 }
 
 /**
+ * Normalize a self-hosted URL: strip trailing slash and /api suffix
+ */
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+}
+
+/**
  * PostHog connection step for the setup wizard
  *
  * Features:
- * - Region selector (US/EU button group)
+ * - Cloud / Self-hosted mode toggle
+ * - Region selector (US/EU) for cloud mode
+ * - Instance URL input for self-hosted mode (with SSRF validation)
  * - API Key input (password field with show/hide toggle)
  * - Project ID input
  * - Two-phase validation:
@@ -81,7 +92,9 @@ export interface PostHogStepProps {
  */
 export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
   // Form state
+  const [mode, setMode] = useState<DeployMode>("cloud");
   const [region, setRegion] = useState<Region>("us");
+  const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [projectId, setProjectId] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -99,6 +112,10 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       // Check for network errors
       if (err.message.includes("fetch") || err.message.includes("network")) {
         return ERROR_MESSAGES.network;
+      }
+      // Pass through server error messages directly
+      if (err.message && !err.message.match(/^\d{3}$/)) {
+        return err.message;
       }
     }
 
@@ -122,27 +139,53 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       return;
     }
 
+    // Client-side SSRF check for self-hosted URLs
+    if (mode === "self_hosted") {
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (!normalized) {
+        setError("Please enter your PostHog instance URL.");
+        return;
+      }
+      try {
+        new URL(normalized);
+      } catch {
+        setError("Invalid URL format. Please enter a valid URL.");
+        return;
+      }
+      if (isPrivateHost(normalized)) {
+        setError("Private/internal addresses are not allowed for self-hosted instances.");
+        return;
+      }
+    }
+
     setError(null);
     setState("validating");
 
     try {
       // Phase 1: Quick validation
       const selectedRegion = REGIONS.find((r) => r.id === region);
+      const validateBody: Record<string, unknown> = {
+        api_key: apiKey,
+        project_id: projectId,
+        mode,
+      };
+
+      if (mode === "cloud") {
+        validateBody.region = region;
+        validateBody.host = selectedRegion?.host;
+      } else {
+        validateBody.base_url = normalizeBaseUrl(baseUrl);
+      }
+
       const validateResponse = await fetch("/api/integrations/posthog/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          api_key: apiKey,
-          project_id: projectId,
-          host: selectedRegion?.host,
-          region: region,
-        }),
+        body: JSON.stringify(validateBody),
       });
 
       if (!validateResponse.ok) {
         const data = await validateResponse.json().catch(() => ({}));
-        // Extract error message from nested structure: { error: { message: "..." } }
         const errorMsg = data.error?.message || data.error || `${validateResponse.status}`;
         throw new Error(errorMsg);
       }
@@ -150,15 +193,23 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       // Phase 2: Calculate MTU
       setState("calculating_mtu");
 
+      const mtuBody: Record<string, unknown> = {
+        api_key: apiKey,
+        project_id: projectId,
+        mode,
+      };
+
+      if (mode === "cloud") {
+        mtuBody.region = region;
+      } else {
+        mtuBody.base_url = normalizeBaseUrl(baseUrl);
+      }
+
       const mtuResponse = await fetch("/api/billing/calculate-mtu", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          api_key: apiKey,
-          project_id: projectId,
-          region: region,  // Send region, not host - server derives host with /api path
-        }),
+        body: JSON.stringify(mtuBody),
       });
 
       if (!mtuResponse.ok) {
@@ -174,40 +225,99 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       trackIntegrationConnected("posthog");
 
       // Notify parent of success
-      onSuccess({ mtuCount: count, region });
+      onSuccess({
+        mtuCount: count,
+        region: mode === "cloud" ? region : "self_hosted",
+      });
     } catch (err) {
       setState("error");
       setError(getErrorMessage(err));
     }
-  }, [apiKey, projectId, region, onSuccess, getErrorMessage]);
+  }, [apiKey, projectId, region, mode, baseUrl, onSuccess, getErrorMessage]);
 
   const isLoading = state === "validating" || state === "calculating_mtu";
   const isSuccess = state === "success";
+  const isSelfHosted = mode === "self_hosted";
+
+  // Determine the help URL for API keys
+  const apiKeysUrl = isSelfHosted && baseUrl
+    ? `${normalizeBaseUrl(baseUrl)}/settings/user-api-keys`
+    : REGIONS.find((r) => r.id === region)?.apiKeysUrl;
+  const projectSettingsUrl = isSelfHosted && baseUrl
+    ? `${normalizeBaseUrl(baseUrl)}/settings/project`
+    : REGIONS.find((r) => r.id === region)?.projectSettingsUrl;
 
   return (
     <div className={cn("space-y-6", className)} data-slot="posthog-step">
-      {/* Region Selector */}
+      {/* Deployment Mode Toggle */}
       <div className="space-y-2">
-        <Label>PostHog Region</Label>
+        <Label>Deployment</Label>
         <div className="flex gap-2">
-          {REGIONS.map((r) => (
-            <Button
-              key={r.id}
-              variant={region === r.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => setRegion(r.id)}
-              disabled={isLoading || isSuccess}
-              className="flex-1"
-            >
-              <Globe className="h-4 w-4" />
-              {r.label}
-            </Button>
-          ))}
+          <Button
+            variant={mode === "cloud" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMode("cloud")}
+            disabled={isLoading || isSuccess}
+            className="flex-1"
+          >
+            <Globe className="h-4 w-4" />
+            Cloud
+          </Button>
+          <Button
+            variant={mode === "self_hosted" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setMode("self_hosted")}
+            disabled={isLoading || isSuccess}
+            className="flex-1"
+          >
+            <Server className="h-4 w-4" />
+            Self-Hosted
+          </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Select the region where your PostHog data is hosted
-        </p>
       </div>
+
+      {/* Cloud: Region Selector */}
+      {!isSelfHosted && (
+        <div className="space-y-2">
+          <Label>PostHog Region</Label>
+          <div className="flex gap-2">
+            {REGIONS.map((r) => (
+              <Button
+                key={r.id}
+                variant={region === r.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRegion(r.id)}
+                disabled={isLoading || isSuccess}
+                className="flex-1"
+              >
+                <Globe className="h-4 w-4" />
+                {r.label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Select the region where your PostHog data is hosted
+          </p>
+        </div>
+      )}
+
+      {/* Self-hosted: Instance URL */}
+      {isSelfHosted && (
+        <div className="space-y-2">
+          <Label htmlFor="posthog-base-url">Instance URL</Label>
+          <Input
+            id="posthog-base-url"
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://posthog.yourcompany.com"
+            disabled={isLoading || isSuccess}
+          />
+          <p className="text-xs text-muted-foreground">
+            The URL of your self-hosted PostHog instance (without <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">/api</code>)
+          </p>
+        </div>
+      )}
 
       {/* API Key Input */}
       <div className="space-y-2">
@@ -239,12 +349,12 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
         <p className="text-xs text-muted-foreground">
           Create one in{" "}
           <a
-            href={REGIONS.find((r) => r.id === region)?.apiKeysUrl}
+            href={apiKeysUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
           >
-            PostHog Settings → Personal API Keys
+            PostHog Settings &rarr; Personal API Keys
           </a>
         </p>
         <p className="text-xs text-muted-foreground">
@@ -270,12 +380,12 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
         <p className="text-xs text-muted-foreground">
           Find this in{" "}
           <a
-            href={REGIONS.find((r) => r.id === region)?.projectSettingsUrl}
+            href={projectSettingsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
           >
-            PostHog Settings → Project Details
+            PostHog Settings &rarr; Project Details
           </a>
         </p>
       </div>
@@ -304,7 +414,12 @@ export function PostHogStep({ onSuccess, className }: PostHogStepProps) {
       {!isSuccess && (
         <Button
           onClick={handleValidate}
-          disabled={isLoading || !apiKey.trim() || !projectId.trim()}
+          disabled={
+            isLoading ||
+            !apiKey.trim() ||
+            !projectId.trim() ||
+            (isSelfHosted && !baseUrl.trim())
+          }
           className="w-full"
         >
           {isLoading && <Spinner className="h-4 w-4" />}
