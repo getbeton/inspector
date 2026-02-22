@@ -11,6 +11,7 @@ import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
+import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
 import { FALLBACK_SAMPLE, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
 import { WebsiteStep } from "./steps/WebsiteStep";
@@ -224,6 +225,9 @@ export function SetupWizard({
   // Sample data for previews
   const [sampleData, setSampleData] = useState<SampleData>(FALLBACK_SAMPLE);
 
+  // Selected Attio contact for preview enrichment (production mode only)
+  const [selectedContactData, setSelectedContactData] = useState<SelectedContact | null>(null);
+
   // Load sample data on mount (skip in demo mode)
   useEffect(() => {
     if (demoMode || authBypass) return;
@@ -237,17 +241,23 @@ export function SetupWizard({
       });
   }, [demoMode, authBypass]);
 
-  // Enrich sample data with user's email-derived company info
+  // Enrich sample data: selected Attio contact > user email > fallback
   const enrichedSampleData = useMemo<SampleData>(() => {
     const base = { ...sampleData };
-    if (!demoMode && session?.email && session.sub !== "auth-bypass") {
+    if (selectedContactData?.email) {
+      // Use the picked Attio contact's data
+      const { companyName, companyDomain } = deriveCompanyFromEmail(selectedContactData.email);
+      base.company_name = companyName;
+      base.company_domain = companyDomain;
+      base.user_email = selectedContactData.email;
+    } else if (!demoMode && session?.email && session.sub !== "auth-bypass") {
       const { companyName, companyDomain } = deriveCompanyFromEmail(session.email);
       base.company_name = companyName;
       base.company_domain = companyDomain;
       base.user_email = session.email;
     }
     return base;
-  }, [sampleData, session, demoMode]);
+  }, [sampleData, session, demoMode, selectedContactData]);
 
   // Derive PostHog host from region for deep links
   const posthogHost = useMemo(() => {
@@ -465,6 +475,13 @@ export function SetupWizard({
         return {
           config: (
             <div>
+              {/* Contact picker — only in production mode with Attio connected */}
+              {!demoMode && !authBypass && attioConnected && (
+                <ContactPicker
+                  onSelect={setSelectedContactData}
+                  className="mb-6"
+                />
+              )}
               <DealFieldMappingStep
                 onSuccess={handleFieldMappingSuccess}
                 onMappingChange={setDealMappingState}
@@ -486,6 +503,8 @@ export function SetupWizard({
                 sampleData={enrichedSampleData}
                 attioWorkspaceName={attioWorkspaceName}
                 attioWorkspaceSlug={attioWorkspaceSlug}
+                contactRecordId={selectedContactData?.personId}
+                contactName={selectedContactData?.personName}
               />
             </div>
           ),
