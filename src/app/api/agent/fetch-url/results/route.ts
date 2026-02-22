@@ -108,6 +108,7 @@ export async function GET(req: NextRequest) {
       .in('url', urlList)
       .eq('operation', operation)
       .order('created_at', { ascending: false })
+      .limit(100)
 
     if (error) {
       log.error(`Batch cross-session lookup failed: ${error.message}`)
