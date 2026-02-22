@@ -88,7 +88,8 @@ function ContentPreview({
 
   const { markdown, links, metadata, truncated } = detail.content
   const title = metadata?.title as string | undefined
-  const sourceURL = metadata?.sourceURL as string | undefined
+  const rawSourceURL = metadata?.sourceURL as string | undefined
+  const sourceURL = rawSourceURL && /^https?:\/\//i.test(rawSourceURL) ? rawSourceURL : undefined
   const statusCode = metadata?.statusCode as number | undefined
 
   return (
