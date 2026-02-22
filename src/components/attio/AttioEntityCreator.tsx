@@ -14,6 +14,10 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react"
+import {
+  trackAttioEntityCreated,
+  trackAttioEntityCreationFailed,
+} from "@/lib/analytics"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +44,8 @@ export interface AttioEntityCreatorProps {
   attioWorkspaceSlug?: string | null
   /** Callbacks */
   onEntitiesCreated?: (result: BatchResult) => void
+  /** Analytics context: where this component is rendered */
+  analyticsContext?: "onboarding" | "standalone"
   /** inline = embedded in onboarding, dialog = standalone overlay */
   mode?: "inline" | "dialog"
   className?: string
@@ -64,6 +70,7 @@ export function AttioEntityCreator({
   personEmail,
   attioWorkspaceSlug,
   onEntitiesCreated,
+  analyticsContext = "standalone",
   mode = "inline",
   className,
 }: AttioEntityCreatorProps) {
@@ -204,10 +211,27 @@ export function AttioEntityCreator({
       const batchResult: BatchResult = data.results || {}
       setResult(batchResult)
       setPhase("done")
+
+      // Track each successfully created entity
+      if (batchResult.company) {
+        trackAttioEntityCreated({ object_type: "company", context: analyticsContext })
+      }
+      if (batchResult.person) {
+        trackAttioEntityCreated({ object_type: "person", context: analyticsContext })
+      }
+      if (batchResult.deal) {
+        trackAttioEntityCreated({ object_type: "deal", context: analyticsContext })
+      }
+
       onEntitiesCreated?.(batchResult)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred")
+      const msg = err instanceof Error ? err.message : "An error occurred"
+      setError(msg)
       setPhase("error")
+
+      // Track the failure for the phase that was in progress
+      const failedType = phase === "company" ? "company" : phase === "person" ? "person" : "deal"
+      trackAttioEntityCreationFailed({ object_type: failedType })
     }
   }, [
     createCompany,
@@ -218,6 +242,8 @@ export function AttioEntityCreator({
     personName,
     personEmail,
     onEntitiesCreated,
+    analyticsContext,
+    phase,
   ])
 
   const isCreating = phase !== "idle" && phase !== "done" && phase !== "error"

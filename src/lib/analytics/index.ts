@@ -17,11 +17,20 @@ export {
   trackDemoTourStarted,
   trackDemoTourCompleted,
   trackSetupStarted,
+  trackOnboardingStepViewed,
   trackSetupStepCompleted,
+  trackOnboardingStepSkipped,
   trackIntegrationConnected,
+  trackIntegrationConnectionFailed,
+  trackPostHogSelfHostedSelected,
+  trackFirecrawlProxyTierSelected,
   trackCardLinked,
   trackFirstSignalViewed,
   trackOnboardingCompleted,
+  trackAttioEntityCreated,
+  trackAttioEntityCreationFailed,
+  trackAttioContactPickerUsed,
+  setOnboardingUserProperties,
 } from './gtm'
 
 export { usePostHogIdentify } from './use-posthog-identify'

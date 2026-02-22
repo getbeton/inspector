@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, type ReactNode } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { trackSetupStepCompleted, trackOnboardingCompleted } from "@/lib/analytics";
+import {
+  trackSetupStepCompleted,
+  trackOnboardingCompleted,
+  trackOnboardingStepViewed,
+  trackOnboardingStepSkipped,
+  setOnboardingUserProperties,
+} from "@/lib/analytics";
 import { ProgressIndicator, type StepInfo } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
@@ -192,12 +198,30 @@ export function SetupWizard({
 
   const [currentStepIndex, setCurrentStepIndex] = useState<number | null>(null);
 
+  // Analytics: track when each step started (for duration_ms calculation)
+  const stepStartTimeRef = useRef<number>(Date.now());
+  const onboardingStartTimeRef = useRef<number>(Date.now());
+
   // Set initial index once steps are loaded
   useEffect(() => {
     if (steps.length > 0 && currentStepIndex === null) {
       setCurrentStepIndex(initialIndex);
     }
   }, [steps, initialIndex, currentStepIndex]);
+
+  // Analytics: fire onboarding_step_viewed when the active step changes
+  useEffect(() => {
+    if (demoMode || currentStepIndex === null || steps.length === 0) return;
+    const step = steps[currentStepIndex];
+    if (!step) return;
+    stepStartTimeRef.current = Date.now();
+    trackOnboardingStepViewed({
+      step_key: step.key,
+      step_name: step.label,
+      is_optional: step.optional,
+      step_index: currentStepIndex,
+    });
+  }, [currentStepIndex, steps, demoMode]);
 
   // Cross-step shared data
   const [mtuCount, setMtuCount] = useState<number>(demoMode ? 1_420 : 0);
@@ -298,28 +322,67 @@ export function SetupWizard({
 
   /**
    * Advance from the current step. Marks the step as completed (or skipped),
-   * then moves to the next step. If all steps are done, redirects to
-   * website exploration logs.
+   * fires the appropriate analytics event, then moves to the next step.
+   * If all steps are done, fires onboarding_completed and redirects.
    */
   const advanceFrom = useCallback(
     (status: "completed" | "skipped" = "completed") => {
       if (currentStepIndex === null) return;
       const step = steps[currentStepIndex];
       if (!demoMode) {
-        trackSetupStepCompleted(step.key);
+        const durationMs = Date.now() - stepStartTimeRef.current;
+
+        if (status === "skipped") {
+          trackOnboardingStepSkipped({
+            step_key: step.key,
+            step_name: step.label,
+          });
+        } else {
+          trackSetupStepCompleted(step.key, {
+            step_name: step.label,
+            is_optional: step.optional,
+            duration_ms: durationMs,
+          });
+        }
         markStep(step.key, status);
       }
 
       const nextIndex = currentStepIndex + 1;
       if (nextIndex >= steps.length) {
         if (demoMode) return; // stay on last step in demo
-        trackOnboardingCompleted();
+
+        // Compute aggregate stats for the completion event
+        const completed = Array.from(stepStatuses.values()).filter((s) => s === "completed").length + 1; // +1 for the current step
+        const skipped = Array.from(stepStatuses.values()).filter((s) => s === "skipped").length;
+        const totalDurationMs = Date.now() - onboardingStartTimeRef.current;
+
+        // Collect connected integration names for user properties
+        const connectedIntegrations: string[] = [];
+        if (posthogConnected) connectedIntegrations.push("posthog");
+        if (attioConnected) connectedIntegrations.push("attio");
+        if (firecrawlConnected) connectedIntegrations.push("firecrawl");
+
+        trackOnboardingCompleted({
+          total_duration_ms: totalDurationMs,
+          steps_completed: completed,
+          steps_skipped: skipped,
+          integrations: connectedIntegrations,
+        });
+
+        // Set persistent user properties via GTM → PostHog $set
+        setOnboardingUserProperties({
+          onboarding_completed_at: new Date().toISOString(),
+          integrations_connected: connectedIntegrations,
+          has_self_hosted_posthog: posthogRegion === "self_hosted",
+          has_firecrawl: firecrawlConnected,
+        });
+
         router.push("/memory");
       } else {
         setCurrentStepIndex(nextIndex);
       }
     },
-    [currentStepIndex, steps, router, demoMode, markStep]
+    [currentStepIndex, steps, router, demoMode, markStep, stepStatuses, posthogConnected, attioConnected, firecrawlConnected, posthogRegion]
   );
 
   const goToPrevStep = useCallback(() => {

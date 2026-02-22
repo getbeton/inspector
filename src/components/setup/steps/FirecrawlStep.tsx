@@ -9,7 +9,11 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectTrigger, SelectPopup, SelectItem } from "@/components/ui/select";
 import { Check, AlertCircle, Globe, Server, Eye, EyeOff, SkipForward } from "lucide-react";
-import { trackIntegrationConnected } from "@/lib/analytics";
+import {
+  trackIntegrationConnected,
+  trackIntegrationConnectionFailed,
+  trackFirecrawlProxyTierSelected,
+} from "@/lib/analytics";
 import { isPrivateHost } from "@/lib/utils/ssrf";
 
 type DeployMode = "cloud" | "self_hosted";
@@ -142,11 +146,19 @@ export function FirecrawlStep({ onSuccess, onSkip, className }: FirecrawlStepPro
       }
 
       setState("success");
-      trackIntegrationConnected("firecrawl");
+      trackIntegrationConnected("firecrawl", {
+        mode,
+        category: "web_scraping",
+      });
       onSuccess();
     } catch (err) {
       setState("error");
-      setError(getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      setError(msg);
+      trackIntegrationConnectionFailed({
+        integration_name: "firecrawl",
+        error_message: msg,
+      });
     }
   }, [apiKey, mode, baseUrl, proxy, onSuccess, getErrorMessage]);
 
@@ -246,7 +258,10 @@ export function FirecrawlStep({ onSuccess, onSkip, className }: FirecrawlStepPro
           <Label>Proxy Tier</Label>
           <Select
             value={proxy}
-            onValueChange={(val) => setProxy(val as ProxyTier)}
+            onValueChange={(val) => {
+              setProxy(val as ProxyTier);
+              if (val) trackFirecrawlProxyTierSelected(val);
+            }}
             disabled={isLoading || isSuccess}
           >
             <SelectTrigger>
