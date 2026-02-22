@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/supabase/types'
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { SUPPORTED_INTEGRATIONS } from '@/lib/integrations/supported'
+import { isPrivateHost } from '@/lib/utils/ssrf'
 
 /**
  * GET /api/integrations/[name]
@@ -76,6 +77,41 @@ export async function GET(
   }
 }
 
+// ============================================
+// Per-integration input validation
+// ============================================
+
+/**
+ * Run integration-specific input checks before persisting.
+ * Returns an error string if validation fails, or null if OK.
+ */
+function validateIntegrationInput(
+  name: string,
+  body: Record<string, unknown>
+): string | null {
+  const { mode, base_url } = body as { mode?: string; base_url?: string }
+
+  // Common: any self-hosted integration must provide a valid, non-private base_url
+  if (mode === 'self_hosted') {
+    if (!base_url) {
+      return 'Instance URL is required for self-hosted mode.'
+    }
+    if (isPrivateHost(base_url)) {
+      return 'Instance URL cannot point to a private/internal address.'
+    }
+  }
+
+  // Firecrawl-specific: cloud API keys must start with "fc-"
+  if (name === 'firecrawl') {
+    const api_key = body.api_key as string | undefined
+    if (mode !== 'self_hosted' && api_key && !api_key.startsWith('fc-')) {
+      return 'Firecrawl cloud API keys start with "fc-". Please check your key.'
+    }
+  }
+
+  return null
+}
+
 /**
  * POST /api/integrations/[name]
  * Save or update integration configuration
@@ -114,6 +150,12 @@ export async function POST(
       return NextResponse.json({ error: 'API key is required' }, { status: 400 })
     }
 
+    // Per-integration input validation (SSRF, key format, etc.)
+    const validationError = validateIntegrationInput(name, body)
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 })
+    }
+
     // Encrypt sensitive credentials (async to avoid blocking event loop)
     const { apiKeyEncrypted, projectIdEncrypted } = await encryptCredentials({
       apiKey: api_key,
@@ -136,7 +178,8 @@ export async function POST(
       workspace_id: membership.workspaceId,
       integration_name: name,
       api_key_encrypted: apiKeyEncrypted,
-      project_id_encrypted: projectIdEncrypted,
+      // Only store project_id_encrypted when a project_id was actually provided
+      ...(projectIdEncrypted != null && { project_id_encrypted: projectIdEncrypted }),
       config_json: { region, host, ...otherConfig },
       status: 'validating',
       is_active: true
