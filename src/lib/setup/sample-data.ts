@@ -23,9 +23,6 @@ export interface SampleData extends Record<string, unknown> {
 }
 
 /**
- * Hardcoded fallback when no real account data exists in the workspace.
- */
-/**
  * Derive company info from a user email address.
  * e.g. user@acme.com → { companyName: "Acme", companyDomain: "acme.com" }
  */
@@ -41,15 +38,19 @@ export function deriveCompanyFromEmail(email: string): {
 
 /**
  * Hardcoded fallback when no real account data exists in the workspace.
+ * Returns a fresh object each call so `detected_at` is always current
+ * and callers cannot mutate a shared reference.
  */
-export const FALLBACK_SAMPLE: SampleData = {
-  company_name: "Acme Corp",
-  company_domain: "acme.com",
-  user_email: "user@acme.com",
-  signal_name: "Product Qualified Lead",
-  signal_type: "pql",
-  health_score: 85,
-  signal_count: 12,
-  deal_value: 48000,
-  detected_at: new Date().toISOString().split("T")[0],
+export function getDefaultSampleData(): SampleData {
+  return {
+    company_name: "Acme Corp",
+    company_domain: "acme.com",
+    user_email: "user@acme.com",
+    signal_name: "Product Qualified Lead",
+    signal_type: "pql",
+    health_score: 85,
+    signal_count: 12,
+    deal_value: 48000,
+    detected_at: new Date().toISOString().split("T")[0],
+  }
 }

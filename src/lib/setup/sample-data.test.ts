@@ -1,10 +1,11 @@
-import { deriveCompanyFromEmail, FALLBACK_SAMPLE } from './sample-data'
+/// <reference types="vitest" />
+import { deriveCompanyFromEmail, getDefaultSampleData } from './sample-data'
 
 /**
  * Tests for sample data helpers and deep link construction logic.
  *
  * BETON-279 TC1: Email domain extraction
- * BETON-279 TC2: Demo mode fallback (verified via FALLBACK_SAMPLE shape)
+ * BETON-279 TC2: Demo mode fallback (verified via getDefaultSampleData shape)
  */
 
 // ---------------------------------------------------------------------------
@@ -58,29 +59,39 @@ describe('deriveCompanyFromEmail', () => {
 // TC2: Fallback sample data shape
 // ---------------------------------------------------------------------------
 
-describe('FALLBACK_SAMPLE', () => {
+describe('getDefaultSampleData', () => {
   it('has all required fields', () => {
-    expect(FALLBACK_SAMPLE).toHaveProperty('company_name')
-    expect(FALLBACK_SAMPLE).toHaveProperty('company_domain')
-    expect(FALLBACK_SAMPLE).toHaveProperty('user_email')
-    expect(FALLBACK_SAMPLE).toHaveProperty('signal_name')
-    expect(FALLBACK_SAMPLE).toHaveProperty('signal_type')
-    expect(FALLBACK_SAMPLE).toHaveProperty('health_score')
-    expect(FALLBACK_SAMPLE).toHaveProperty('signal_count')
-    expect(FALLBACK_SAMPLE).toHaveProperty('deal_value')
-    expect(FALLBACK_SAMPLE).toHaveProperty('detected_at')
+    const sample = getDefaultSampleData()
+    expect(sample).toHaveProperty('company_name')
+    expect(sample).toHaveProperty('company_domain')
+    expect(sample).toHaveProperty('user_email')
+    expect(sample).toHaveProperty('signal_name')
+    expect(sample).toHaveProperty('signal_type')
+    expect(sample).toHaveProperty('health_score')
+    expect(sample).toHaveProperty('signal_count')
+    expect(sample).toHaveProperty('deal_value')
+    expect(sample).toHaveProperty('detected_at')
   })
 
   it('uses demo data (Acme Corp)', () => {
-    expect(FALLBACK_SAMPLE.company_name).toBe('Acme Corp')
-    expect(FALLBACK_SAMPLE.company_domain).toBe('acme.com')
-    expect(FALLBACK_SAMPLE.user_email).toBe('user@acme.com')
+    const sample = getDefaultSampleData()
+    expect(sample.company_name).toBe('Acme Corp')
+    expect(sample.company_domain).toBe('acme.com')
+    expect(sample.user_email).toBe('user@acme.com')
   })
 
   it('has realistic numeric values', () => {
-    expect(FALLBACK_SAMPLE.health_score).toBeGreaterThan(0)
-    expect(FALLBACK_SAMPLE.health_score).toBeLessThanOrEqual(100)
-    expect(FALLBACK_SAMPLE.deal_value).toBeGreaterThan(0)
+    const sample = getDefaultSampleData()
+    expect(sample.health_score).toBeGreaterThan(0)
+    expect(sample.health_score).toBeLessThanOrEqual(100)
+    expect(sample.deal_value).toBeGreaterThan(0)
+  })
+
+  it('returns a fresh object on each call', () => {
+    const a = getDefaultSampleData()
+    const b = getDefaultSampleData()
+    expect(a).not.toBe(b)
+    expect(a).toEqual(b)
   })
 })
 

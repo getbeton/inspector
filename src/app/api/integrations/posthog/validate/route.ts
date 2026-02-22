@@ -47,10 +47,44 @@ interface ErrorMapping {
 }
 
 function mapError(error: unknown): ErrorMapping {
+  // 1. Check for structured error objects with a status code property
+  const statusCode =
+    (error as { statusCode?: number })?.statusCode ??
+    (error as { status?: number })?.status
+
+  if (statusCode === 401) {
+    return {
+      code: 'invalid_api_key',
+      message: 'Invalid API key. Please check and try again.',
+      status: 401,
+    }
+  }
+  if (statusCode === 403) {
+    return {
+      code: 'invalid_api_key',
+      message: 'Access denied. Please verify your API key has the required permissions.',
+      status: 403,
+    }
+  }
+  if (statusCode === 404) {
+    return {
+      code: 'project_not_found',
+      message: 'Project not found. Please verify your Project ID.',
+      status: 404,
+    }
+  }
+  if (statusCode === 429) {
+    return {
+      code: 'rate_limited',
+      message: 'Too many requests. Please wait a moment and try again.',
+      status: 429,
+    }
+  }
+
+  // 2. Fall back to word-boundary regex matching on the stringified error
   const errorStr = String(error)
 
-  // Check for specific HTTP status codes
-  if (errorStr.includes('401') || errorStr.includes('Unauthorized')) {
+  if (/\b401\b/.test(errorStr) || /\bUnauthorized\b/i.test(errorStr)) {
     return {
       code: 'invalid_api_key',
       message: 'Invalid API key. Please check and try again.',
@@ -58,7 +92,7 @@ function mapError(error: unknown): ErrorMapping {
     }
   }
 
-  if (errorStr.includes('403') || errorStr.includes('Forbidden')) {
+  if (/\b403\b/.test(errorStr) || /\bForbidden\b/i.test(errorStr)) {
     return {
       code: 'invalid_api_key',
       message: 'Access denied. Please verify your API key has the required permissions.',
@@ -66,7 +100,7 @@ function mapError(error: unknown): ErrorMapping {
     }
   }
 
-  if (errorStr.includes('404') || errorStr.includes('Not Found')) {
+  if (/\b404\b/.test(errorStr) || /\bNot Found\b/i.test(errorStr)) {
     return {
       code: 'project_not_found',
       message: 'Project not found. Please verify your Project ID.',
@@ -74,7 +108,7 @@ function mapError(error: unknown): ErrorMapping {
     }
   }
 
-  if (errorStr.includes('429') || errorStr.includes('rate')) {
+  if (/\b429\b/.test(errorStr) || /\brate\b/i.test(errorStr)) {
     return {
       code: 'rate_limited',
       message: 'Too many requests. Please wait a moment and try again.',
@@ -98,7 +132,7 @@ function mapError(error: unknown): ErrorMapping {
   // Network errors
   if (
     errorStr.includes('fetch') ||
-    errorStr.includes('network') ||
+    /\bnetwork\b/i.test(errorStr) ||
     errorStr.includes('ECONNREFUSED') ||
     errorStr.includes('ETIMEDOUT')
   ) {
@@ -109,10 +143,10 @@ function mapError(error: unknown): ErrorMapping {
     }
   }
 
-  // Default unknown error
+  // Default unknown error — do not leak error.message to client
   return {
     code: 'unknown_error',
-    message: error instanceof Error ? error.message : 'An unexpected error occurred.',
+    message: 'An unexpected error occurred.',
     status: 500,
   }
 }

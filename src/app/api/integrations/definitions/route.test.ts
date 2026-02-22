@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { GET } from './route'
 
 /**
@@ -12,18 +13,14 @@ import { GET } from './route'
 // ---------------------------------------------------------------------------
 
 vi.mock('@/lib/supabase/server', () => ({
+  requireWorkspace: vi.fn(),
   createClient: vi.fn(),
 }))
 
-vi.mock('@/lib/supabase/helpers', () => ({
-  getWorkspaceMembership: vi.fn(),
-}))
+import { requireWorkspace, createClient } from '@/lib/supabase/server'
 
-import { createClient } from '@/lib/supabase/server'
-import { getWorkspaceMembership } from '@/lib/supabase/helpers'
-
+const mockRequireWorkspace = requireWorkspace as ReturnType<typeof vi.fn>
 const mockCreateClient = createClient as ReturnType<typeof vi.fn>
-const mockGetWorkspaceMembership = getWorkspaceMembership as ReturnType<typeof vi.fn>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -84,14 +81,12 @@ const CONFIGS = [
 ]
 
 function createSupabaseMock(options?: {
-  user?: { id: string } | null
   definitionsData?: typeof DEFINITIONS | null
   definitionsError?: { message: string } | null
   configsData?: typeof CONFIGS | null
   configsError?: { message: string } | null
 }) {
   const {
-    user = { id: 'user-1' },
     definitionsData = DEFINITIONS,
     definitionsError = null,
     configsData = CONFIGS,
@@ -124,14 +119,7 @@ function createSupabaseMock(options?: {
     return defChain // fallback
   })
 
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user },
-      }),
-    },
-    from: fromMock,
-  }
+  return { from: fromMock }
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +129,12 @@ function createSupabaseMock(options?: {
 describe('GET /api/integrations/definitions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRequireWorkspace.mockResolvedValue({ workspaceId: 'ws-1' })
   })
 
   // TC4: API rejects unauthenticated requests
   it('returns 401 when user is not authenticated', async () => {
-    const supabase = createSupabaseMock({ user: null })
-    mockCreateClient.mockResolvedValue(supabase)
+    mockRequireWorkspace.mockRejectedValue(new Error('Unauthorized'))
 
     const res = await GET()
     expect(res.status).toBe(401)
@@ -155,9 +143,7 @@ describe('GET /api/integrations/definitions', () => {
 
   // TC4 extended: no workspace membership
   it('returns 404 when user has no workspace membership', async () => {
-    const supabase = createSupabaseMock()
-    mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue(null)
+    mockRequireWorkspace.mockRejectedValue(new Error('No workspace found'))
 
     const res = await GET()
     expect(res.status).toBe(404)
@@ -168,10 +154,6 @@ describe('GET /api/integrations/definitions', () => {
   it('returns enriched definitions with connection status', async () => {
     const supabase = createSupabaseMock()
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const res = await GET()
     expect(res.status).toBe(200)
@@ -214,10 +196,6 @@ describe('GET /api/integrations/definitions', () => {
     ]
     const supabase = createSupabaseMock({ configsData: inactiveConfig })
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const res = await GET()
     const body = await res.json()
@@ -239,10 +217,6 @@ describe('GET /api/integrations/definitions', () => {
     ]
     const supabase = createSupabaseMock({ configsData: failedConfig })
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const res = await GET()
     const body = await res.json()
@@ -259,10 +233,6 @@ describe('GET /api/integrations/definitions', () => {
       definitionsError: { message: 'relation "integration_definitions" does not exist' },
     })
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const res = await GET()
@@ -282,10 +252,6 @@ describe('GET /api/integrations/definitions', () => {
       configsError: { message: 'DB error' },
     })
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const res = await GET()
@@ -300,10 +266,6 @@ describe('GET /api/integrations/definitions', () => {
   it('handles workspace with no configs gracefully', async () => {
     const supabase = createSupabaseMock({ configsData: [] })
     mockCreateClient.mockResolvedValue(supabase)
-    mockGetWorkspaceMembership.mockResolvedValue({
-      workspaceId: 'ws-1',
-      role: 'owner',
-    })
 
     const res = await GET()
     expect(res.status).toBe(200)

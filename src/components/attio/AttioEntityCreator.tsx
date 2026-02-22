@@ -95,7 +95,8 @@ export function AttioEntityCreator({
   useEffect(() => {
     if (!companyDomain && !personEmail) return
 
-    let cancelled = false
+    const controller = new AbortController()
+    const { signal } = controller
     setExistence((prev) => ({ ...prev, loading: true }))
 
     const checks = []
@@ -103,11 +104,12 @@ export function AttioEntityCreator({
     if (companyDomain) {
       checks.push(
         fetch(
-          `/api/integrations/attio/search?q=${encodeURIComponent(companyDomain)}&object=companies`
+          `/api/integrations/attio/search?q=${encodeURIComponent(companyDomain)}&object=companies`,
+          { signal }
         )
           .then((r) => r.json())
           .then((data) => {
-            if (cancelled) return
+            if (signal.aborted) return
             const match = data.results?.[0]
             setExistence((prev) => ({
               ...prev,
@@ -117,8 +119,9 @@ export function AttioEntityCreator({
             }))
             if (match) setCreateCompany(false)
           })
-          .catch(() => {
-            if (!cancelled)
+          .catch((err) => {
+            if (err instanceof DOMException && err.name === 'AbortError') return
+            if (!signal.aborted)
               setExistence((prev) => ({ ...prev, company: { exists: false } }))
           })
       )
@@ -127,11 +130,12 @@ export function AttioEntityCreator({
     if (personEmail) {
       checks.push(
         fetch(
-          `/api/integrations/attio/search?q=${encodeURIComponent(personEmail)}&object=people`
+          `/api/integrations/attio/search?q=${encodeURIComponent(personEmail)}&object=people`,
+          { signal }
         )
           .then((r) => r.json())
           .then((data) => {
-            if (cancelled) return
+            if (signal.aborted) return
             const match = data.results?.[0]
             setExistence((prev) => ({
               ...prev,
@@ -141,24 +145,27 @@ export function AttioEntityCreator({
             }))
             if (match) setCreatePerson(false)
           })
-          .catch(() => {
-            if (!cancelled)
+          .catch((err) => {
+            if (err instanceof DOMException && err.name === 'AbortError') return
+            if (!signal.aborted)
               setExistence((prev) => ({ ...prev, person: { exists: false } }))
           })
       )
     }
 
     Promise.all(checks).finally(() => {
-      if (!cancelled) setExistence((prev) => ({ ...prev, loading: false }))
+      if (!signal.aborted) setExistence((prev) => ({ ...prev, loading: false }))
     })
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [companyDomain, personEmail])
 
   // Create entities via batch API
   const handleCreate = useCallback(async () => {
+    // Track phase locally to avoid stale closure reads on `phase` state
+    let currentPhase: CreationPhase = "company"
     setPhase("company")
     setError(null)
 
@@ -174,7 +181,6 @@ export function AttioEntityCreator({
       }
 
       if (createPerson && personEmail) {
-        setPhase("person")
         body.create_person = true
         body.person_data = {
           email_addresses: personEmail,
@@ -194,7 +200,8 @@ export function AttioEntityCreator({
       }
 
       // Single batch call
-      setPhase(createCompany ? "company" : createPerson ? "person" : "deal")
+      currentPhase = createCompany ? "company" : createPerson ? "person" : "deal"
+      setPhase(currentPhase)
       const res = await fetch("/api/integrations/attio/entities", {
         method: "POST",
         credentials: "include",
@@ -210,6 +217,7 @@ export function AttioEntityCreator({
 
       const batchResult: BatchResult = data.results || {}
       setResult(batchResult)
+      currentPhase = "done"
       setPhase("done")
 
       // Track each successfully created entity
@@ -229,8 +237,8 @@ export function AttioEntityCreator({
       setError(msg)
       setPhase("error")
 
-      // Track the failure for the phase that was in progress
-      const failedType = phase === "company" ? "company" : phase === "person" ? "person" : "deal"
+      // Use currentPhase (local) rather than phase (stale closure)
+      const failedType = currentPhase === "company" ? "company" : currentPhase === "person" ? "person" : "deal"
       trackAttioEntityCreationFailed({ object_type: failedType })
     }
   }, [
@@ -243,7 +251,6 @@ export function AttioEntityCreator({
     personEmail,
     onEntitiesCreated,
     analyticsContext,
-    phase,
   ])
 
   const isCreating = phase !== "idle" && phase !== "done" && phase !== "error"
