@@ -20,7 +20,7 @@ import { toastManager } from '@/components/ui/toast'
 import { useSession } from '@/components/auth/session-provider'
 import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 import { Select, SelectTrigger, SelectPopup, SelectItem } from '@/components/ui/select'
-import { ExternalLink, Eye, EyeOff } from 'lucide-react'
+import { ExternalLink, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import {
   useIntegrationCredentials,
@@ -122,8 +122,37 @@ const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
   },
 }
 
-function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '')
+/**
+ * Checks whether raw input looks like a valid base URL for an instance.
+ * Accepts:  domain.com, www.domain.com, https://domain.com, http://sub.domain.co.uk
+ * Rejects:  domaincom (no dot), ghsdgfds//domain.com, https:///domain.com
+ */
+function isValidInstanceUrl(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return false
+
+  // Normalise: if no protocol, prepend https:// so URL() can parse it
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+
+  try {
+    const url = new URL(withProtocol)
+    // hostname must contain at least one dot (rules out "domaincom")
+    if (!url.hostname.includes('.')) return false
+    // reject triple-slash patterns like https:///domain.com (empty hostname)
+    if (!url.hostname) return false
+    // reject if original had malformed slashes before the host
+    // e.g. "ghsdgfds//domain.com" → URL would parse "ghsdgfds" as protocol
+    if (!/^https?:\/\//i.test(withProtocol)) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+function buildHelpUrl(raw: string, path: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '')
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return withProtocol.replace(/\/+$/, '') + path
 }
 
 // ---------------------------------------------------------------------------
@@ -357,18 +386,7 @@ function IntegrationCard({
             </p>
           ) : editing ? (
             <div className="space-y-4">
-              {fieldConfig.fields.map(field => (
-                <div key={field.id}>
-                  <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">{field.label}</label>
-                  <Input
-                    type={field.type}
-                    placeholder={field.placeholder}
-                    value={editValues[field.id] || ''}
-                    onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
-                  />
-                </div>
-              ))}
-              {/* Self-hostable fields (driven by definition.supports_self_hosted) */}
+              {/* Self-hostable: deployment mode & instance URL first */}
               {definition.supports_self_hosted && fieldConfig.selfHostable && (
                 <>
                   <div>
@@ -403,7 +421,7 @@ function IntegrationCard({
                   )}
                 </>
               )}
-              {/* Extra fields */}
+              {/* Extra fields (e.g. proxy tier) */}
               {fieldConfig.extraFields?.map(field => {
                 if (!isExtraFieldVisible(field)) return null
                 return (
@@ -440,20 +458,43 @@ function IntegrationCard({
                   </div>
                 )
               })}
-              {/* Help link */}
+              {/* Help link — with live URL validation for self-hosted */}
               {(() => {
-                let helpHref: string | undefined
-                if (definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted' && editValues.base_url) {
-                  const base = normalizeBaseUrl(editValues.base_url)
-                  const path = fieldConfig.selfHostable.selfHostedHelpPath ?? ''
-                  helpHref = base + path
-                } else {
-                  helpHref = fieldConfig.helpUrl
+                const isSelfHosted = definition.supports_self_hosted && fieldConfig.selfHostable && editValues.mode === 'self_hosted'
+                if (isSelfHosted) {
+                  const path = fieldConfig.selfHostable!.selfHostedHelpPath ?? ''
+                  const raw = editValues.base_url || ''
+                  const helpHref = raw.trim() ? buildHelpUrl(raw, path) : ''
+                  const valid = raw.trim() ? isValidInstanceUrl(raw) : false
+
+                  if (valid) {
+                    return (
+                      <a
+                        href={helpHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        Get your API key{path && <span className="text-muted-foreground ml-0.5 font-mono">{path}</span>}
+                        {' '}<ExternalLink className="h-3 w-3" />
+                      </a>
+                    )
+                  }
+                  // Always show — invalid or empty URL gets error state
+                  return (
+                    <span className="inline-flex items-center gap-1 text-xs text-destructive">
+                      <AlertCircle className="h-3 w-3" />
+                      {raw.trim()
+                        ? 'Enter a valid instance URL to get your API key link'
+                        : 'Enter your instance URL above to get your API key link'}
+                    </span>
+                  )
                 }
-                if (!helpHref) return null
+                // Cloud mode — static help URL
+                if (!fieldConfig.helpUrl) return null
                 return (
                   <a
-                    href={helpHref}
+                    href={fieldConfig.helpUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -462,6 +503,18 @@ function IntegrationCard({
                   </a>
                 )
               })()}
+              {/* Credential fields (API key, project ID, etc.) */}
+              {fieldConfig.fields.map(field => (
+                <div key={field.id}>
+                  <label className="text-sm font-bold uppercase tracking-wider mb-1.5 block">{field.label}</label>
+                  <Input
+                    type={field.type}
+                    placeholder={field.placeholder}
+                    value={editValues[field.id] || ''}
+                    onChange={(e) => setEditValues({ ...editValues, [field.id]: e.target.value })}
+                  />
+                </div>
+              ))}
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleSave} disabled={saveMutation.isPending}>
                   {saveMutation.isPending ? 'Saving...' : 'Save'}
