@@ -14,3 +14,13 @@ export type {
   SlackPostResult,
   SlackConfigJson,
 } from './types'
+
+export {
+  buildSignalNotificationMessage,
+  SIGNAL_TYPE_METADATA,
+} from './message-builder'
+
+export type {
+  SignalNotificationContext,
+  SignalTypeMeta,
+} from './message-builder'
