@@ -7,6 +7,7 @@
 type AnySupabaseClient = import('@supabase/supabase-js').SupabaseClient<any, any, any>
 import type { DetectedSignal, DetectorContext, SignalDetectorDefinition } from './types'
 import { allDetectors, getDetectorsByCategory } from './detectors'
+import { dispatchSlackNotification } from '@/lib/integrations/slack/notifications'
 
 export interface ProcessorOptions {
   /**
@@ -91,6 +92,10 @@ export async function processAccountSignals(
             result.errors.push(`Failed to persist ${signal.type}: ${error.message}`)
           } else {
             result.persisted++
+            // Fire-and-forget Slack notification
+            dispatchSlackNotification(supabase, signal, workspaceId).catch((err) =>
+              console.error('[Slack] Notification failed:', err instanceof Error ? err.message : err)
+            )
           }
         }
       }

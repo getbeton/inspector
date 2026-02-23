@@ -3,6 +3,7 @@ import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { SignalInsert } from '@/lib/supabase/types'
+import { dispatchSlackNotification } from '@/lib/integrations/slack/notifications'
 
 /**
  * GET /api/signals
@@ -297,6 +298,21 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating signal:', error)
       return NextResponse.json({ error: 'Failed to create signal' }, { status: 500 })
+    }
+
+    // Fire-and-forget Slack notification
+    if (signal) {
+      dispatchSlackNotification(anySupabase, {
+        id: signal.id,
+        account_id: signal.account_id,
+        workspace_id: workspaceId,
+        type: signal.type,
+        value: signal.value,
+        details: signal.details || {},
+        source: signal.source ?? 'api',
+      }, workspaceId).catch((err) =>
+        console.error('[Slack] API signal notification failed:', err instanceof Error ? err.message : err)
+      )
     }
 
     return NextResponse.json({ signal }, { status: 201 })

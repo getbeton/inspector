@@ -24,3 +24,8 @@ export type {
   SignalNotificationContext,
   SignalTypeMeta,
 } from './message-builder'
+
+export {
+  dispatchSlackNotification,
+  preCheckSlackToken,
+} from './notifications'
