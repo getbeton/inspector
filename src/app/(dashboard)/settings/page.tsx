@@ -28,6 +28,7 @@ import {
   useDisconnectIntegration,
 } from '@/lib/hooks/use-integrations'
 import { useIntegrationDefinitions } from '@/lib/hooks/use-integration-definitions'
+import { SlackIntegrationCard } from '@/components/integrations/slack-card'
 import type { IntegrationCategory, IntegrationDefinition } from '@/lib/integrations/types'
 
 // ---------------------------------------------------------------------------
@@ -619,13 +620,17 @@ function CategorySection({
       <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b-2 border-border pb-2">
         {CATEGORY_LABELS[category]}
       </h3>
-      {definitions.map((def) => (
-        <IntegrationCard
-          key={def.id}
-          definition={def}
-          fieldConfig={FIELD_CONFIGS[def.name]}
-        />
-      ))}
+      {definitions.map((def) =>
+        def.name === 'slack' ? (
+          <SlackIntegrationCard key={def.id} definition={def} />
+        ) : (
+          <IntegrationCard
+            key={def.id}
+            definition={def}
+            fieldConfig={FIELD_CONFIGS[def.name]}
+          />
+        )
+      )}
     </div>
   )
 }
