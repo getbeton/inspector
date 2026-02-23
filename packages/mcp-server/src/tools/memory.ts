@@ -1,23 +1,17 @@
 /**
- * Memory tools — Read Only (3 tools)
+ * Memory tools (3 tools) — thin proxy to /api/agent/*
  *
- * These tools use the admin (service role) Supabase client because they
- * need cross-table joins that RLS doesn't permit. Workspace isolation
- * is enforced explicitly via workspace_id filters.
- *
- * - list_exploration_sessions: Past agent sessions with status, EDA counts
- * - get_eda_results: EDA results (join suggestions, metrics, table stats)
- * - get_website_exploration: Website analysis (B2B, PLG type, ICP, pricing)
+ * These tools read agent exploration data (sessions, EDA results, website analysis).
  */
 
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { AdminToolContext } from '../context/types.js'
-import { toMcpError } from '../lib/errors.js'
+import { callApi } from '../lib/proxy.js'
+import { httpErrorToMcp, toMcpError } from '../lib/errors.js'
 
 export function registerMemoryTools(
   server: McpServer,
-  getAdminContext: () => Promise<AdminToolContext>
+  getAuthHeader: () => string | undefined
 ): void {
   // ── list_exploration_sessions ──────────────────────────────────────
   server.tool(
@@ -29,46 +23,17 @@ export function registerMemoryTools(
     },
     async ({ status, limit }) => {
       try {
-        const { adminSupabase, workspaceId } = await getAdminContext()
+        const params: Record<string, string> = { limit: String(limit) }
+        if (status) params.status = status
 
-        let query = adminSupabase
-          .from('workspace_agent_sessions')
-          .select('*')
-          .eq('workspace_id', workspaceId)
-          .order('created_at', { ascending: false })
-          .limit(limit)
-
-        if (status) {
-          query = query.eq('status', status)
-        }
-
-        const { data: sessions, error } = await query
-
-        if (error) {
-          return toMcpError(new Error(`Failed to fetch sessions: ${error.message}`))
-        }
-
-        // Count EDA results for each session
-        const enrichedSessions = await Promise.all(
-          (sessions || []).map(async (session) => {
-            const { count } = await adminSupabase
-              .from('eda_results')
-              .select('*', { count: 'exact', head: true })
-              .eq('workspace_id', workspaceId)
-
-            return {
-              ...session,
-              eda_result_count: count || 0,
-            }
-          })
+        const { data, status: httpStatus } = await callApi(
+          '/api/agent/sessions',
+          getAuthHeader(),
+          { params }
         )
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ sessions: enrichedSessions }, null, 2),
-          }],
-        }
+        if (httpStatus !== 200) return httpErrorToMcp(data, httpStatus)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }
@@ -84,30 +49,17 @@ export function registerMemoryTools(
     },
     async ({ table_id }) => {
       try {
-        const { adminSupabase, workspaceId } = await getAdminContext()
+        const params: Record<string, string> = {}
+        if (table_id) params.table_id = table_id
 
-        let query = adminSupabase
-          .from('eda_results')
-          .select('*')
-          .eq('workspace_id', workspaceId)
-          .order('updated_at', { ascending: false })
+        const { data, status } = await callApi(
+          '/api/agent/data/eda',
+          getAuthHeader(),
+          { params }
+        )
 
-        if (table_id) {
-          query = query.eq('table_id', table_id)
-        }
-
-        const { data, error } = await query
-
-        if (error) {
-          return toMcpError(new Error(`Failed to fetch EDA results: ${error.message}`))
-        }
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ eda_results: data || [] }, null, 2),
-          }],
-        }
+        if (status !== 200) return httpErrorToMcp(data, status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }
@@ -121,29 +73,13 @@ export function registerMemoryTools(
     {},
     async () => {
       try {
-        const { adminSupabase, workspaceId } = await getAdminContext()
+        const { data, status } = await callApi(
+          '/api/agent/data/website-exploration',
+          getAuthHeader()
+        )
 
-        const { data, error } = await adminSupabase
-          .from('website_exploration_results')
-          .select('*')
-          .eq('workspace_id', workspaceId)
-          .single()
-
-        if (error) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: JSON.stringify({ website_exploration: null, message: 'No website exploration results found' }, null, 2),
-            }],
-          }
-        }
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ website_exploration: data }, null, 2),
-          }],
-        }
+        if (status !== 200) return httpErrorToMcp(data, status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }

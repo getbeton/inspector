@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import type { NextRequest } from 'next/server'
 import type { Database } from './types'
 
 /**
@@ -34,6 +36,38 @@ export async function createClient() {
       }
     }
   })
+}
+
+/**
+ * Create Supabase client from a NextRequest, supporting dual auth:
+ * - Bearer JWT token (from MCP server or external callers)
+ * - Cookie-based session (from browser)
+ *
+ * This allows API routes to serve both browser users and programmatic
+ * callers (like the MCP thin proxy) without code duplication.
+ */
+export async function createClientFromRequest(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+
+  const authHeader = request.headers.get('authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  if (bearerToken) {
+    // External caller (MCP server) — use JWT directly with Supabase
+    // The JWT is a Supabase access token, so RLS policies apply normally.
+    return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${bearerToken}` } },
+    })
+  }
+
+  // Browser caller — use cookies (existing behavior)
+  return createClient()
 }
 
 /**

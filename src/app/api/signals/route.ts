@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createClientFromRequest } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
@@ -6,11 +6,20 @@ import type { SignalInsert } from '@/lib/supabase/types'
 
 /**
  * GET /api/signals
- * List all signals for current workspace with optional filters
+ *
+ * List signals for current workspace. Returns a unified list that merges:
+ * - Custom signal definitions (from signal_definitions table)
+ * - Heuristic signal occurrences (from signals table)
+ *
+ * Both are enriched with metrics from signal_aggregates.
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ')
+    const supabase = hasBearerToken
+      ? await createClientFromRequest(request)
+      : await createClient()
+
     const searchParams = request.nextUrl.searchParams
 
     // Parse query parameters
@@ -31,66 +40,96 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's workspace
-    const membership = await getWorkspaceMembership()
+    let workspaceId: string
 
-    if (!membership) {
-      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anySupabase = supabase as any
 
-    // Build query
-    let query = supabase
-      .from('signals')
-      .select(`
-        *,
-        accounts (
-          id,
-          name,
-          domain,
-          arr,
-          health_score
-        )
-      `, { count: 'exact' })
-      .eq('workspace_id', membership.workspaceId)
-      .order('timestamp', { ascending: false })
-
-    // Apply filters
-    if (type) {
-      query = query.eq('type', type)
-    }
-    if (source) {
-      query = query.eq('source', source)
-    }
-    if (accountId) {
-      query = query.eq('account_id', accountId)
-    }
-    if (startDate) {
-      query = query.gte('timestamp', startDate)
-    }
-    if (endDate) {
-      query = query.lte('timestamp', endDate)
+    if (hasBearerToken) {
+      const { data } = await anySupabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+        .single()
+      if (!data) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      workspaceId = data.workspace_id
+    } else {
+      const membership = await getWorkspaceMembership()
+      if (!membership) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      workspaceId = membership.workspaceId
     }
 
-    // Apply pagination
-    const from = (page - 1) * limit
-    const to = from + limit - 1
-    query = query.range(from, to)
+    // If requesting only custom/manual signals, query signal_definitions
+    // If requesting heuristic, query signals. Otherwise merge both.
+    const wantCustom = !source || source === 'manual'
+    const wantHeuristic = !source || source !== 'manual'
 
-    // Run both queries in parallel — aggregates don't depend on signal results
-    const [signalsResult, aggregatesResult] = await Promise.all([
-      query,
-      supabase
+    // Run all queries in parallel
+    const [definitionsResult, signalsResult, aggregatesResult] = await Promise.all([
+      // Custom signal definitions
+      wantCustom ? (async () => {
+        let q = anySupabase
+          .from('signal_definitions')
+          .select('*', { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+
+        if (type) q = q.eq('type', type)
+        if (startDate) q = q.gte('created_at', startDate)
+        if (endDate) q = q.lte('created_at', endDate)
+
+        // Only paginate definitions if we're not also querying occurrences
+        if (!wantHeuristic) {
+          const from = (page - 1) * limit
+          q = q.range(from, from + limit - 1)
+        }
+
+        return q
+      })() : Promise.resolve({ data: [], count: 0, error: null }),
+
+      // Heuristic signal occurrences
+      wantHeuristic ? (async () => {
+        let q = anySupabase
+          .from('signals')
+          .select(`
+            *,
+            accounts (
+              id,
+              name,
+              domain,
+              arr,
+              health_score
+            )
+          `, { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order('timestamp', { ascending: false })
+
+        if (type) q = q.eq('type', type)
+        if (accountId) q = q.eq('account_id', accountId)
+        if (startDate) q = q.gte('timestamp', startDate)
+        if (endDate) q = q.lte('timestamp', endDate)
+
+        if (!wantCustom) {
+          const from = (page - 1) * limit
+          q = q.range(from, from + limit - 1)
+        }
+
+        return q
+      })() : Promise.resolve({ data: [], count: 0, error: null }),
+
+      // Aggregated metrics
+      anySupabase
         .from('signal_aggregates')
         .select('*')
-        .eq('workspace_id', membership.workspaceId) as unknown as Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>,
+        .eq('workspace_id', workspaceId) as unknown as Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>,
     ])
 
-    const { data: signals, error, count } = signalsResult
-
-    if (error) {
-      console.error('Error fetching signals:', error)
+    if (signalsResult.error) {
+      console.error('Error fetching signals:', signalsResult.error)
       return NextResponse.json({ error: 'Failed to fetch signals' }, { status: 500 })
     }
 
+    // Build aggregates lookup
     const aggregatesMap: Record<string, Record<string, unknown>> = {}
     if (aggregatesResult.data) {
       for (const agg of aggregatesResult.data) {
@@ -98,8 +137,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Merge metrics into signal details for the response
-    const enrichedSignals = (signals || []).map((signal: { type: string; details: Record<string, unknown> | null }) => {
+    // Normalize definitions to look like signals in the response
+    const definitionItems = (definitionsResult?.data || []).map((def: Record<string, unknown>) => {
+      const agg = aggregatesMap[def.type as string]
+      return {
+        id: def.id,
+        workspace_id: def.workspace_id,
+        type: def.type,
+        source: 'manual',
+        timestamp: def.created_at,
+        created_at: def.created_at,
+        value: null,
+        account_id: null,
+        accounts: null,
+        is_definition: true,
+        details: {
+          name: def.name,
+          description: def.description,
+          event_name: def.event_name,
+          condition_operator: def.condition_operator,
+          condition_value: def.condition_value,
+          time_window_days: def.time_window_days,
+          conversion_event: def.conversion_event,
+          lift: agg?.avg_lift ?? null,
+          confidence: agg?.confidence_score ?? null,
+          conversion_with: agg?.avg_conversion_rate ?? null,
+          leads_per_month: agg?.count_last_30d ? Math.round((agg.count_last_30d as number) / 4.3) : null,
+          match_count_7d: agg?.count_last_7d ?? null,
+          match_count_30d: agg?.count_last_30d ?? null,
+          match_count_total: agg?.total_count ?? null,
+          sample_with: agg?.sample_size ?? null,
+        },
+      }
+    })
+
+    // Enrich heuristic signals with aggregate metrics
+    const occurrenceItems = (signalsResult.data || []).map((signal: { type: string; details: Record<string, unknown> | null }) => {
       const agg = aggregatesMap[signal.type]
       if (!agg) return signal
       return {
@@ -118,13 +191,24 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Merge and paginate
+    const allItems = [...definitionItems, ...occurrenceItems]
+    const totalCount = (definitionsResult?.count || 0) + (signalsResult.count || 0)
+
+    // Apply pagination to merged result if both sources were queried
+    let paginatedItems = allItems
+    if (wantCustom && wantHeuristic) {
+      const from = (page - 1) * limit
+      paginatedItems = allItems.slice(from, from + limit)
+    }
+
     return NextResponse.json({
-      signals: enrichedSignals,
+      signals: paginatedItems,
       pagination: {
         page,
         limit,
-        total: count || 0,
-        pages: count ? Math.ceil(count / limit) : 0
+        total: totalCount,
+        pages: totalCount ? Math.ceil(totalCount / limit) : 0
       }
     })
   } catch (error) {
@@ -135,11 +219,14 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/signals
- * Create a new signal (usually from integrations)
+ * Create a new signal occurrence (from integrations/heuristics)
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ')
+    const supabase = hasBearerToken
+      ? await createClientFromRequest(request)
+      : await createClient()
 
     const {
       data: { user }
@@ -149,11 +236,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Get user's workspace
-    const membership = await getWorkspaceMembership()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anySupabase = supabase as any
 
-    if (!membership) {
-      return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+    // Get user's workspace
+    let workspaceId: string
+
+    if (hasBearerToken) {
+      const { data } = await anySupabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+        .single()
+      if (!data) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      workspaceId = data.workspace_id
+    } else {
+      const membership = await getWorkspaceMembership()
+      if (!membership) return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      workspaceId = membership.workspaceId
     }
 
     const body = await request.json()
@@ -167,20 +267,20 @@ export async function POST(request: Request) {
     }
 
     // Verify account belongs to workspace
-    const { data: account } = await supabase
+    const { data: account } = await anySupabase
       .from('accounts')
       .select('id')
       .eq('id', account_id)
-      .eq('workspace_id', membership.workspaceId)
+      .eq('workspace_id', workspaceId)
       .single()
 
     if (!account) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    // Create signal
+    // Create signal occurrence
     const signalData: SignalInsert = {
-      workspace_id: membership.workspaceId,
+      workspace_id: workspaceId,
       account_id,
       type,
       value: value || null,
@@ -188,7 +288,7 @@ export async function POST(request: Request) {
       source: source || 'manual'
     }
 
-    const { data: signal, error } = await supabase
+    const { data: signal, error } = await anySupabase
       .from('signals')
       .insert(signalData as never)
       .select()

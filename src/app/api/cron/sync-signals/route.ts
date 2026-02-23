@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-  const results: Array<{ signalId: string; status: string; error?: string }> = []
+  const results: Array<{ signalDefinitionId: string; status: string; error?: string }> = []
 
   try {
     // Find all sync configs that have at least one auto_update target
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       .from('signal_sync_configs')
       .select(`
         id,
-        signal_id,
+        signal_definition_id,
         workspace_id,
         event_names,
         condition_operator,
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
     const configs = syncConfigs as Array<{
       id: string
-      signal_id: string
+      signal_definition_id: string
       workspace_id: string
       event_names: string[]
       condition_operator: string
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
 
         if (!posthogCreds?.apiKey || !posthogCreds?.projectId) {
           results.push({
-            signalId: config.signal_id,
+            signalDefinitionId: config.signal_definition_id,
             status: 'skipped',
             error: 'PostHog not configured',
           })
@@ -186,11 +186,11 @@ export async function GET(request: Request) {
           .update({ last_synced_at: new Date().toISOString() } as never)
           .eq('id', config.id)
 
-        results.push({ signalId: config.signal_id, status: 'synced' })
+        results.push({ signalDefinitionId: config.signal_definition_id, status: 'synced' })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Unknown error'
         console.error(`[Sync Signals] Config ${config.id} failed:`, errMsg)
-        results.push({ signalId: config.signal_id, status: 'error', error: errMsg })
+        results.push({ signalDefinitionId: config.signal_definition_id, status: 'error', error: errMsg })
       }
     }
 

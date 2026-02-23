@@ -2,12 +2,11 @@
  * MCP Server factory
  *
  * Creates a McpServer instance with all 18 Beton tools registered.
- * Each tool receives a lazy context resolver — authentication and
- * workspace resolution happen only when a tool is actually called.
+ * Each tool delegates to the Next.js API via the proxy helper.
+ * Authentication is forwarded via the getAuthHeader callback.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ToolContext, AdminToolContext } from './context/types.js'
 import { registerSignalTools } from './tools/signals.js'
 import { registerMemoryTools } from './tools/memory.js'
 import { registerWarehouseTools } from './tools/warehouse.js'
@@ -19,26 +18,24 @@ import { registerWorkspaceTools } from './tools/workspace.js'
 /**
  * Create a fully configured MCP server with all tools.
  *
- * @param getContext - Lazy context resolver (validates JWT + resolves workspace on demand)
- * @param getAdminContext - Lazy admin context resolver (adds service role client)
+ * @param getAuthHeader - Returns the current Authorization header value for this session
  */
 export function createMcpServer(
-  getContext: () => Promise<ToolContext>,
-  getAdminContext: () => Promise<AdminToolContext>
+  getAuthHeader: () => string | undefined
 ): McpServer {
   const server = new McpServer({
     name: 'beton',
-    version: '0.1.0',
+    version: '0.2.0',
   })
 
-  // Register all tool groups
-  registerSignalTools(server, getContext)
-  registerMemoryTools(server, getAdminContext)
-  registerWarehouseTools(server, getContext)
-  registerJoinsTools(server, getAdminContext)
-  registerMappingTools(server, getContext)
-  registerBillingTools(server, getContext)
-  registerWorkspaceTools(server, getContext)
+  // Register all tool groups — each gets the auth header getter
+  registerSignalTools(server, getAuthHeader)
+  registerMemoryTools(server, getAuthHeader)
+  registerWarehouseTools(server, getAuthHeader)
+  registerJoinsTools(server, getAuthHeader)
+  registerMappingTools(server, getAuthHeader)
+  registerBillingTools(server, getAuthHeader)
+  registerWorkspaceTools(server, getAuthHeader)
 
   return server
 }
