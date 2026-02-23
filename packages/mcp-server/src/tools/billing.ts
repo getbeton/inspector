@@ -23,7 +23,7 @@ export function registerBillingTools(
         const { data, status } = await callApi(
           '/api/billing/checkout',
           getAuthHeader(),
-          { method: 'POST', body: { success_url, cancel_url } }
+          { method: 'POST', body: { success_url, cancel_url }, toolName: 'create_checkout_link' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)

@@ -18,7 +18,8 @@ export function registerJoinsTools(
       try {
         const { data, status } = await callApi(
           '/api/agent/sessions/joins',
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'get_confirmed_joins' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)

@@ -20,7 +20,8 @@ export function registerWarehouseTools(
       try {
         const { data, status } = await callApi(
           '/api/agent/list-tables',
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'list_warehouse_tables' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
@@ -43,7 +44,7 @@ export function registerWarehouseTools(
         const { data, status } = await callApi(
           '/api/agent/list-columns',
           getAuthHeader(),
-          { params: { table_id: table_name } }
+          { params: { table_id: table_name }, toolName: 'get_table_columns' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)

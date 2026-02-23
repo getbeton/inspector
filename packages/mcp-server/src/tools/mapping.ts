@@ -20,7 +20,8 @@ export function registerMappingTools(
       try {
         const { data, status } = await callApi(
           '/api/integrations/attio/mappings',
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'get_field_mappings' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
@@ -43,7 +44,7 @@ export function registerMappingTools(
         const { data, status } = await callApi(
           '/api/integrations/attio/mappings',
           getAuthHeader(),
-          { method: 'PUT', body: { mappings } }
+          { method: 'PUT', body: { mappings }, toolName: 'update_field_mappings' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
