@@ -1,62 +1,47 @@
 /**
  * Express HTTP transport for MCP server
  *
- * Sets up the Express app with:
- * - POST /mcp — Streamable HTTP MCP transport
- * - GET /mcp — SSE connection for server-initiated messages
- * - DELETE /mcp — Session termination
- * - GET /.well-known/oauth-protected-resource — OAuth metadata
- * - GET /health — Health check
- *
+ * Sets up the Express app with Streamable HTTP MCP transport.
  * Authentication is handled per-request: the transport extracts the
- * Authorization header and passes it to the context resolver.
+ * Authorization header and passes it to the tool proxy layer.
+ *
+ * SECURITY FIX: Auth headers are stored in a mutable Map and updated
+ * on every request, preventing the stale closure bug where a token
+ * captured at session creation would be reused for the session lifetime.
  */
 
 import express, { type Request, type Response } from 'express'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { handleProtectedResourceMetadata } from './auth/metadata.js'
-import { resolveContext, resolveAdminContext, AuthError } from './context/workspace.js'
-import type { ToolContext, AdminToolContext } from './context/types.js'
+import { createMcpServer } from './server.js'
 
 // Store active transports by session ID
 const transports = new Map<string, StreamableHTTPServerTransport>()
 
+// Per-session mutable auth state — updated on every request
+const sessionAuthHeaders = new Map<string, string | undefined>()
+
 /**
  * Create the Express application with MCP transport.
- *
- * @param createServer - Factory function that creates a configured McpServer
  */
-export function createApp(
-  createServer: (getContext: () => Promise<ToolContext>, getAdminContext: () => Promise<AdminToolContext>) => McpServer
-): express.Express {
+export function createApp(): express.Express {
   const app = express()
 
-  // Parse JSON bodies for MCP protocol messages
   app.use(express.json())
-
-  // OAuth Protected Resource Metadata
-  app.get('/.well-known/oauth-protected-resource', handleProtectedResourceMetadata)
 
   // Health check
   app.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
   })
 
-  // MCP Streamable HTTP endpoint — handles POST, GET (SSE), DELETE
+  // MCP Streamable HTTP endpoint
   app.post('/mcp', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization
-
-    // Create context resolver closures that capture the auth header
-    const getContext = () => resolveContext(authHeader)
-    const getAdminContext = () => resolveAdminContext(authHeader)
-
-    // Check for existing session
     const sessionId = req.headers['mcp-session-id'] as string | undefined
     let transport: StreamableHTTPServerTransport
 
     if (sessionId && transports.has(sessionId)) {
-      // Reuse existing transport for this session
+      // Reuse existing transport — update the auth header (fixes stale closure)
+      sessionAuthHeaders.set(sessionId, authHeader)
       transport = transports.get(sessionId)!
     } else if (!sessionId) {
       // New session — create transport and server
@@ -64,16 +49,26 @@ export function createApp(
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (id) => {
           transports.set(id, transport)
+          sessionAuthHeaders.set(id, authHeader)
         },
       })
 
       // Clean up on close
       transport.onclose = () => {
         const id = transport.sessionId
-        if (id) transports.delete(id)
+        if (id) {
+          transports.delete(id)
+          sessionAuthHeaders.delete(id)
+        }
       }
 
-      const server = createServer(getContext, getAdminContext)
+      // Create server with a getter that always reads the CURRENT auth header
+      const getAuthHeader = () => {
+        const id = transport.sessionId
+        return id ? sessionAuthHeaders.get(id) : authHeader
+      }
+
+      const server = createMcpServer(getAuthHeader)
       await server.connect(transport)
     } else {
       // Session ID provided but not found — client needs to reconnect
@@ -119,6 +114,7 @@ export function createApp(
     const transport = transports.get(sessionId)!
     await transport.handleRequest(req, res)
     transports.delete(sessionId)
+    sessionAuthHeaders.delete(sessionId)
   })
 
   return app

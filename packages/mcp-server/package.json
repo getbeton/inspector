@@ -1,8 +1,8 @@
 {
   "name": "@beton/mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Beton Inspector MCP Server — AI-native interface for RevOps intelligence",
+  "description": "Beton Inspector MCP Server — thin proxy to Next.js API",
   "license": "AGPL-3.0",
   "main": "dist/index.js",
   "scripts": {
@@ -15,15 +15,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@supabase/supabase-js": "^2.89.0",
-    "bcryptjs": "^2.4.3",
     "express": "^5.1.0",
-    "jose": "^6.0.11",
-    "stripe": "^20.1.2",
     "zod": "^3.25.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.3",
     "@types/node": "^20",
     "tsx": "^4.19.4",

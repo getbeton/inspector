@@ -1065,3 +1065,45 @@ export function getMtuMeterId(): string | null {
   }
   return config.mtuMeterId;
 }
+
+/**
+ * Create a Stripe Checkout Session for card entry.
+ * Returns the checkout URL for the user to complete setup.
+ */
+export async function createCheckoutSession(options: {
+  workspaceId: string;
+  workspaceName: string;
+  stripeCustomerId?: string;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<{ url: string }> {
+  const stripe = getStripeClient();
+
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: 'setup',
+    payment_method_types: ['card'],
+    success_url: options.successUrl,
+    cancel_url: options.cancelUrl,
+    metadata: {
+      workspace_id: options.workspaceId,
+    },
+  };
+
+  if (options.stripeCustomerId) {
+    sessionParams.customer = options.stripeCustomerId;
+  } else {
+    sessionParams.customer_creation = 'always';
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams);
+
+  if (!session.url) {
+    throw new StripeBillingError(
+      'Stripe did not return a checkout URL',
+      'checkout_url_missing',
+      500
+    );
+  }
+
+  return { url: session.url };
+}

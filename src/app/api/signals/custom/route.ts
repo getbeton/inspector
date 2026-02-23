@@ -1,14 +1,12 @@
 /**
  * POST /api/signals/custom
  *
- * Create a new manual signal and trigger initial metrics calculation.
- * Match count is calculated synchronously (fast).
- * Optionally creates a sync config for auto-update (PostHog cohorts / Attio lists).
+ * Create a new custom signal definition and trigger initial metrics calculation.
+ * Now writes to `signal_definitions` table instead of `signals`.
  *
  * PATCH /api/signals/custom
  *
- * Add a sync target (PostHog cohort or Attio list) to an existing signal.
- * Called after cohort/list creation to link the external resource.
+ * Add a sync target (PostHog cohort or Attio list) to an existing signal definition.
  *
  * Request (POST):
  * {
@@ -23,7 +21,7 @@
  *
  * Request (PATCH):
  * {
- *   "signal_id": "uuid",
+ *   "signal_definition_id": "uuid",
  *   "event_names": ["pageview"],
  *   "condition_operator": "gte",
  *   "condition_value": 2,
@@ -61,7 +59,9 @@ async function handleCreateCustomSignal(
   request: NextRequest,
   context: RLSContext
 ): Promise<NextResponse> {
-  const { supabase, workspaceId } = context
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = context.supabase as any
+  const { workspaceId } = context
 
   let body: CreateCustomSignalBody
   try {
@@ -93,52 +93,36 @@ async function handleCreateCustomSignal(
     host: posthogConfig.host,
   })
 
-  // Create the signal in the database first — metrics calculated asynchronously
   const signalType = `custom:${body.event_name}`
-  const { data: signal, error } = await supabase
-    .from('signals')
+  const conditionOperator = body.condition_operator || 'gte'
+  const conditionValue = body.condition_value || 1
+  const timeWindowDays = body.time_window_days || 7
+
+  // Create the signal definition
+  const { data: definition, error } = await supabase
+    .from('signal_definitions')
     .insert({
       workspace_id: workspaceId,
-      // Use a placeholder account_id — custom signals are workspace-level
-      account_id: workspaceId,
+      name: body.name,
+      description: body.description || '',
       type: signalType,
-      source: 'manual',
-      value: null,
-      details: {
-        name: body.name,
-        description: body.description || '',
-        event_name: body.event_name,
-        condition_operator: body.condition_operator || 'gte',
-        condition_value: body.condition_value || 1,
-        time_window_days: body.time_window_days || 7,
-        conversion_event: body.conversion_event || null,
-        match_count: null,
-      },
-    } as never)
+      event_name: body.event_name,
+      condition_operator: conditionOperator,
+      condition_value: conditionValue,
+      time_window_days: timeWindowDays,
+      conversion_event: body.conversion_event || null,
+    })
     .select()
     .single()
 
   if (error) {
-    console.error('Failed to create custom signal:', error)
-    return NextResponse.json({ error: 'Failed to create signal' }, { status: 500 })
+    console.error('Failed to create signal definition:', error)
+    return NextResponse.json({ error: 'Failed to create signal definition' }, { status: 500 })
   }
 
   // Fire-and-forget: calculate match count and upsert metrics in the background.
-  // This avoids blocking the response for up to 30s on the HogQL query.
   calculateMatchCount(posthogClient, body.event_name)
     .then(async (matchCount) => {
-      // Update the signal with the computed metrics
-      await supabase
-        .from('signals')
-        .update({
-          value: matchCount.count_30d,
-          details: {
-            ...(signal.details as Record<string, unknown>),
-            match_count: matchCount,
-          },
-        } as never)
-        .eq('id', signal.id)
-
       await upsertSignalMetrics(supabase, workspaceId, signalType, matchCount)
     })
     .catch((err) => {
@@ -146,7 +130,7 @@ async function handleCreateCustomSignal(
     })
 
   return NextResponse.json({
-    signal,
+    signal_definition: definition,
     metrics: {
       status: 'calculating',
       match_count: null,
@@ -155,11 +139,11 @@ async function handleCreateCustomSignal(
 }
 
 /**
- * PATCH handler: add a sync target to an existing signal.
+ * PATCH handler: add a sync target to an existing signal definition.
  * Creates the sync config if it doesn't exist, then adds the target.
  */
 interface AddSyncTargetBody {
-  signal_id: string
+  signal_definition_id: string
   event_names: string[]
   condition_operator: string
   condition_value: number
@@ -177,7 +161,7 @@ async function handleAddSyncTarget(
   context: RLSContext
 ): Promise<NextResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = context.supabase as any // New tables not yet in generated types
+  const supabase = context.supabase as any
   const { workspaceId } = context
 
   let body: AddSyncTargetBody
@@ -188,9 +172,9 @@ async function handleAddSyncTarget(
   }
 
   // Validate
-  if (!body.signal_id || !body.target?.type || !body.target?.external_id) {
+  if (!body.signal_definition_id || !body.target?.type || !body.target?.external_id) {
     return NextResponse.json(
-      { error: 'signal_id, target.type, and target.external_id are required' },
+      { error: 'signal_definition_id, target.type, and target.external_id are required' },
       { status: 400 }
     )
   }
@@ -207,23 +191,23 @@ async function handleAddSyncTarget(
     )
   }
 
-  // Verify signal belongs to workspace
-  const { data: signal } = await supabase
-    .from('signals')
+  // Verify signal definition belongs to workspace
+  const { data: definition } = await supabase
+    .from('signal_definitions')
     .select('id')
-    .eq('id', body.signal_id)
+    .eq('id', body.signal_definition_id)
     .eq('workspace_id', workspaceId)
     .single()
 
-  if (!signal) {
-    return NextResponse.json({ error: 'Signal not found' }, { status: 404 })
+  if (!definition) {
+    return NextResponse.json({ error: 'Signal definition not found' }, { status: 404 })
   }
 
   // Upsert sync config (create if not exists)
   const { data: existingConfig } = await supabase
     .from('signal_sync_configs')
     .select('id')
-    .eq('signal_id', body.signal_id)
+    .eq('signal_definition_id', body.signal_definition_id)
     .single()
 
   let syncConfigId: string
@@ -244,7 +228,7 @@ async function handleAddSyncTarget(
     const { data: newConfig, error: configError } = await supabase
       .from('signal_sync_configs')
       .insert({
-        signal_id: body.signal_id,
+        signal_definition_id: body.signal_definition_id,
         workspace_id: workspaceId,
         event_names: body.event_names,
         condition_operator: body.condition_operator,

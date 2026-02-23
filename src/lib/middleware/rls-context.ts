@@ -12,7 +12,7 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createClientFromRequest } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,7 +99,11 @@ export function withRLSContext(handler: RLSRouteHandler) {
   return async (request: NextRequest): Promise<NextResponse> => {
     try {
       // Step 1: Create Supabase client
-      const supabase = await createClient()
+      // Supports dual auth: Bearer JWT (from MCP/external) or cookies (from browser)
+      const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ')
+      const supabase: AnySupabaseClient = hasBearerToken
+        ? await createClientFromRequest(request)
+        : await createClient()
 
       // Step 2: Verify authentication
       const {
@@ -120,7 +124,23 @@ export function withRLSContext(handler: RLSRouteHandler) {
       }
 
       // Step 3: Get workspace membership
-      const membership = await getWorkspaceMembership()
+      // For Bearer token auth, query directly on the same client (RLS applies)
+      // For cookie auth, use the existing helper
+      let membership: { workspaceId: string; userId: string; role: string } | null
+
+      if (hasBearerToken) {
+        const { data } = await supabase
+          .from('workspace_members')
+          .select('workspace_id, user_id, role')
+          .eq('user_id', user.id)
+          .single()
+
+        membership = data
+          ? { workspaceId: data.workspace_id, userId: data.user_id, role: data.role }
+          : null
+      } else {
+        membership = await getWorkspaceMembership()
+      }
 
       if (!membership) {
         console.warn(`[RLS] User ${user.id} has no workspace membership`)

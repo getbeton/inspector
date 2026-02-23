@@ -1,19 +1,15 @@
 /**
- * PostHog Warehouse tools (2 tools)
- *
- * - list_warehouse_tables: Available tables in PostHog data warehouse
- * - get_table_columns: Table schema with column metadata & sample values
+ * PostHog Warehouse tools (2 tools) — thin proxy to /api/agent/*
  */
 
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ToolContext } from '../context/types.js'
-import { toMcpError } from '../lib/errors.js'
-import { createWorkspacePostHogClient } from '../lib/posthog.js'
+import { callApi } from '../lib/proxy.js'
+import { httpErrorToMcp, toMcpError } from '../lib/errors.js'
 
 export function registerWarehouseTools(
   server: McpServer,
-  getContext: () => Promise<ToolContext>
+  getAuthHeader: () => string | undefined
 ): void {
   // ── list_warehouse_tables ──────────────────────────────────────────
   server.tool(
@@ -22,26 +18,13 @@ export function registerWarehouseTools(
     {},
     async () => {
       try {
-        const { supabase, workspaceId } = await getContext()
-        const client = await createWorkspacePostHogClient(supabase, workspaceId)
+        const { data, status } = await callApi(
+          '/api/agent/list-tables',
+          getAuthHeader()
+        )
 
-        const tables = await client.getWarehouseTables()
-
-        // Return simplified table list
-        const simplified = tables.map(t => ({
-          id: t.id,
-          name: t.name,
-          format: t.format,
-          column_count: t.columns.length,
-          source: t.external_data_source?.source_type || 'native',
-        }))
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ tables: simplified, total: simplified.length }, null, 2),
-          }],
-        }
+        if (status !== 200) return httpErrorToMcp(data, status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }
@@ -57,34 +40,14 @@ export function registerWarehouseTools(
     },
     async ({ table_name }) => {
       try {
-        const { supabase, workspaceId } = await getContext()
-        const client = await createWorkspacePostHogClient(supabase, workspaceId)
+        const { data, status } = await callApi(
+          '/api/agent/list-columns',
+          getAuthHeader(),
+          { params: { table_id: table_name } }
+        )
 
-        const schema = await client.getDatabaseSchema()
-        const table = schema[table_name]
-
-        if (!table) {
-          return toMcpError(new Error(`Table "${table_name}" not found. Use list_warehouse_tables to see available tables.`))
-        }
-
-        const columns = Object.entries(table.fields).map(([key, field]) => ({
-          name: key,
-          type: field.type,
-          table: field.table,
-          schema_valid: field.schema_valid,
-        }))
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              table_name,
-              table_type: table.type,
-              columns,
-              column_count: columns.length,
-            }, null, 2),
-          }],
-        }
+        if (status !== 200) return httpErrorToMcp(data, status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }

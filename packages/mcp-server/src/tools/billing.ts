@@ -1,18 +1,15 @@
 /**
- * Billing tool (1 tool)
- *
- * - create_checkout_link: Generate Stripe Checkout URL for card entry
+ * Billing tool (1 tool) — thin proxy to /api/billing/checkout
  */
 
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ToolContext } from '../context/types.js'
-import { toMcpError } from '../lib/errors.js'
-import { createCheckoutSession } from '../lib/stripe.js'
+import { callApi } from '../lib/proxy.js'
+import { httpErrorToMcp, toMcpError } from '../lib/errors.js'
 
 export function registerBillingTools(
   server: McpServer,
-  getContext: () => Promise<ToolContext>
+  getAuthHeader: () => string | undefined
 ): void {
   server.tool(
     'create_checkout_link',
@@ -23,36 +20,14 @@ export function registerBillingTools(
     },
     async ({ success_url, cancel_url }) => {
       try {
-        const { supabase, workspaceId } = await getContext()
+        const { data, status } = await callApi(
+          '/api/billing/checkout',
+          getAuthHeader(),
+          { method: 'POST', body: { success_url, cancel_url } }
+        )
 
-        // Get workspace details
-        const { data: workspace } = await supabase
-          .from('workspaces')
-          .select('name, stripe_customer_id')
-          .eq('id', workspaceId)
-          .single()
-
-        if (!workspace) {
-          return toMcpError(new Error('Workspace not found'))
-        }
-
-        const { url } = await createCheckoutSession({
-          workspaceId,
-          workspaceName: workspace.name,
-          stripeCustomerId: workspace.stripe_customer_id,
-          successUrl: success_url,
-          cancelUrl: cancel_url,
-        })
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              checkout_url: url,
-              message: 'Open this URL in a browser to enter payment details.',
-            }, null, 2),
-          }],
-        }
+        if (status !== 200) return httpErrorToMcp(data, status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
       } catch (error) {
         return toMcpError(error)
       }
