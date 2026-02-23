@@ -36,7 +36,7 @@ export function registerSignalTools(
         if (start_date) params.start_date = start_date
         if (end_date) params.end_date = end_date
 
-        const { data, status } = await callApi('/api/signals', getAuthHeader(), { params })
+        const { data, status } = await callApi('/api/signals', getAuthHeader(), { params, toolName: 'list_signals' })
 
         if (status !== 200) return httpErrorToMcp(data, status)
         return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
@@ -53,7 +53,7 @@ export function registerSignalTools(
     { signal_id: z.string().uuid().describe('The signal UUID') },
     async ({ signal_id }) => {
       try {
-        const { data, status } = await callApi(`/api/signals/${signal_id}`, getAuthHeader())
+        const { data, status } = await callApi(`/api/signals/${signal_id}`, getAuthHeader(), { toolName: 'get_signal' })
 
         if (status !== 200) return httpErrorToMcp(data, status)
         return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
@@ -81,6 +81,7 @@ export function registerSignalTools(
         const { data, status } = await callApi('/api/signals/custom', getAuthHeader(), {
           method: 'POST',
           body: args,
+          toolName: 'create_signal',
         })
 
         if (status !== 202 && status !== 201) return httpErrorToMcp(data, status)
@@ -100,7 +101,8 @@ export function registerSignalTools(
       try {
         const { data, status } = await callApi(
           `/api/signals/${signal_id}/metrics`,
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'get_signal_metrics' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
@@ -123,7 +125,7 @@ export function registerSignalTools(
         const { data, status } = await callApi(
           '/api/signals/dashboard/metrics',
           getAuthHeader(),
-          { params: { lookback_days: String(lookback_days) } }
+          { params: { lookback_days: String(lookback_days) }, toolName: 'get_dashboard_metrics' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)

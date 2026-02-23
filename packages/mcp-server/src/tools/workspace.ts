@@ -18,7 +18,7 @@ export function registerWorkspaceTools(
     {},
     async () => {
       try {
-        const { data, status } = await callApi('/api/user/workspace', getAuthHeader())
+        const { data, status } = await callApi('/api/user/workspace', getAuthHeader(), { toolName: 'get_workspace' })
 
         if (status !== 200) return httpErrorToMcp(data, status)
         return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
@@ -35,7 +35,7 @@ export function registerWorkspaceTools(
     {},
     async () => {
       try {
-        const { data, status } = await callApi('/api/integrations', getAuthHeader())
+        const { data, status } = await callApi('/api/integrations', getAuthHeader(), { toolName: 'get_integration_status' })
 
         if (status !== 200) return httpErrorToMcp(data, status)
         return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
@@ -54,7 +54,8 @@ export function registerWorkspaceTools(
       try {
         const { data, status } = await callApi(
           `/api/heuristics/scores/${account_id}`,
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'get_account_scores' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
@@ -86,7 +87,7 @@ export function registerWorkspaceTools(
         }
         if (status) params.status = status
 
-        const { data, status: httpStatus } = await callApi('/api/accounts', getAuthHeader(), { params })
+        const { data, status: httpStatus } = await callApi('/api/accounts', getAuthHeader(), { params, toolName: 'list_accounts' })
 
         if (httpStatus !== 200) return httpErrorToMcp(data, httpStatus)
         return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
