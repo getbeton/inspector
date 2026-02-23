@@ -29,7 +29,7 @@ export function registerMemoryTools(
         const { data, status: httpStatus } = await callApi(
           '/api/agent/sessions',
           getAuthHeader(),
-          { params }
+          { params, toolName: 'list_exploration_sessions' }
         )
 
         if (httpStatus !== 200) return httpErrorToMcp(data, httpStatus)
@@ -55,7 +55,7 @@ export function registerMemoryTools(
         const { data, status } = await callApi(
           '/api/agent/data/eda',
           getAuthHeader(),
-          { params }
+          { params, toolName: 'get_eda_results' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
@@ -75,7 +75,8 @@ export function registerMemoryTools(
       try {
         const { data, status } = await callApi(
           '/api/agent/data/website-exploration',
-          getAuthHeader()
+          getAuthHeader(),
+          { toolName: 'get_website_exploration' }
         )
 
         if (status !== 200) return httpErrorToMcp(data, status)
