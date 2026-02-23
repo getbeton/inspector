@@ -34,8 +34,11 @@ export function PostHogPreview({
       {/* PostHog header */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-foreground/10 bg-[#1D4AFF]/5">
         {/* PostHog hedgehog icon */}
-        <div className="h-10 w-10 rounded-lg bg-[#1D4AFF] flex items-center justify-center">
-          <span className="text-white font-bold text-lg">P</span>
+        <div className="h-10 w-10 rounded-lg bg-[#1D4AFF] flex items-center justify-center p-1.5">
+          <picture>
+            <source srcSet="https://cdn.brandfetch.io/id2veLU_gI/theme/dark/symbol.svg" media="(prefers-color-scheme: dark)" />
+            <img src="https://cdn.brandfetch.io/id2veLU_gI/theme/light/symbol.svg" alt="PostHog" className="h-full w-full" />
+          </picture>
         </div>
         <div>
           <h4 className="font-semibold text-sm">PostHog</h4>

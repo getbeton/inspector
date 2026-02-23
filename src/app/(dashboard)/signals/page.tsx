@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -188,6 +189,11 @@ export default function SignalsPage() {
         </div>
         <div className="flex items-center gap-3">
           {!isDemo && <RefreshButton syncType="signal_detection" />}
+          {!isDemo && (
+            <Link href="/signals/new">
+              <Button size="sm">New Signal</Button>
+            </Link>
+          )}
         </div>
       </div>
 

@@ -72,6 +72,7 @@ export interface AttioAttribute {
   isRequired: boolean
   isUnique: boolean
   isWritable: boolean
+  selectOptions?: Array<{ value: string; label: string }>
 }
 
 /**
@@ -232,7 +233,7 @@ export async function getObjectAttributes(
     }>
   }>(response)
 
-  return (data.data || []).map((attr) => ({
+  const attributes: AttioAttribute[] = (data.data || []).map((attr) => ({
     id: attr.id?.attribute_id || '',
     slug: attr.api_slug || '',
     title: attr.title || '',
@@ -241,6 +242,96 @@ export async function getObjectAttributes(
     isUnique: attr.is_unique || false,
     isWritable: attr.is_writable !== false,
   }))
+
+  // Fetch select/status options for applicable attributes (in parallel)
+  const optionFetches = attributes
+    .filter((attr) => attr.type === 'select' || attr.type === 'status')
+    .map(async (attr) => {
+      const options =
+        attr.type === 'status'
+          ? await fetchStatusOptions(apiKey, objectSlug, attr.slug)
+          : await fetchSelectOptions(apiKey, objectSlug, attr.slug)
+      return { slug: attr.slug, options }
+    })
+
+  const optionResults = await Promise.all(optionFetches)
+  const optionsMap = new Map(optionResults.map((r) => [r.slug, r.options]))
+
+  // Merge options into attribute objects
+  for (const attr of attributes) {
+    const options = optionsMap.get(attr.slug)
+    if (options && options.length > 0) {
+      attr.selectOptions = options
+    }
+  }
+
+  return attributes
+}
+
+/**
+ * Fetch select options for a select-type attribute.
+ * @see https://docs.attio.com/rest-api/endpoint-reference/attributes/list-select-options
+ */
+async function fetchSelectOptions(
+  apiKey: string,
+  objectSlug: string,
+  attributeSlug: string
+): Promise<Array<{ value: string; label: string }>> {
+  try {
+    const response = await fetch(
+      `${ATTIO_BASE_URL}/objects/${objectSlug}/attributes/${attributeSlug}/options`,
+      { method: 'GET', headers: createHeaders(apiKey) }
+    )
+    const data = await handleResponse<{
+      data?: Array<{
+        id?: { option_id?: string }
+        title?: string
+        is_archived?: boolean
+      }>
+    }>(response)
+    return (data.data || [])
+      .filter((opt) => !opt.is_archived)
+      .map((opt) => ({
+        value: opt.title || opt.id?.option_id || '',
+        label: opt.title || '',
+      }))
+  } catch {
+    // Non-critical: return empty if options can't be fetched
+    return []
+  }
+}
+
+/**
+ * Fetch statuses for a status-type attribute.
+ * @see https://docs.attio.com/rest-api/endpoint-reference/attributes/list-statuses
+ */
+async function fetchStatusOptions(
+  apiKey: string,
+  objectSlug: string,
+  attributeSlug: string
+): Promise<Array<{ value: string; label: string }>> {
+  try {
+    const response = await fetch(
+      `${ATTIO_BASE_URL}/objects/${objectSlug}/attributes/${attributeSlug}/statuses`,
+      { method: 'GET', headers: createHeaders(apiKey) }
+    )
+    const data = await handleResponse<{
+      data?: Array<{
+        id?: { status_id?: string }
+        title?: string
+        is_archived?: boolean
+      }>
+    }>(response)
+    return (data.data || [])
+      .filter((s) => !s.is_archived)
+      .map((s) => ({
+        value: s.title || s.id?.status_id || '',
+        label: s.title || '',
+      }))
+  } catch {
+    // Non-critical: return empty if statuses can't be fetched
+    return []
+  }
 }
 
 /**
