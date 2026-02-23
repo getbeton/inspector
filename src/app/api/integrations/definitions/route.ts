@@ -71,6 +71,20 @@ const FALLBACK_DEFINITIONS: DefinitionRow[] = [
     supports_self_hosted: true,
     config_schema: null,
   },
+  {
+    id: 'fallback-slack',
+    name: 'slack',
+    display_name: 'Slack',
+    description: 'Send signal notifications to a Slack channel when product usage signals are detected.',
+    category: 'notification',
+    icon_url: null,
+    icon_url_light: null,
+    required: false,
+    display_order: 70,
+    setup_step_key: 'slack',
+    supports_self_hosted: false,
+    config_schema: null,
+  },
 ]
 
 /**

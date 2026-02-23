@@ -9,6 +9,7 @@ const _SUPPORTED_INTEGRATIONS = [
   'attio',
   'apollo',
   'firecrawl',
+  'slack',
 ] as const
 
 export type IntegrationName = (typeof _SUPPORTED_INTEGRATIONS)[number]

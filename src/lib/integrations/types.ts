@@ -14,6 +14,7 @@ export type IntegrationCategory =
   | 'billing'
   | 'enrichment'
   | 'web_scraping'
+  | 'notification'
 
 /**
  * A row from `integration_definitions`, enriched with workspace-specific

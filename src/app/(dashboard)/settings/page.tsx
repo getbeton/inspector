@@ -40,6 +40,7 @@ const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
   billing: 'Billing',
   enrichment: 'Enrichment',
   web_scraping: 'Web Scraping',
+  notification: 'Notifications',
 }
 
 // ---------------------------------------------------------------------------
