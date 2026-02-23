@@ -13,6 +13,7 @@ import { PostHogClient, createPostHogClient } from './posthog/client'
 import { StripeClient, createStripeClient } from './stripe/client'
 import { ApolloClient, createApolloClient } from './apollo/client'
 import { FirecrawlClient, createFirecrawlClient } from './firecrawl/client'
+import { SlackClient, createSlackClient } from './slack/client'
 
 // Types
 export * from './types'
@@ -95,6 +96,21 @@ export {
   type ExtractResponse,
 } from './firecrawl'
 
+// Slack
+export {
+  SlackClient,
+  createSlackClient,
+  SlackError,
+  SlackAuthError,
+  SlackRateLimitError,
+  SlackChannelError,
+  type SlackClientConfig,
+  type SlackChannel,
+  type SlackConnectionResult,
+  type SlackPostResult,
+  type SlackConfigJson,
+} from './slack'
+
 // Attio (explicit exports to avoid naming conflicts with ./types)
 export {
   AttioError,
@@ -123,9 +139,9 @@ export {
  * Integration factory - creates the appropriate client based on integration name
  */
 export function createIntegrationClient(
-  name: 'posthog' | 'stripe' | 'apollo' | 'firecrawl',
+  name: 'posthog' | 'stripe' | 'apollo' | 'firecrawl' | 'slack',
   config: Record<string, string>
-): PostHogClient | StripeClient | ApolloClient | FirecrawlClient {
+): PostHogClient | StripeClient | ApolloClient | FirecrawlClient | SlackClient {
   switch (name) {
     case 'posthog':
       if (!config.apiKey || !config.projectId) {
@@ -155,6 +171,12 @@ export function createIntegrationClient(
         baseUrl: config.baseUrl,
         proxy: (config.proxy as 'basic' | 'stealth') || null,
       })
+
+    case 'slack':
+      if (!config.botToken) {
+        throw new Error('Slack requires botToken')
+      }
+      return createSlackClient({ botToken: config.botToken })
 
     default:
       throw new Error(`Unknown integration: ${name}`)
