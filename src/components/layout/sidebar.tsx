@@ -96,6 +96,7 @@ const navEntries: NavEntry[] = [
     basePath: '/settings',
     children: [
       { href: '/settings', label: 'Integrations' },
+      { href: '/settings/mcp', label: 'MCP' },
       { href: '/settings/billing', label: 'Billing' },
       { href: '/settings/workspace', label: 'Workspace' },
       { href: '/settings/danger-zone', label: 'Danger Zone' },
