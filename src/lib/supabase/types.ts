@@ -455,6 +455,7 @@ export interface Database {
           workspace_id: string
           user_id: string
           key_hash: string
+          encrypted_key: string | null
           name: string
           last_used_at: string | null
           expires_at: string
@@ -465,6 +466,7 @@ export interface Database {
           workspace_id: string
           user_id: string
           key_hash: string
+          encrypted_key?: string | null
           name?: string
           last_used_at?: string | null
           expires_at: string
@@ -475,6 +477,7 @@ export interface Database {
           workspace_id?: string
           user_id?: string
           key_hash?: string
+          encrypted_key?: string | null
           name?: string
           last_used_at?: string | null
           expires_at?: string

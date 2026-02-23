@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import type { ApiKey, ApiKeyInsert } from '@/lib/supabase/types'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { encrypt, isEncryptionKeyConfigured } from '@/lib/crypto/encryption'
 
 const API_KEY_PREFIX = 'beton_'
 const API_KEY_EXPIRY_DAYS = 90
@@ -31,20 +32,35 @@ export async function GET() {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
-    // Get API keys (excluding hash for security)
+    // Get API keys (excluding hash for security, include encrypted_key only for flag check)
+    // Note: encrypted_key column added via migration 021 — cast until types regenerated
     const { data, error } = await supabase
       .from('api_keys')
-      .select('id, name, last_used_at, expires_at, created_at')
+      .select('id, name, encrypted_key, last_used_at, expires_at, created_at')
       .eq('workspace_id', membership.workspaceId)
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    const keys = data as Pick<ApiKey, 'id' | 'name' | 'last_used_at' | 'expires_at' | 'created_at'>[] | null
+      .order('created_at', { ascending: false }) as {
+        data: Array<{
+          id: string; name: string; encrypted_key: string | null;
+          last_used_at: string | null; expires_at: string; created_at: string
+        }> | null
+        error: unknown
+      }
 
     if (error) {
       console.error('Error fetching API keys:', error)
       return NextResponse.json({ error: 'Failed to fetch keys' }, { status: 500 })
     }
+
+    // Map to response shape — expose has_encrypted_key flag but not the ciphertext
+    const keys = (data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      last_used_at: row.last_used_at,
+      expires_at: row.expires_at,
+      created_at: row.created_at,
+      has_encrypted_key: row.encrypted_key !== null,
+    }))
 
     return NextResponse.json({ keys })
   } catch (error) {
@@ -84,8 +100,14 @@ export async function POST(request: Request) {
     const randomBytes = crypto.randomBytes(16).toString('hex')
     const apiKey = `${API_KEY_PREFIX}${randomBytes}`
 
-    // Hash the key for storage
+    // Hash the key for storage (used for auth validation)
     const keyHash = await bcrypt.hash(apiKey, 10)
+
+    // Encrypt the key for retrievable storage (used for MCP setup page reveal)
+    let encryptedKey: string | null = null
+    if (isEncryptionKeyConfigured()) {
+      encryptedKey = await encrypt(apiKey)
+    }
 
     // Calculate expiry date
     const expiresAt = new Date()
@@ -96,6 +118,7 @@ export async function POST(request: Request) {
       workspace_id: membership.workspaceId,
       user_id: user.id,
       key_hash: keyHash,
+      encrypted_key: encryptedKey,
       name,
       expires_at: expiresAt.toISOString()
     }
