@@ -27,8 +27,11 @@ export function AttioConnectionPreview({
     >
       {/* Attio header */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-foreground/10 bg-[#5B5FC7]/5">
-        <div className="h-10 w-10 rounded-lg bg-[#5B5FC7] flex items-center justify-center">
-          <span className="text-white font-bold text-lg">A</span>
+        <div className="h-10 w-10 rounded-lg bg-[#5B5FC7] flex items-center justify-center p-1.5">
+          <picture>
+            <source srcSet="https://cdn.brandfetch.io/idZA7HYRWK/theme/dark/symbol.svg" media="(prefers-color-scheme: dark)" />
+            <img src="https://cdn.brandfetch.io/idZA7HYRWK/theme/light/symbol.svg" alt="Attio" className="h-full w-full" />
+          </picture>
         </div>
         <div>
           <h4 className="font-semibold text-sm">Attio</h4>

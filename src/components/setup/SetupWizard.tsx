@@ -390,8 +390,8 @@ export function SetupWizard({
           config: demoMode ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded bg-[#1D4AFF] flex items-center justify-center">
-                  <span className="text-white font-bold text-[10px]">P</span>
+                <div className="h-5 w-5 rounded bg-[#1D4AFF] flex items-center justify-center p-0.5">
+                  <img src="https://cdn.brandfetch.io/id2veLU_gI/theme/light/symbol.svg" alt="PostHog" className="h-full w-full" />
                 </div>
                 <span className="font-medium">Connect PostHog</span>
               </div>
@@ -430,8 +430,8 @@ export function SetupWizard({
           config: demoMode ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded bg-[#5B5FC7] flex items-center justify-center">
-                  <span className="text-white font-bold text-[10px]">A</span>
+                <div className="h-5 w-5 rounded bg-[#5B5FC7] flex items-center justify-center p-0.5">
+                  <img src="https://cdn.brandfetch.io/idZA7HYRWK/theme/light/symbol.svg" alt="Attio" className="h-full w-full" />
                 </div>
                 <span className="font-medium">Connect Attio CRM</span>
               </div>
