@@ -19,6 +19,9 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // `next` param is set by MCP OAuth flow (/api/mcp/authorize redirects here)
+  const next = searchParams.get('next')
+
   // Handle error from URL (e.g., from auth callback failures)
   useEffect(() => {
     const urlError = searchParams.get('error')
@@ -35,7 +38,8 @@ function LoginForm() {
 
       // Dynamic import to avoid build-time evaluation of Supabase client
       const { signInWithGoogle } = await import('@/lib/auth/supabase')
-      const { error: authError } = await signInWithGoogle()
+      // Pass `next` so the auth callback redirects back to the MCP authorize endpoint
+      const { error: authError } = await signInWithGoogle(next ?? undefined)
 
       if (authError) {
         setError(authError.message || 'Failed to sign in with Google')
