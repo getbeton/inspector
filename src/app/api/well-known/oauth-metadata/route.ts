@@ -1,19 +1,17 @@
-import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 /**
  * RFC 8414 — OAuth 2.0 Authorization Server Metadata
  *
  * Served via rewrite: /.well-known/oauth-authorization-server → here.
  * MCP clients discover this after receiving a 401 from the MCP endpoint.
+ *
+ * Uses the request origin so URLs always match the domain the client connected to.
  */
-export async function GET() {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.NEXT_PUBLIC_VERCEL_URL
-      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-      : 'http://localhost:3000')
+export async function GET(request: NextRequest) {
+  const baseUrl = new URL(request.url).origin
 
-  return NextResponse.json({
+  return Response.json({
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/api/mcp/authorize`,
     token_endpoint: `${baseUrl}/api/mcp/token`,
