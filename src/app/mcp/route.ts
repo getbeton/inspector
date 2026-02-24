@@ -66,8 +66,16 @@ async function handleMcp(request: Request): Promise<Response> {
 
   if (!token) {
     // 401 with WWW-Authenticate triggers MCP OAuth discovery in clients
+    // resource_metadata URL tells mcp-remote where to find the protected
+    // resource metadata (RFC 9728) which points to the authorization server
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.NEXT_PUBLIC_VERCEL_URL
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+        : 'http://localhost:3000')
+
     return jsonRpcError(-32000, 'Authentication required', 401, {
-      'WWW-Authenticate': 'Bearer',
+      'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
     })
   }
 
