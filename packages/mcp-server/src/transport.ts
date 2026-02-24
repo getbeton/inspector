@@ -39,6 +39,16 @@ export function createApp(): express.Express {
     const sessionId = req.headers['mcp-session-id'] as string | undefined
     let transport: StreamableHTTPServerTransport
 
+    // No auth on a fresh connection → 401 to trigger MCP OAuth flow
+    if (!authHeader && !sessionId) {
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Authentication required' },
+        id: null,
+      })
+      return
+    }
+
     if (sessionId && transports.has(sessionId)) {
       // Reuse existing transport — update the auth header (fixes stale closure)
       sessionAuthHeaders.set(sessionId, authHeader)

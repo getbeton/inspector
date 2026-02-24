@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   },
 
   turbopack: {},
+
+  // Rewrite .well-known path to API route (Next.js app dir doesn't support
+  // dot-prefixed folders, so we serve the metadata from /api/well-known/*)
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: '/api/well-known/oauth-metadata',
+      },
+    ]
+  },
 }
 
 export default nextConfig

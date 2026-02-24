@@ -10,6 +10,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Skip middleware for MCP OAuth endpoints — they manage auth internally
+  // (register is public, authorize checks session itself, token validates codes)
+  if (pathname.startsWith('/api/mcp/') || pathname.startsWith('/api/well-known/')) {
+    return NextResponse.next()
+  }
+
   // Guard: return a friendly error page when Supabase is not configured
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -62,9 +68,12 @@ export async function middleware(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser()
 
-  // Redirect to home if accessing login while authenticated
+  // Redirect if accessing login while authenticated
   if (pathname === '/login' && user) {
-    return NextResponse.redirect(new URL('/', request.url))
+    // If `next` is set (e.g. MCP OAuth flow), honor it instead of going to /
+    const next = request.nextUrl.searchParams.get('next')
+    const target = next || '/'
+    return NextResponse.redirect(new URL(target, request.url))
   }
 
   return response
