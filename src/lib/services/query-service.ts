@@ -45,6 +45,10 @@ export interface QueryExecutionOptions {
   skipCache?: boolean
   /** Cache TTL in milliseconds (default: 3600000 = 1 hour) */
   cacheTtlMs?: number
+  /** Agent session UUID (internal PK from workspace_agent_sessions.id).
+   *  When provided, stored in posthog_queries.session_id and posthog_query_results.session_id.
+   *  Omit for user-initiated queries (session_id will be NULL). */
+  sessionId?: string
 }
 
 /** Query execution response */
@@ -110,6 +114,7 @@ export class QueryService {
       timeoutMs = 60_000,
       skipCache = false,
       cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+      sessionId,
     } = options
 
     // Step 1: Validate query
@@ -138,8 +143,8 @@ export class QueryService {
       }
     }
 
-    // Step 5: Create query record
-    const queryRecord = await this.createQueryRecord(workspaceId, queryText, queryHash)
+    // Step 5: Create query record (with session linkage if agent context)
+    const queryRecord = await this.createQueryRecord(workspaceId, queryText, queryHash, sessionId)
 
     try {
       // Step 6: Execute against PostHog
@@ -150,13 +155,14 @@ export class QueryService {
       const posthogResult = await this.executePostHogQuery(queryText, timeoutMs)
       const executionTimeMs = Date.now() - startTime
 
-      // Step 7: Store results
+      // Step 7: Store results (with session linkage if agent context)
       const storedResult = await this.storeResults(
         queryRecord.id,
         workspaceId,
         queryHash,
         posthogResult,
-        cacheTtlMs
+        cacheTtlMs,
+        sessionId
       )
 
       // Step 8: Update query status to completed with execution time
@@ -249,14 +255,16 @@ export class QueryService {
   private async createQueryRecord(
     workspaceId: string,
     queryText: string,
-    queryHash: string
+    queryHash: string,
+    sessionId?: string
   ): Promise<PosthogQuery> {
     return this.queryRepository.create({
       workspace_id: workspaceId,
       query_text: queryText,
       query_hash: queryHash,
       status: 'pending',
-    })
+      ...(sessionId ? { session_id: sessionId } : {}),
+    } as any)
   }
 
   /**
@@ -300,7 +308,8 @@ export class QueryService {
     workspaceId: string,
     queryHash: string,
     result: QueryResult,
-    cacheTtlMs: number
+    cacheTtlMs: number,
+    sessionId?: string
   ): Promise<PosthogQueryResult> {
     const expiresAt = new Date(Date.now() + cacheTtlMs)
 
@@ -312,7 +321,8 @@ export class QueryService {
       results: result.results,
       row_count: result.results.length,
       expires_at: expiresAt.toISOString(),
-    })
+      ...(sessionId ? { session_id: sessionId } : {}),
+    } as any)
   }
 
   /**
@@ -382,11 +392,22 @@ export class QueryService {
 }
 
 /**
- * Factory function to create a QueryService
+ * Factory function to create a QueryService with a user-scoped Supabase client (RLS-enabled)
  */
 export function createQueryService(
   supabase: SupabaseClient,
   posthogClient: PostHogClient
 ): QueryService {
   return new QueryService({ supabase, posthogClient })
+}
+
+/**
+ * Factory function to create a QueryService with an admin Supabase client (bypasses RLS).
+ * Used for agent-initiated queries where workspace_id is enforced at the application level.
+ */
+export function createQueryServiceForAgent(
+  adminSupabase: SupabaseClient,
+  posthogClient: PostHogClient
+): QueryService {
+  return new QueryService({ supabase: adminSupabase, posthogClient })
 }

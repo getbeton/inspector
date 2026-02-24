@@ -10,15 +10,18 @@ const TERMINAL_STATUSES: AgentSessionStatus[] = ['completed', 'failed', 'closed'
 /**
  * Look up a session by its string ID and return the associated workspace_id.
  * Rejects sessions in terminal states (completed, failed, closed).
+ *
+ * Returns sessionUUID (the internal UUID primary key) for use as FK
+ * in tables like posthog_queries.session_id.
  */
 export async function resolveSession(
     sessionId: string
-): Promise<{ workspaceId: string; status: AgentSessionStatus }> {
+): Promise<{ workspaceId: string; status: AgentSessionStatus; sessionUUID: string }> {
     const supabase = createAdminClient();
 
     const { data, error } = await supabase
         .from('workspace_agent_sessions')
-        .select('workspace_id, status')
+        .select('id, workspace_id, status')
         .eq('session_id', sessionId)
         .single();
 
@@ -34,7 +37,7 @@ export async function resolveSession(
         throw new Error(`Session is ${status}`);
     }
 
-    return { workspaceId: data.workspace_id, status };
+    return { workspaceId: data.workspace_id, status, sessionUUID: data.id };
 }
 
 /**

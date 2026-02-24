@@ -595,3 +595,27 @@ export function createPostHogClient(
 ): PostHogClient {
   return new PostHogClient({ apiKey, projectId, host })
 }
+
+/**
+ * Create a PostHog client from workspace credentials (admin path).
+ * Fetches integration credentials using the admin client (bypasses RLS),
+ * then constructs a PostHogClient. Throws ConfigurationError if PostHog
+ * is not configured for the workspace.
+ */
+export async function createPostHogClientForWorkspace(
+  workspaceId: string
+): Promise<PostHogClient> {
+  const { getIntegrationCredentialsAdmin } = await import('../credentials')
+  const { ConfigurationError } = await import('../../errors/query-errors')
+
+  const credentials = await getIntegrationCredentialsAdmin(workspaceId, 'posthog')
+  if (!credentials || !credentials.apiKey || !credentials.projectId) {
+    throw new ConfigurationError('PostHog integration not configured for this workspace')
+  }
+
+  return new PostHogClient({
+    apiKey: credentials.apiKey,
+    projectId: credentials.projectId,
+    host: credentials.host || undefined,
+  })
+}
