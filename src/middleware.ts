@@ -10,9 +10,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Skip middleware for MCP OAuth endpoints — they manage auth internally
-  // (register is public, authorize checks session itself, token validates codes)
-  if (pathname.startsWith('/api/mcp/') || pathname.startsWith('/api/well-known/')) {
+  // Skip middleware for MCP endpoints — they manage auth internally
+  // /mcp = Streamable HTTP endpoint, /api/mcp/* = OAuth flow, /api/well-known/* = metadata
+  if (pathname === '/mcp' || pathname.startsWith('/api/mcp/') || pathname.startsWith('/api/well-known/')) {
     return NextResponse.next()
   }
 
