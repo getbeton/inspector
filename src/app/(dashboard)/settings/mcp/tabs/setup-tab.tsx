@@ -42,7 +42,10 @@ interface AgentConfig {
   id: string
   label: string
   filePath: string
-  buildConfig: (mcpUrl: string, apiKey: string) => string
+  /** Primary config uses npx mcp-remote (OAuth, no API key needed) */
+  buildConfig: (mcpUrl: string) => string
+  /** Fallback config with static API key for agents that don't support mcp-remote */
+  buildApiKeyConfig?: (mcpUrl: string, apiKey: string) => string
 }
 
 const AGENT_CONFIGS: AgentConfig[] = [
@@ -50,7 +53,20 @@ const AGENT_CONFIGS: AgentConfig[] = [
     id: 'claude',
     label: 'Claude Code',
     filePath: '~/.claude/mcp.json',
-    buildConfig: (mcpUrl, apiKey) =>
+    buildConfig: (mcpUrl) =>
+      JSON.stringify(
+        {
+          mcpServers: {
+            beton: {
+              command: 'npx',
+              args: ['mcp-remote@latest', mcpUrl],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    buildApiKeyConfig: (mcpUrl, apiKey) =>
       JSON.stringify(
         {
           mcpServers: {
@@ -69,13 +85,13 @@ const AGENT_CONFIGS: AgentConfig[] = [
     id: 'cursor',
     label: 'Cursor',
     filePath: '~/.cursor/mcp.json',
-    buildConfig: (mcpUrl, apiKey) =>
+    buildConfig: (mcpUrl) =>
       JSON.stringify(
         {
           mcpServers: {
             beton: {
-              url: mcpUrl,
-              headers: { Authorization: `Bearer ${apiKey}` },
+              command: 'npx',
+              args: ['mcp-remote@latest', mcpUrl],
             },
           },
         },
@@ -87,13 +103,13 @@ const AGENT_CONFIGS: AgentConfig[] = [
     id: 'windsurf',
     label: 'Windsurf',
     filePath: '~/.codeium/windsurf/mcp_config.json',
-    buildConfig: (mcpUrl, apiKey) =>
+    buildConfig: (mcpUrl) =>
       JSON.stringify(
         {
           mcpServers: {
             beton: {
-              serverUrl: mcpUrl,
-              headers: { Authorization: `Bearer ${apiKey}` },
+              command: 'npx',
+              args: ['mcp-remote@latest', mcpUrl],
             },
           },
         },
@@ -105,17 +121,14 @@ const AGENT_CONFIGS: AgentConfig[] = [
     id: 'continue',
     label: 'VS Code (Continue)',
     filePath: '~/.continue/config.json',
-    buildConfig: (mcpUrl, apiKey) =>
+    buildConfig: (mcpUrl) =>
       JSON.stringify(
         {
           mcpServers: [
             {
               name: 'beton',
-              transport: {
-                type: 'http',
-                url: mcpUrl,
-                headers: { Authorization: `Bearer ${apiKey}` },
-              },
+              command: 'npx',
+              args: ['mcp-remote@latest', mcpUrl],
             },
           ],
         },
@@ -364,61 +377,22 @@ function ApiKeyCard() {
 
 function AgentSnippetsCard() {
   const [selectedAgent, setSelectedAgent] = useState(AGENT_CONFIGS[0].id)
-  const { data: keys } = useApiKeys()
-  const revealMutation = useRevealApiKey()
-  const [revealedKey, setRevealedKey] = useState<string | null>(null)
-
-  const activeKey = keys?.[0] ?? null
   const mcpUrl = getMcpUrl()
 
   const agentConfig = AGENT_CONFIGS.find((c) => c.id === selectedAgent) ?? AGENT_CONFIGS[0]
 
-  // Build config with placeholder or actual key
+  // Primary config: npx mcp-remote (uses OAuth, no API key needed)
   const configText = useMemo(() => {
-    const keyValue = revealedKey || 'YOUR_API_KEY'
-    return agentConfig.buildConfig(mcpUrl, keyValue)
-  }, [agentConfig, mcpUrl, revealedKey])
-
-  const handleQuickCopy = async () => {
-    if (!activeKey) {
-      toastManager.add({ type: 'warning', title: 'Generate an API key first' })
-      return
-    }
-
-    let key = revealedKey
-    if (!key && activeKey.has_encrypted_key) {
-      try {
-        key = await revealMutation.mutateAsync(activeKey.id)
-        setRevealedKey(key)
-      } catch {
-        toastManager.add({ type: 'error', title: 'Failed to reveal key for config' })
-        return
-      }
-    }
-
-    if (!key) {
-      toastManager.add({
-        type: 'warning',
-        title: 'Cannot resolve API key. Generate a new key to enable quick copy.',
-      })
-      return
-    }
-
-    const fullConfig = agentConfig.buildConfig(mcpUrl, key)
-    try {
-      await navigator.clipboard.writeText(fullConfig)
-      toastManager.add({ type: 'success', title: 'Config copied with your API key!' })
-    } catch {
-      toastManager.add({ type: 'error', title: 'Failed to copy' })
-    }
-  }
+    return agentConfig.buildConfig(mcpUrl)
+  }, [agentConfig, mcpUrl])
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Installation</CardTitle>
         <CardDescription>
-          Copy the config snippet for your AI agent and paste it into the config file shown above the code block.
+          Copy the config snippet for your AI agent and paste it into the config file. On first use,
+          a browser window will open for you to log in to Beton.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -453,10 +427,10 @@ function AgentSnippetsCard() {
           </div>
         </div>
 
-        {/* Quick copy button */}
-        <Button variant="outline" size="sm" onClick={handleQuickCopy} disabled={revealMutation.isPending}>
-          {revealMutation.isPending ? 'Resolving key\u2026' : 'Quick Copy (with API key)'}
-        </Button>
+        <p className="text-xs text-muted-foreground">
+          Requires <code className="text-[0.8em] px-1 py-0.5 rounded bg-muted">npx</code> (Node.js 18+).
+          Authentication is handled automatically via OAuth — no API key required.
+        </p>
       </CardContent>
     </Card>
   )
