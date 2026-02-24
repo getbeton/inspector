@@ -11,8 +11,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // Skip middleware for MCP endpoints — they manage auth internally
-  // /mcp = Streamable HTTP endpoint, /api/mcp/* = OAuth flow, /api/well-known/* = metadata
-  if (pathname === '/mcp' || pathname.startsWith('/api/mcp/') || pathname.startsWith('/api/well-known/')) {
+  // /mcp = Streamable HTTP endpoint, /api/mcp/* = OAuth flow
+  // /.well-known/* = OAuth metadata (original path before Next.js rewrite)
+  // /api/well-known/* = OAuth metadata (post-rewrite destination)
+  if (
+    pathname === '/mcp' ||
+    pathname.startsWith('/api/mcp/') ||
+    pathname.startsWith('/.well-known/') ||
+    pathname.startsWith('/api/well-known/')
+  ) {
     return NextResponse.next()
   }
 
