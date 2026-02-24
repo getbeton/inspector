@@ -17,6 +17,7 @@ import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
+import { SlackSetupStep } from "./steps/SlackSetupStep";
 import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
 import { getDefaultSampleData, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
@@ -588,6 +589,27 @@ export function SetupWizard({
               isConnected={firecrawlConnected}
               mode={firecrawlMode}
               proxyTier={firecrawlProxy}
+            />
+          ),
+        };
+
+      case "slack":
+        return {
+          config: (
+            <div>
+              <SlackSetupStep
+                onSuccess={() => advanceFrom("completed")}
+                onSkip={() => advanceFrom("skipped")}
+              />
+              {authBypassSkipButton}
+            </div>
+          ),
+          preview: (
+            <SlackNotificationPreview
+              dealNameTemplate={dealMappingState.dealNameTemplate}
+              notificationText="New signal: Usage Spike for Acme Corp"
+              sampleData={enrichedSampleData}
+              posthogHost={posthogHost}
             />
           ),
         };
