@@ -30,16 +30,25 @@ export const supabase = typeof window !== 'undefined'
 /**
  * Trigger Google OAuth sign-in
  * Redirects to Supabase OAuth endpoint, which then redirects to our callback
+ *
+ * @param next — optional post-login redirect path (used by MCP OAuth flow to
+ *               return to /api/mcp/authorize after login)
  */
-export async function signInWithGoogle() {
+export async function signInWithGoogle(next?: string) {
   // Use frontend origin for redirect to Next.js auth callback handler
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  // Build callback URL — thread `next` through so /auth/callback redirects there
+  let redirectTo = `${origin}/auth/callback`
+  if (next) {
+    redirectTo += `?next=${encodeURIComponent(next)}`
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       // Redirect to Next.js auth callback handler (handles session + workspace creation)
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo,
       // Force Google to show account picker even if user is already logged in
       queryParams: {
         prompt: 'select_account'
