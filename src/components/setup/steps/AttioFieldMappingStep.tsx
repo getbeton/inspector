@@ -30,7 +30,7 @@ const BETON_FIELDS: Array<{ field: string; label: string; description: string }>
   { field: 'domain', label: 'Domain', description: 'Company website domain' },
   { field: 'health_score', label: 'Health Score', description: 'Account health (0-100)' },
   { field: 'signal_count', label: 'Signal Count', description: 'Total signals detected' },
-  { field: 'concrete_grade', label: 'Concrete Grade', description: 'Account grade (M100-M10)' },
+  { field: 'top_signal', label: 'Top Signal', description: 'Highest-lift signal definition' },
   { field: 'last_signal_date', label: 'Last Signal Date', description: 'When last signal was detected' },
 ]
 

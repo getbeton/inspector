@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const RATE_LIMIT_MINUTES = 5
 
-const VALID_SYNC_TYPES = ['signal_detection', 'mtu_tracking', 'sync_signals', 'posthog_events'] as const
+const VALID_SYNC_TYPES = ['mtu_tracking', 'sync_signals'] as const
 type SyncType = (typeof VALID_SYNC_TYPES)[number]
 
 /**
@@ -104,10 +104,8 @@ export async function POST(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 const CRON_ENDPOINTS: Record<SyncType, string> = {
-  signal_detection: '/api/cron/signal-detection',
   mtu_tracking: '/api/cron/mtu-tracking',
   sync_signals: '/api/cron/sync-signals',
-  posthog_events: '/api/cron/signal-detection',
 }
 
 async function callCronEndpoint(syncType: SyncType): Promise<Record<string, unknown>> {
