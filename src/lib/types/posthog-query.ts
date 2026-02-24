@@ -20,6 +20,7 @@ export type PosthogQueryStatus = 'pending' | 'running' | 'completed' | 'failed' 
 export interface PosthogQuery {
   id: string
   workspace_id: string
+  session_id?: string | null
   query_text: string
   query_hash: string
   status: PosthogQueryStatus
@@ -33,6 +34,7 @@ export interface PosthogQuery {
 export interface PosthogQueryInsert {
   id?: string
   workspace_id: string
+  session_id?: string | null
   query_text: string
   query_hash: string
   status?: PosthogQueryStatus
@@ -58,6 +60,7 @@ export interface PosthogQueryUpdate {
 export interface PosthogQueryResult {
   id: string
   workspace_id: string
+  session_id?: string | null
   query_id: string
   query_hash: string
   columns: string[]
@@ -71,6 +74,7 @@ export interface PosthogQueryResult {
 export interface PosthogQueryResultInsert {
   id?: string
   workspace_id: string
+  session_id?: string | null
   query_id: string
   query_hash: string
   columns: string[]

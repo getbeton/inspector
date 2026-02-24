@@ -12,6 +12,7 @@ export {
 export {
   QueryService,
   createQueryService,
+  createQueryServiceForAgent,
   type QueryExecutionOptions,
   type QueryExecutionResponse,
   type QueryServiceDependencies,
