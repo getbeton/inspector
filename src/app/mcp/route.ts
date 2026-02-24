@@ -1,155 +1,120 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
-import { registerAllTools } from '@/lib/mcp/tools'
-import type { NextRequest } from 'next/server'
-
 /**
- * Streamable HTTP MCP endpoint — POST /mcp
+ * GET|POST|DELETE /mcp — Embedded MCP Streamable HTTP endpoint
  *
- * Stateless: each request creates a fresh McpServer, processes the
- * JSON-RPC message, and returns the response. No sessions needed —
- * works natively on Vercel serverless.
+ * Dual-auth: supports both `beton_*` API keys (from settings page) and
+ * Supabase JWTs (from OAuth login flow). Unauthenticated requests get 401
+ * which triggers the MCP OAuth discovery flow in clients like Claude Code.
  *
- * Auth: returns 401 without Bearer token, triggering the MCP OAuth
- * discovery flow (/.well-known/oauth-authorization-server).
+ * Stateless — each request creates a fresh server + transport so there
+ * is no session state to lose between Vercel function invocations.
  */
 
-// ─── Inline Transport ───────────────────────────────────────────────────────
-// Bridges McpServer ↔ Next.js Request/Response in a single round-trip.
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { validateApiKey } from '@/lib/mcp/validate-key'
+import { registerAllTools } from '@/lib/mcp/tools'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-class InlineTransport implements Transport {
-  onmessage?: (message: JSONRPCMessage) => void
-  onerror?: (error: Error) => void
-  onclose?: () => void
-  sessionId?: string
-
-  private collected: JSONRPCMessage[] = []
-  private resolver?: () => void
-
-  async start(): Promise<void> {}
-  async close(): Promise<void> { this.onclose?.() }
-
-  async send(message: JSONRPCMessage): Promise<void> {
-    this.collected.push(message)
-    this.resolver?.()
-  }
-
-  /** Feed a JSON-RPC message and collect the server's response(s). */
-  async handle(message: JSONRPCMessage): Promise<JSONRPCMessage | null> {
-    this.collected = []
-
-    // Dispatch to the McpServer via the onmessage callback
-    this.onmessage?.(message)
-
-    // Notifications (no `id`) don't produce responses
-    if (!('id' in message)) {
-      return null
-    }
-
-    // Wait for the server to call send()
-    if (this.collected.length === 0) {
-      await new Promise<void>((resolve) => {
-        this.resolver = resolve
-      })
-    }
-
-    return this.collected[0] ?? null
-  }
+function jsonRpcError(code: number, message: string, status: number, headers?: Record<string, string>) {
+  return Response.json(
+    { jsonrpc: '2.0', error: { code, message }, id: null },
+    { status, headers }
+  )
 }
 
-// ─── Route Handler ──────────────────────────────────────────────────────────
-
 /**
- * Synthetic initialize handshake sent before every non-initialize request.
- * In stateless mode each POST creates a fresh McpServer that hasn't seen
- * the client's initialize → we replay it internally so tools/list and
- * tools/call work without a persistent session.
+ * Resolve workspace ID from a Bearer token. Supports two token types:
+ * 1. `beton_*` API key → bcrypt-validated against api_keys table
+ * 2. Supabase JWT → decoded to get user_id → workspace_members lookup
  */
-const SYNTHETIC_INIT: JSONRPCMessage = {
-  jsonrpc: '2.0',
-  method: 'initialize',
-  params: {
-    protocolVersion: '2025-03-26',
-    capabilities: {},
-    clientInfo: { name: 'stateless-bridge', version: '1.0' },
-  },
-  id: '_init',
-} as unknown as JSONRPCMessage
+async function resolveWorkspace(token: string): Promise<string | null> {
+  // ── API key path ──────────────────────────────────────────────────
+  if (token.startsWith('beton_')) {
+    const auth = await validateApiKey(token)
+    return auth?.workspaceId ?? null
+  }
 
-const SYNTHETIC_INITIALIZED: JSONRPCMessage = {
-  jsonrpc: '2.0',
-  method: 'notifications/initialized',
-} as unknown as JSONRPCMessage
+  // ── Supabase JWT path (from OAuth flow) ───────────────────────────
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) return null
 
-export async function POST(request: NextRequest) {
+  const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  // Look up workspace membership via admin client (bypasses RLS)
+  const admin = createAdminClient()
+  const { data: member } = await admin
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', user.id)
+    .single()
+
+  return member?.workspace_id ?? null
+}
+
+async function handleMcp(request: Request): Promise<Response> {
+  // ── Auth ────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
 
-  // No token → 401 triggers MCP OAuth flow in the client
-  if (!authHeader) {
-    return Response.json(
-      {
-        jsonrpc: '2.0',
-        error: { code: -32001, message: 'Authentication required' },
-        id: null,
-      },
-      {
-        status: 401,
-        headers: { 'WWW-Authenticate': 'Bearer' },
-      }
-    )
+  if (!token) {
+    // 401 with WWW-Authenticate triggers MCP OAuth discovery in clients
+    return jsonRpcError(-32000, 'Authentication required', 401, {
+      'WWW-Authenticate': 'Bearer',
+    })
   }
 
-  // Parse JSON-RPC body
-  let body: JSONRPCMessage
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json(
-      { jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null },
-      { status: 400 }
-    )
+  const workspaceId = await resolveWorkspace(token)
+  if (!workspaceId) {
+    return jsonRpcError(-32000, 'Invalid or expired credentials', 401)
   }
 
-  // Create a fresh server + transport per request (stateless)
-  const transport = new InlineTransport()
-  const server = new McpServer({ name: 'beton', version: '0.2.0' })
-  registerAllTools(server, () => authHeader)
+  // ── Server + Transport ──────────────────────────────────────────────
+  const server = new McpServer({
+    name: 'beton',
+    version: '0.2.0',
+  })
+
+  registerAllTools(server, workspaceId)
+
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    // Stateless: no session ID, each request is independent
+    sessionIdGenerator: undefined,
+    // Return JSON instead of SSE for simpler tool call responses
+    enableJsonResponse: true,
+  })
+
   await server.connect(transport)
 
-  // For non-initialize requests, replay the handshake so the server
-  // accepts tools/list, tools/call, etc. on this fresh instance.
-  const method = (body as { method?: string }).method
-  if (method !== 'initialize') {
-    await transport.handle(SYNTHETIC_INIT)
-    await transport.handle(SYNTHETIC_INITIALIZED)
+  // ── Handle request ──────────────────────────────────────────────────
+  // Pre-parse body for POST so the transport doesn't re-read the stream
+  let parsedBody: unknown
+  if (request.method === 'POST') {
+    try {
+      parsedBody = await request.json()
+    } catch {
+      return jsonRpcError(-32700, 'Parse error: invalid JSON', 400)
+    }
   }
 
-  const response = await transport.handle(body)
-
-  // Clean up
-  await server.close()
-
-  if (!response) {
-    // Notification acknowledged — no body needed
-    return new Response(null, { status: 202 })
-  }
-
-  return Response.json(response)
+  return transport.handleRequest(request, { parsedBody })
 }
 
-// GET /mcp — SSE stream (not needed for stateless, return method not allowed)
-export async function GET() {
-  return Response.json(
-    { jsonrpc: '2.0', error: { code: -32000, message: 'SSE not supported in stateless mode' }, id: null },
-    { status: 405 }
-  )
+export async function POST(request: Request) {
+  return handleMcp(request)
 }
 
-// DELETE /mcp — session termination (no-op for stateless)
-export async function DELETE() {
-  return Response.json(
-    { jsonrpc: '2.0', error: { code: -32000, message: 'No sessions in stateless mode' }, id: null },
-    { status: 405 }
-  )
+export async function GET(request: Request) {
+  return handleMcp(request)
+}
+
+export async function DELETE(request: Request) {
+  return handleMcp(request)
 }
