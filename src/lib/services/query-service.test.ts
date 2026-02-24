@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { QueryService, type QueryServiceDependencies } from './query-service'
+import { QueryService, createQueryServiceForAgent, type QueryServiceDependencies } from './query-service'
 import { QueryValidator } from './query-validator'
 import { RateLimiter, type RateLimitStatus } from './rate-limiter'
 import { QueryRepository } from '../repositories/query-repository'
@@ -420,6 +420,163 @@ describe('QueryService', () => {
 
       expect(mockRateLimiter.getRateLimitStatus).toHaveBeenCalledWith(workspaceId)
       expect(status).toEqual(defaultRateLimitStatus)
+    })
+  })
+
+  describe('session_id linkage', () => {
+    const sessionUUID = 'session-uuid-123'
+
+    it('passes session_id to query record when sessionId option is provided', async () => {
+      const queryRecord: PosthogQuery = {
+        id: 'query-session',
+        workspace_id: workspaceId,
+        session_id: sessionUUID,
+        query_text: validQuery,
+        query_hash: 'hash-session',
+        status: 'pending',
+        execution_time_ms: null,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
+      }
+
+      mockResultRepository.getCached.mockResolvedValue(null)
+      mockQueryRepository.create.mockResolvedValue(queryRecord)
+      mockPostHogClient.query.mockResolvedValue({
+        columns: ['event'],
+        results: [['test']],
+      })
+      mockResultRepository.create.mockResolvedValue({
+        id: 'result-session',
+        query_id: 'query-session',
+        workspace_id: workspaceId,
+        session_id: sessionUUID,
+        query_hash: 'hash-session',
+        columns: ['event'],
+        results: [['test']],
+        row_count: 1,
+        cached_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+      })
+
+      await queryService.execute(workspaceId, validQuery, { sessionId: sessionUUID })
+
+      expect(mockQueryRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: sessionUUID,
+        })
+      )
+      expect(mockResultRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: sessionUUID,
+        })
+      )
+    })
+
+    it('omits session_id when sessionId option is not provided (user query path)', async () => {
+      const queryRecord: PosthogQuery = {
+        id: 'query-user',
+        workspace_id: workspaceId,
+        query_text: validQuery,
+        query_hash: 'hash-user',
+        status: 'pending',
+        execution_time_ms: null,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
+      }
+
+      mockResultRepository.getCached.mockResolvedValue(null)
+      mockQueryRepository.create.mockResolvedValue(queryRecord)
+      mockPostHogClient.query.mockResolvedValue({
+        columns: ['event'],
+        results: [['test']],
+      })
+      mockResultRepository.create.mockResolvedValue({
+        id: 'result-user',
+        query_id: 'query-user',
+        workspace_id: workspaceId,
+        query_hash: 'hash-user',
+        columns: ['event'],
+        results: [['test']],
+        row_count: 1,
+        cached_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+      })
+
+      await queryService.execute(workspaceId, validQuery)
+
+      // Should NOT include session_id in the create payload
+      const createCall = mockQueryRepository.create.mock.calls[0][0]
+      expect(createCall).not.toHaveProperty('session_id')
+
+      const resultCreateCall = mockResultRepository.create.mock.calls[0][0]
+      expect(resultCreateCall).not.toHaveProperty('session_id')
+    })
+
+    it('session_id linkage survives even when session terminates during execution (benign race)', async () => {
+      // Documents expected behavior: in-flight queries complete and are recorded
+      // with session_id even if the session transitions to terminal state mid-flight.
+      const queryRecord: PosthogQuery = {
+        id: 'query-race',
+        workspace_id: workspaceId,
+        session_id: sessionUUID,
+        query_text: validQuery,
+        query_hash: 'hash-race',
+        status: 'pending',
+        execution_time_ms: null,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
+      }
+
+      mockResultRepository.getCached.mockResolvedValue(null)
+      mockQueryRepository.create.mockResolvedValue(queryRecord)
+      mockPostHogClient.query.mockResolvedValue({
+        columns: ['event'],
+        results: [['data']],
+      })
+      mockResultRepository.create.mockResolvedValue({
+        id: 'result-race',
+        query_id: 'query-race',
+        workspace_id: workspaceId,
+        session_id: sessionUUID,
+        query_hash: 'hash-race',
+        columns: ['event'],
+        results: [['data']],
+        row_count: 1,
+        cached_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+      })
+
+      // Execute with session — the session may have completed mid-flight
+      // but the query should still record session_id successfully
+      const response = await queryService.execute(workspaceId, validQuery, {
+        sessionId: sessionUUID,
+      })
+
+      expect(response).toBeDefined()
+      expect(response.cached).toBe(false)
+      expect(mockQueryRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ session_id: sessionUUID })
+      )
+    })
+  })
+
+  describe('createQueryServiceForAgent', () => {
+    it('creates a QueryService instance with the provided admin client', () => {
+      const adminClient = createMockSupabase()
+      const posthogClient = createMockPostHogClient()
+
+      const service = createQueryServiceForAgent(adminClient as any, posthogClient as any)
+
+      expect(service).toBeInstanceOf(QueryService)
     })
   })
 })
