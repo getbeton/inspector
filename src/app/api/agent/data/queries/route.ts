@@ -28,13 +28,12 @@ export const GET = withRLSContext(async (request, { supabase, workspaceId }) => 
   const status = searchParams.get('status')
 
   try {
+    // Select core columns; session_id added by migration 021 — use * to avoid
+    // hard-coding columns that may not exist yet on the deployed schema.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table columns not in generated types yet
     let query = (supabase as any)
       .from('posthog_queries')
-      .select(
-        'id, workspace_id, session_id, query_text, query_hash, status, execution_time_ms, error_message, created_at, started_at, completed_at',
-        { count: 'exact' }
-      )
+      .select('*', { count: 'exact' })
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false })
       .limit(limit)

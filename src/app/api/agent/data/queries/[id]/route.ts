@@ -21,13 +21,11 @@ export const GET = withRLSContext(async (request: NextRequest, { supabase, works
   }
 
   try {
-    // Fetch the query record
+    // Fetch the query record (use * to avoid hard-coding columns from migration 021)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table columns not in generated types yet
     const { data: queryData, error: queryError } = await (supabase as any)
       .from('posthog_queries')
-      .select(
-        'id, workspace_id, session_id, query_text, query_hash, status, execution_time_ms, error_message, created_at, started_at, completed_at'
-      )
+      .select('*')
       .eq('id', id)
       .eq('workspace_id', workspaceId)
       .single()
