@@ -134,6 +134,7 @@ export interface ExtractResponse {
 export class FirecrawlClient {
   private apiKey: string
   private baseUrl: string
+  private mode: 'cloud' | 'self_hosted'
   private proxy: 'basic' | 'stealth' | null
   private defaultTimeout: number
 
@@ -143,6 +144,7 @@ export class FirecrawlClient {
     }
 
     this.apiKey = config.apiKey
+    this.mode = config.mode ?? 'cloud'
     this.proxy = config.proxy ?? null
     this.defaultTimeout = config.defaultTimeout ?? 30_000
 
@@ -281,15 +283,39 @@ export class FirecrawlClient {
   }
 
   /**
-   * Test the connection by hitting a read-only endpoint.
+   * Test the connection by validating the API key against a read-only endpoint.
    *
-   * Uses GET /v1/crawl (list crawl jobs) which requires valid auth but
-   * does NOT consume any scrape credits — unlike the old approach of
-   * scraping example.com.
+   * Cloud mode: hits GET /v1/team/credit-usage which requires valid auth,
+   * returns billing info, and does NOT consume any scrape credits.
+   *
+   * Self-hosted mode: the /v1/team/credit-usage endpoint may not exist,
+   * so we fall back to POST /v1/scrape on https://example.com (costs 1
+   * credit, but self-hosted instances typically have unlimited credits).
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.request<{ success: boolean }>('/v1/crawl', { method: 'GET' })
+      if (this.mode === 'cloud') {
+        // Credit-usage endpoint is free and validates the API key
+        await this.request<{ success: boolean }>('/v1/team/credit-usage', { method: 'GET' })
+      } else {
+        // Self-hosted: try credit-usage first; fall back to a minimal scrape
+        try {
+          await this.request<{ success: boolean }>('/v1/team/credit-usage', { method: 'GET' })
+        } catch (innerError) {
+          // Re-throw auth errors immediately — the key is invalid
+          if (innerError instanceof FirecrawlAuthError) throw innerError
+          // For any other error (404, 500, etc.) the endpoint may not exist
+          // on this self-hosted version, so fall back to a minimal scrape
+          await this.request<{ success: boolean }>('/v1/scrape', {
+            method: 'POST',
+            body: JSON.stringify({
+              url: 'https://example.com',
+              formats: ['markdown'],
+              onlyMainContent: true,
+            }),
+          })
+        }
+      }
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
