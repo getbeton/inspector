@@ -34,32 +34,50 @@ export async function GET() {
 
     // Get API keys (excluding hash for security, include encrypted_key only for flag check)
     // Note: encrypted_key column added via migration 021 — cast until types regenerated
-    const { data, error } = await supabase
+    // Try with encrypted_key first; fall back if column doesn't exist yet
+    type KeyRow = {
+      id: string; name: string; encrypted_key?: string | null;
+      last_used_at: string | null; expires_at: string; created_at: string
+    }
+
+    let rows: KeyRow[] = []
+
+    const richResult = await supabase
       .from('api_keys')
       .select('id, name, encrypted_key, last_used_at, expires_at, created_at')
       .eq('workspace_id', membership.workspaceId)
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false }) as {
-        data: Array<{
-          id: string; name: string; encrypted_key: string | null;
-          last_used_at: string | null; expires_at: string; created_at: string
-        }> | null
-        error: unknown
-      }
+      .order('created_at', { ascending: false }) as { data: KeyRow[] | null; error: { message?: string; code?: string } | null }
 
-    if (error) {
-      console.error('Error fetching API keys:', error)
+    if (richResult.error && /encrypted_key|column/.test(richResult.error.message ?? '')) {
+      // Column doesn't exist yet — fall back to query without it
+      const fallback = await supabase
+        .from('api_keys')
+        .select('id, name, last_used_at, expires_at, created_at')
+        .eq('workspace_id', membership.workspaceId)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }) as { data: KeyRow[] | null; error: { message?: string } | null }
+
+      if (fallback.error) {
+        console.error('Error fetching API keys:', fallback.error)
+        return NextResponse.json({ error: 'Failed to fetch keys' }, { status: 500 })
+      }
+      rows = fallback.data ?? []
+    } else if (richResult.error) {
+      console.error('Error fetching API keys:', richResult.error)
       return NextResponse.json({ error: 'Failed to fetch keys' }, { status: 500 })
+    } else {
+      rows = richResult.data ?? []
     }
 
     // Map to response shape — expose has_encrypted_key flag but not the ciphertext
-    const keys = (data ?? []).map((row) => ({
+    const keys = rows.map((row) => ({
       id: row.id,
       name: row.name,
       last_used_at: row.last_used_at,
       expires_at: row.expires_at,
       created_at: row.created_at,
-      has_encrypted_key: row.encrypted_key !== null,
+      has_encrypted_key: row.encrypted_key != null,
     }))
 
     return NextResponse.json({ keys })
@@ -113,14 +131,15 @@ export async function POST(request: Request) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + API_KEY_EXPIRY_DAYS)
 
-    // Build insert payload
+    // Build insert payload — only include encrypted_key when non-null
+    // so the insert succeeds even if the column doesn't exist yet (migration 021)
     const insertPayload: ApiKeyInsert = {
       workspace_id: membership.workspaceId,
       user_id: user.id,
       key_hash: keyHash,
-      encrypted_key: encryptedKey,
       name,
-      expires_at: expiresAt.toISOString()
+      expires_at: expiresAt.toISOString(),
+      ...(encryptedKey != null && { encrypted_key: encryptedKey }),
     }
 
     // Store in database

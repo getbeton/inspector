@@ -36,7 +36,15 @@ export async function GET(
       .eq('id', id)
       .eq('workspace_id', membership.workspaceId)
       .eq('user_id', user.id)
-      .single() as { data: { encrypted_key: string | null } | null; error: unknown }
+      .single() as { data: { encrypted_key: string | null } | null; error: { message?: string } | null }
+
+    // If the column doesn't exist yet (migration 021 not applied), treat as non-revealable
+    if (error && /encrypted_key|column/.test(error.message ?? '')) {
+      return NextResponse.json(
+        { error: 'Encrypted key storage is not yet available. Please apply migration 021.' },
+        { status: 410 },
+      )
+    }
 
     if (error || !data) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 })
