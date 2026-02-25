@@ -31,6 +31,30 @@ interface McpLogRow {
 }
 
 // ---------------------------------------------------------------------------
+// M5 fix: Server-side sanitization of request params before storage
+// ---------------------------------------------------------------------------
+
+const SENSITIVE_KEY_PATTERN = /token|secret|key|password|credential|auth/i
+const JWT_VALUE_PATTERN = /^ey[A-Za-z0-9_-]+\./
+const MAX_PARAM_VALUE_LENGTH = 1000
+
+function sanitizeRequestParams(params: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      sanitized[key] = '[REDACTED]'
+    } else if (typeof value === 'string' && JWT_VALUE_PATTERN.test(value)) {
+      sanitized[key] = '[REDACTED_JWT]'
+    } else if (typeof value === 'string' && value.length > MAX_PARAM_VALUE_LENGTH) {
+      sanitized[key] = value.substring(0, MAX_PARAM_VALUE_LENGTH) + '...[truncated]'
+    } else {
+      sanitized[key] = value
+    }
+  }
+  return sanitized
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/mcp/logs — cursor-paginated log query
 // ---------------------------------------------------------------------------
 
@@ -148,14 +172,15 @@ export async function POST(request: NextRequest) {
     // Use admin client for insert (bypasses RLS, validated via user auth above)
     const admin = createAdminClient()
 
+    // M5 fix: Sanitize request_params server-side before storage
     const rows = entries.map((entry) => ({
       workspace_id: membership.workspaceId,
       tool_name: entry.tool_name,
       status: entry.status || 'success',
       status_code: entry.status_code ?? null,
       duration_ms: entry.duration_ms ?? null,
-      request_params: entry.request_params ?? null,
-      error_message: entry.error_message ?? null,
+      request_params: entry.request_params ? sanitizeRequestParams(entry.request_params) : null,
+      error_message: entry.error_message ? entry.error_message.substring(0, 1000) : null,
       session_id: entry.session_id ?? null,
     }))
 

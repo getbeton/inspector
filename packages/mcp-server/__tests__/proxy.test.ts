@@ -35,7 +35,7 @@ describe('callApi', () => {
       json: () => Promise.resolve({}),
     })
 
-    await callApi('/api/test', 'Bearer my-jwt-token')
+    await callApi('/api/signals', 'Bearer my-jwt-token')
 
     const [, options] = mockFetch.mock.calls[0]
     expect(options.headers.Authorization).toBe('Bearer my-jwt-token')
@@ -46,7 +46,7 @@ describe('callApi', () => {
       json: () => Promise.resolve({}),
     })
 
-    await callApi('/api/test', undefined)
+    await callApi('/api/signals', undefined)
 
     const [, options] = mockFetch.mock.calls[0]
     expect(options.headers.Authorization).toBeUndefined()
@@ -132,7 +132,7 @@ describe('callApi', () => {
       json: () => Promise.resolve({}),
     })
 
-    await callApi('/api/test', undefined)
+    await callApi('/api/signals', undefined)
 
     const [url] = mockFetch.mock.calls[0]
     expect(url).toContain('localhost:3000')

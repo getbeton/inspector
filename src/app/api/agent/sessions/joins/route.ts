@@ -5,24 +5,26 @@
  * Reads completed sessions and EDA join_suggestions for the workspace.
  *
  * Supports both user auth (withRLSContext) and agent auth (validateAgentRequest).
+ *
+ * Security fix:
+ * - M12: Removed admin client — uses context.supabase with RLS + explicit workspace_id filter
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 async function handleGetConfirmedJoins(
   _request: NextRequest,
   context: RLSContext
 ): Promise<NextResponse> {
-  const { workspaceId } = context
+  const { supabase, workspaceId } = context
 
-  // Use admin client for cross-table joins that RLS blocks
+  // M12 fix: Use context.supabase (RLS-enforced) with explicit workspace_id filter
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adminSupabase = createAdminClient() as any
+  const db = supabase as any
 
   // Fetch completed sessions
-  const { data: sessions, error: sessionsError } = await adminSupabase
+  const { data: sessions, error: sessionsError } = await db
     .from('workspace_agent_sessions')
     .select('session_id, status, created_at, updated_at')
     .eq('workspace_id', workspaceId)
@@ -35,7 +37,7 @@ async function handleGetConfirmedJoins(
   }
 
   // Collect confirmed joins from EDA results
-  const { data: edaResults } = await adminSupabase
+  const { data: edaResults } = await db
     .from('eda_results')
     .select('table_id, join_suggestions')
     .eq('workspace_id', workspaceId)

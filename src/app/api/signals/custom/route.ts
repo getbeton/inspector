@@ -98,6 +98,11 @@ async function handleCreateCustomSignal(
   const conditionValue = body.condition_value || 1
   const timeWindowDays = body.time_window_days || 7
 
+  // M10 fix: Validate operator in POST handler (already exists in PATCH)
+  if (!VALID_OPERATORS.has(conditionOperator)) {
+    throw new InvalidQueryError(`Invalid condition_operator. Must be one of: ${[...VALID_OPERATORS].join(', ')}`)
+  }
+
   // Create the signal definition
   const { data: definition, error } = await supabase
     .from('signal_definitions')

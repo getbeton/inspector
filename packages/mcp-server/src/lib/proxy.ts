@@ -3,11 +3,43 @@
  *
  * All business logic lives in the Next.js app. The MCP server is a thin proxy
  * that forwards requests with the user's auth header and returns the results.
+ *
+ * Security fixes:
+ * - M16: Fetch timeout (30s) via AbortController
+ * - M18: SSRF protection via path prefix allowlist and URL validation
  */
 
 import { logToolInvocation, sanitizeParams } from './logger.js'
 
 const APP_URL = process.env.NEXT_APP_URL || 'http://localhost:3000'
+
+// M18 fix: Validate NEXT_APP_URL at module load
+try {
+  const parsed = new URL(APP_URL)
+  if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    console.warn('[Proxy] WARNING: NEXT_APP_URL is not HTTPS in production')
+  }
+} catch {
+  throw new Error(`Invalid NEXT_APP_URL: ${APP_URL}`)
+}
+
+// M18 fix: Allowlist of valid API path prefixes
+const ALLOWED_PATH_PREFIXES = [
+  '/api/accounts',
+  '/api/signals',
+  '/api/billing',
+  '/api/integrations',
+  '/api/mcp',
+  '/api/agent',
+  '/api/heuristics',
+  '/api/workspace',
+  '/api/sync',
+  '/api/posthog',
+  '/api/user',
+]
+
+// M16 fix: Default fetch timeout
+const FETCH_TIMEOUT_MS = 30_000
 
 export async function callApi(
   path: string,
@@ -20,6 +52,12 @@ export async function callApi(
     toolName?: string
   }
 ): Promise<{ data: unknown; status: number }> {
+  // M18 fix: Validate path against allowlist
+  const isAllowed = ALLOWED_PATH_PREFIXES.some(prefix => path.startsWith(prefix))
+  if (!isAllowed) {
+    throw new Error(`Path not allowed: ${path}`)
+  }
+
   const start = Date.now()
   const url = new URL(path, APP_URL)
 
@@ -39,6 +77,10 @@ export async function callApi(
     headers['Authorization'] = authHeader
   }
 
+  // M16 fix: AbortController with 30s timeout
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
   let data: unknown
   let status: number
   try {
@@ -46,6 +88,7 @@ export async function callApi(
       method: options?.method || 'GET',
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
     })
 
     data = await res.json()
@@ -65,6 +108,8 @@ export async function callApi(
       )
     }
     throw error
+  } finally {
+    clearTimeout(timeout)
   }
 
   // Fire-and-forget log for successful calls

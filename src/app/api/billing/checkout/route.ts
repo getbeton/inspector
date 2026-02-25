@@ -3,6 +3,10 @@
  *
  * Create a Stripe Checkout session for entering payment details.
  * Returns a URL the user should open in their browser.
+ *
+ * Security fixes:
+ * - H4: Validate success_url and cancel_url against allowed hosts
+ * - M11: Role enforcement (admin/owner only)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,10 +22,41 @@ interface CheckoutRequest {
   cancel_url: string
 }
 
+/**
+ * Validate that a URL's host is in the allowed list.
+ * Prevents arbitrary URL injection into Stripe checkout sessions.
+ */
+function isAllowedCheckoutUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    const allowedHosts = new Set(['localhost'])
+
+    if (appUrl) {
+      try {
+        allowedHosts.add(new URL(appUrl).hostname)
+      } catch { /* ignore invalid APP_URL */ }
+    }
+
+    // Allow *.vercel.app for preview deployments
+    if (url.hostname.endsWith('.vercel.app')) return true
+    if (allowedHosts.has(url.hostname)) return true
+
+    return false
+  } catch {
+    return false
+  }
+}
+
 async function handleCreateCheckout(
   request: NextRequest,
   context: RLSContext
 ): Promise<NextResponse> {
+  // M11 fix: Role enforcement on billing operations
+  if (!['admin', 'owner'].includes(context.role)) {
+    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+  }
+
   if (!isBillingEnabled()) {
     return NextResponse.json(
       { error: 'Billing is disabled in self-hosted mode' },
@@ -41,6 +76,14 @@ async function handleCreateCheckout(
   if (!body.success_url || !body.cancel_url) {
     return NextResponse.json(
       { error: 'success_url and cancel_url are required' },
+      { status: 400 }
+    )
+  }
+
+  // H4 fix: Validate checkout URLs against allowed hosts
+  if (!isAllowedCheckoutUrl(body.success_url) || !isAllowedCheckoutUrl(body.cancel_url)) {
+    return NextResponse.json(
+      { error: 'success_url and cancel_url must point to allowed domains' },
       { status: 400 }
     )
   }

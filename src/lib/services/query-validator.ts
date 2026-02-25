@@ -45,6 +45,13 @@ const DANGEROUS_FUNCTIONS = [
 ] as const
 
 /**
+ * Additional blocked SQL patterns (keyword-based, checked as whole words)
+ */
+const ADDITIONAL_BLOCKED_PATTERNS = [
+  'ARRAY JOIN',  // ClickHouse ARRAY JOIN can be used for DoS
+] as const
+
+/**
  * Table prefixes that expose system metadata
  */
 const BLOCKED_TABLE_PREFIXES = [
@@ -151,6 +158,18 @@ export class QueryValidator {
       )
     }
 
+    // 8b. Check for additional blocked patterns (ARRAY JOIN, etc.)
+    const blockedPatternsFound = this.findBlockedPatterns(strippedQuery)
+    if (blockedPatternsFound.length > 0) {
+      throw new InvalidQueryError(
+        `Query contains blocked patterns: ${blockedPatternsFound.join(', ')}`,
+        { patterns: blockedPatternsFound }
+      )
+    }
+
+    // 8c. Check for backtick-escaped dangerous keywords
+    this.checkBacktickEscaped(strippedQuery)
+
     // 9. SQL injection pattern check
     //    - Main patterns run on stripped query (comments removed)
     //    - Comment-stripping-bypass pattern ('; --) runs on normalized (pre-strip) query
@@ -253,6 +272,42 @@ export class QueryValidator {
     }
 
     return found
+  }
+
+  /**
+   * Find additional blocked patterns (multi-word keywords like ARRAY JOIN)
+   */
+  private findBlockedPatterns(query: string): string[] {
+    const found: string[] = []
+    for (const pattern of ADDITIONAL_BLOCKED_PATTERNS) {
+      const regex = new RegExp(`\\b${pattern}\\b`, 'i')
+      if (regex.test(query)) {
+        found.push(pattern)
+      }
+    }
+    return found
+  }
+
+  /**
+   * Check for dangerous keywords hidden inside backtick-quoted identifiers.
+   * e.g. `DROP` TABLE should still be caught.
+   */
+  private checkBacktickEscaped(query: string): void {
+    // Extract content inside backticks
+    const backtickContent = query.match(/`([^`]+)`/g)
+    if (!backtickContent) return
+
+    for (const match of backtickContent) {
+      const inner = match.slice(1, -1).toUpperCase()
+      for (const keyword of DANGEROUS_KEYWORDS) {
+        if (inner === keyword) {
+          throw new InvalidQueryError(
+            `Query contains dangerous keyword in backtick-quoted identifier: ${keyword}`,
+            { keywords: [keyword] }
+          )
+        }
+      }
+    }
   }
 
   /**

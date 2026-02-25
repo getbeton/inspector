@@ -43,7 +43,8 @@ describe('Mapping tools', () => {
 
       expect(mockCallApi).toHaveBeenCalledWith(
         '/api/integrations/attio/mappings',
-        'Bearer test-token'
+        'Bearer test-token',
+        { toolName: 'get_field_mappings' }
       )
       expect(result.isError).toBeUndefined()
     })

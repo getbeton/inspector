@@ -23,8 +23,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
 
     // Parse query parameters
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    // M8 fix: Cap limit at 100, L3 fix: NaN guard
+    const page = parseInt(searchParams.get('page') || '1') || 1
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50') || 50, 100)
     const type = searchParams.get('type')
     const source = searchParams.get('source')
     const accountId = searchParams.get('account_id')
@@ -257,11 +258,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { account_id, type, value, details, source } = body
+
+    // M7 fix: Validate POST body with strict field extraction
+    const account_id = typeof body.account_id === 'string' ? body.account_id : null
+    const type = typeof body.type === 'string' ? body.type.substring(0, 100) : null
+    const value = body.value ?? null
+    const details = (typeof body.details === 'object' && body.details !== null) ? body.details : {}
+    const source = typeof body.source === 'string' ? body.source.substring(0, 50) : 'manual'
 
     if (!account_id || !type) {
       return NextResponse.json(
         { error: 'account_id and type are required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate account_id is UUID-like
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(account_id)) {
+      return NextResponse.json(
+        { error: 'account_id must be a valid UUID' },
         { status: 400 }
       )
     }

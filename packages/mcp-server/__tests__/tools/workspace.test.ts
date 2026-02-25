@@ -42,7 +42,7 @@ describe('Workspace tools', () => {
       const handler = registeredTools.get('get_workspace')!.handler
       const result = await handler({})
 
-      expect(mockCallApi).toHaveBeenCalledWith('/api/user/workspace', 'Bearer test-token')
+      expect(mockCallApi).toHaveBeenCalledWith('/api/user/workspace', 'Bearer test-token', { toolName: 'get_workspace' })
       expect(result.isError).toBeUndefined()
     })
   })
@@ -54,7 +54,7 @@ describe('Workspace tools', () => {
       const handler = registeredTools.get('get_integration_status')!.handler
       await handler({})
 
-      expect(mockCallApi).toHaveBeenCalledWith('/api/integrations', 'Bearer test-token')
+      expect(mockCallApi).toHaveBeenCalledWith('/api/integrations', 'Bearer test-token', { toolName: 'get_integration_status' })
     })
   })
 
@@ -93,7 +93,8 @@ describe('Workspace tools', () => {
 
       expect(mockCallApi).toHaveBeenCalledWith(
         `/api/heuristics/scores/${accountId}`,
-        'Bearer test-token'
+        'Bearer test-token',
+        { toolName: 'get_account_scores' }
       )
     })
   })
