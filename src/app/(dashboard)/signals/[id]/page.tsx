@@ -1,175 +1,115 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { trackFirstSignalViewed } from '@/lib/analytics'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendChart, ConversionChart } from '@/components/charts'
-import { MOCK_SIGNALS } from '@/lib/data/mock-signals'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
-import { useRealSignal, useDeleteSignal } from '@/lib/hooks/use-signals'
+import { useRealSignal, useDeleteSignal, useSignalAnalytics } from '@/lib/hooks/use-signals'
+import { MOCK_SIGNALS } from '@/lib/data/mock-signals'
+import { getMockSignalAnalytics } from '@/lib/data/mock-signal-analytics'
+import { RevenueChart, DualLineChart, AreaChart, RetentionTable, CHART_COLORS } from '@/components/signals/charts'
 import { cn } from '@/lib/utils/cn'
+import type { SignalAnalyticsResponse, ConversionWindow, CohortRetention } from '@/lib/api/signals'
 
-/** Shape used for rendering — unifies mock and real data */
-interface SignalView {
-  id: string
-  name: string
-  description: string
-  status: 'active' | 'draft'
-  source: 'Beton-Discovered' | 'User-Defined'
-  // Event definition
-  event: string
-  condition: string
-  time_window_days: number
-  created_at: string
-  // Metrics (-1 = pending)
-  lift: number
-  confidence: number
-  leads_per_month: number
-  estimated_arr: number
-  conversion_with: number
-  conversion_without: number
-  sample_with: number
-  sample_without: number
-  // Charts
-  trend_data: number[]
-  accuracy_trend: number[]
-  // Deltas (mock only)
-  trend_delta: string
-  confidence_delta: string
-  leads_delta: string
-  arr_delta: string
-  // Match count
-  match_count_7d: number
-  match_count_30d: number
-  match_count_total: number
-}
+// ── Types ──────────────────────────────────────────────────
+
+type RetentionTab = 'users' | 'events' | 'revenue'
+type RetentionStat = 'total' | 'avg' | 'median'
+type ConvCurveMode = 'cumulative' | 'period'
+
+// ── Page ───────────────────────────────────────────────────
 
 export default function SignalDetailPage() {
   const params = useParams()
   const router = useRouter()
   const signalId = params.id as string
 
-  const [showBreakdown, setShowBreakdown] = useState(false)
-  const [showTrend, setShowTrend] = useState(true)
-
   const { data: setupStatus } = useSetupStatus()
   const isDemo = !setupStatus || !setupStatus.setupComplete
   const deleteMutation = useDeleteSignal()
 
-  // Fetch real signal data (only when setup is complete)
-  const { data: realData, isLoading, isError } = useRealSignal(
-    isDemo ? '' : signalId
+  // Filter state
+  const [convWindow, setConvWindow] = useState<ConversionWindow>(30)
+  const [range, setRange] = useState<'3m' | '6m' | '12m' | 'all'>('12m')
+
+  // Chart state
+  const [retTab, setRetTab] = useState<RetentionTab>('users')
+  const [retStat, setRetStat] = useState<RetentionStat>('total')
+  const [convCurveMode, setConvCurveMode] = useState<ConvCurveMode>('cumulative')
+
+  // Fetch signal definition (for header info)
+  const { data: realData, isLoading, isError } = useRealSignal(isDemo ? '' : signalId)
+
+  // Fetch analytics data
+  const { data: analyticsData } = useSignalAnalytics(
+    isDemo ? '' : signalId,
+    isDemo ? undefined : { conversion_window: convWindow, range }
   )
 
-  // Track first signal viewed
+  // Track first view
   useEffect(() => {
-    if (signalId) {
-      trackFirstSignalViewed(signalId)
-    }
+    if (signalId) trackFirstSignalViewed(signalId)
   }, [signalId])
 
-  // Build unified view from either mock or real data
-  const signal = useMemo<SignalView | null>(() => {
+  // Build analytics from either mock or real data
+  const analytics: SignalAnalyticsResponse | null = useMemo(() => {
     if (isDemo) {
-      // Demo mode: use mock data
+      return getMockSignalAnalytics(signalId, convWindow)
+    }
+    return analyticsData ?? null
+  }, [isDemo, signalId, convWindow, analyticsData])
+
+  // Signal name/metadata
+  const signalName = useMemo(() => {
+    if (isDemo) {
       const mock = MOCK_SIGNALS.find(s => s.id === signalId)
-      if (!mock) return null
-      return {
-        id: mock.id,
-        name: mock.name,
-        description: `Users who ${mock.name.toLowerCase()}`,
-        status: mock.status,
-        source: mock.source,
-        event: mock.name.toLowerCase().replace(/ /g, '_'),
-        condition: 'count >= 1',
-        time_window_days: 7,
-        created_at: '2024-12-15T00:00:00Z',
-        lift: mock.lift,
-        confidence: mock.confidence,
-        leads_per_month: mock.leads_per_month,
-        estimated_arr: mock.estimated_arr,
-        conversion_with: mock.conversion_with,
-        conversion_without: mock.conversion_without,
-        sample_with: mock.sample_with,
-        sample_without: mock.sample_without,
-        trend_data: mock.trend_data,
-        accuracy_trend: mock.accuracy_trend,
-        trend_delta: '+0.3x',
-        confidence_delta: '+2%',
-        leads_delta: '+5',
-        arr_delta: '+$42K',
-        match_count_7d: mock.leads_per_month * 2,
-        match_count_30d: mock.leads_per_month * 7,
-        match_count_total: mock.leads_per_month * 30,
-      }
+      return mock?.name || 'Unknown Signal'
     }
-
-    // Real mode: use API data
-    if (!realData?.signal) return null
-    const s = realData.signal
-    const details = s.details || {}
-    const m = realData.metrics
-    const matchCount = details.match_count as { total_count?: number; count_7d?: number; count_30d?: number } | undefined
-
-    return {
-      id: s.id,
-      name: (details.name as string) || s.type,
-      description: (details.description as string) || '',
-      status: 'active',
-      source: s.source === 'manual' ? 'User-Defined' : 'Beton-Discovered',
-      event: (details.event_name as string) || s.type.replace('custom:', ''),
-      condition: formatCondition(
-        (details.condition_operator as string) || 'gte',
-        (details.condition_value as number) || 1
-      ),
-      time_window_days: (details.time_window_days as number) || 7,
-      created_at: s.created_at,
-      // Metrics from signal_aggregates (or -1 for pending)
-      lift: m?.lift ?? -1,
-      confidence: m?.confidence ?? -1,
-      leads_per_month: m?.count_30d ? Math.round(m.count_30d / 4.3) : 0,
-      estimated_arr: 0, // Not calculated for manual signals
-      conversion_with: m?.conversion_rate ?? -1,
-      conversion_without: m ? (m.lift && m.conversion_rate ? m.conversion_rate / m.lift : -1) : -1,
-      sample_with: m?.sample_size ?? 0,
-      sample_without: 0,
-      trend_data: [0],
-      accuracy_trend: [0],
-      trend_delta: '--',
-      confidence_delta: '--',
-      leads_delta: '--',
-      arr_delta: '--',
-      match_count_7d: matchCount?.count_7d ?? m?.count_7d ?? 0,
-      match_count_30d: matchCount?.count_30d ?? m?.count_30d ?? 0,
-      match_count_total: matchCount?.total_count ?? m?.total_count ?? 0,
+    if (realData?.signal) {
+      const details = realData.signal.details || {}
+      return (details.name as string) || realData.signal.type
     }
+    return 'Loading...'
   }, [isDemo, signalId, realData])
 
-  const handleDelete = async () => {
-    if (!signal) return
-    if (!confirm(`Delete signal "${signal.name}"?`)) return
-    try {
-      await deleteMutation.mutateAsync(signal.id)
-      router.push('/signals')
-    } catch {
-      // mutation error handled by React Query
+  const signalSource = useMemo(() => {
+    if (isDemo) {
+      const mock = MOCK_SIGNALS.find(s => s.id === signalId)
+      return mock?.source || 'Beton-Discovered'
     }
+    return realData?.signal?.source === 'manual' ? 'User-Defined' : 'Beton-Discovered'
+  }, [isDemo, signalId, realData])
+
+  // Retention data lookup
+  const retentionData = useMemo((): { signal: number[]; nosignal: number[] } | null => {
+    if (!analytics?.retention) return null
+    const match = analytics.retention.find(r => {
+      if (r.tab !== retTab) return false
+      if (retTab === 'users') return true // Users tab ignores stat_mode
+      return r.stat_mode === retStat
+    })
+    if (!match) return null
+    return { signal: match.signal_values, nosignal: match.nosignal_values }
+  }, [analytics, retTab, retStat])
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete signal "${signalName}"?`)) return
+    try {
+      await deleteMutation.mutateAsync(signalId)
+      router.push('/signals')
+    } catch { /* React Query handles errors */ }
   }
 
-  // Loading state (real mode only)
+  // ── Loading/Error states ────────────────────────────────
+
   if (!isDemo && isLoading) {
     return (
       <div className="space-y-6">
-        <Link href="/signals" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Signals
-        </Link>
+        <BackLink />
         <Card>
           <CardContent className="py-12 text-center">
             <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
@@ -180,23 +120,12 @@ export default function SignalDetailPage() {
     )
   }
 
-  // Error or not found
-  if (!signal || (!isDemo && isError)) {
+  if (!isDemo && isError) {
     return (
       <div className="space-y-6">
-        <Link href="/signals" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Signals
-        </Link>
+        <BackLink />
         <Card>
           <CardContent className="py-12 text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
             <h3 className="text-lg font-medium mb-2">Signal not found</h3>
             <p className="text-muted-foreground mb-4">
               The signal you&apos;re looking for doesn&apos;t exist or has been removed.
@@ -210,52 +139,66 @@ export default function SignalDetailPage() {
     )
   }
 
-  const hasPendingMetrics = signal.lift < 0
-  const hasConversionData = signal.conversion_with >= 0 && signal.conversion_without >= 0
-  const hasHistoricalData = signal.accuracy_trend.length > 1
+  if (isDemo && !MOCK_SIGNALS.find(s => s.id === signalId)) {
+    return (
+      <div className="space-y-6">
+        <BackLink />
+        <Card>
+          <CardContent className="py-12 text-center">
+            <h3 className="text-lg font-medium mb-2">Signal not found</h3>
+            <Link href="/signals">
+              <Button variant="outline">Back to Signals</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // ── Derived data for charts ─────────────────────────────
+
+  const snapshots = analytics?.snapshots ?? []
+  const kpi = analytics?.kpi ?? {
+    users_with_signal: 0,
+    converted_users: 0,
+    additional_net_revenue: 0,
+    statistical_significance: null,
+    p_value: null,
+    conversion_rate: null,
+  }
+  const curve = analytics?.conversion_curve
+  const monthLabels = snapshots.map(s =>
+    new Date(s.month + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })
+  )
+
+  const windowLabel = convWindow === null ? 'No limit' : `${convWindow}d`
 
   return (
     <div className="space-y-6">
-      {/* Back link */}
-      <Link href="/signals" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Signals
-      </Link>
+      <BackLink />
 
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{signal.name}</h1>
+          <h1 className="text-2xl font-bold">{signalName}</h1>
           <div className="flex items-center gap-2 mt-1">
             <Badge
-              variant={signal.status === 'active' ? 'default' : 'secondary'}
-              className={cn(
-                signal.status === 'active'
-                  ? 'bg-success/10 text-success border-success/20'
-                  : 'bg-muted text-muted-foreground'
-              )}
+              variant="default"
+              className="bg-success/10 text-success border-success/20"
             >
-              {signal.status}
+              active
             </Badge>
             <span className="text-sm text-muted-foreground">·</span>
             <Badge
               variant="outline"
               className={cn(
-                signal.source === 'Beton-Discovered'
+                signalSource === 'Beton-Discovered'
                   ? 'border-primary/30 text-primary'
                   : 'border-muted-foreground/30 text-muted-foreground'
               )}
             >
-              {signal.source === 'Beton-Discovered' ? 'Auto' : 'Custom'}
+              {signalSource === 'Beton-Discovered' ? 'Auto' : 'Custom'}
             </Badge>
-            {hasPendingMetrics && (
-              <>
-                <span className="text-sm text-muted-foreground">·</span>
-                <Badge variant="secondary" className="text-xs">Metrics Pending</Badge>
-              </>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -272,312 +215,372 @@ export default function SignalDetailPage() {
         </div>
       </div>
 
-      {/* Match Count Cards (always available — calculated on creation) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          label="Total Matches"
-          value={formatNumber(signal.match_count_total)}
-          help="Total event occurrences in the last 90 days"
+      {/* ── Filters ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <FilterSelect
+          label="Conv. window"
+          value={convWindow === null ? 'none' : String(convWindow)}
+          options={[
+            { value: '7', label: '7 days' },
+            { value: '14', label: '14 days' },
+            { value: '30', label: '30 days' },
+            { value: '60', label: '60 days' },
+            { value: '90', label: '90 days' },
+            { value: 'none', label: 'No limit' },
+          ]}
+          onChange={v => setConvWindow(v === 'none' ? null : parseInt(v, 10) as ConversionWindow)}
         />
-        <MetricCard
-          label="Last 30 days"
-          value={formatNumber(signal.match_count_30d)}
-          help="Event occurrences in the last 30 days"
+        <FilterSelect
+          label="Range"
+          value={range}
+          options={[
+            { value: '3m', label: 'Last 3 months' },
+            { value: '6m', label: 'Last 6 months' },
+            { value: '12m', label: 'Last 12 months' },
+            { value: 'all', label: 'All time' },
+          ]}
+          onChange={v => setRange(v as typeof range)}
         />
-        <MetricCard
-          label="Last 7 days"
-          value={formatNumber(signal.match_count_7d)}
-          help="Event occurrences in the last 7 days"
-        />
-        {hasPendingMetrics ? (
-          <MetricCard
-            label="Lift"
-            value="Pending"
-            pending
-            help="How many times more likely to convert vs baseline"
-          />
-        ) : (
-          <MetricCard
-            label="Lift"
-            value={`${signal.lift.toFixed(1)}x`}
-            delta={signal.trend_delta !== '--' ? signal.trend_delta : undefined}
-            deltaPositive={signal.trend_delta.startsWith('+')}
-            help="How many times more likely to convert vs baseline"
-          />
-        )}
       </div>
 
-      {/* Additional metrics row (only when calculated) */}
-      {!hasPendingMetrics && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <MetricCard
-            label="Confidence"
-            value={`${(signal.confidence * 100).toFixed(0)}%`}
-            delta={signal.confidence_delta !== '--' ? signal.confidence_delta : undefined}
-            deltaPositive={signal.confidence_delta?.startsWith('+')}
-            help="Statistical certainty (>95% = reliable)"
-          />
-          <MetricCard
-            label="Leads/mo"
-            value={signal.leads_per_month.toString()}
-            delta={signal.leads_delta !== '--' ? signal.leads_delta : undefined}
-            deltaPositive={signal.leads_delta?.startsWith('+')}
-            help="Users matching this signal pattern per month"
-          />
-          {signal.estimated_arr > 0 && (
-            <MetricCard
-              label="ARR Impact"
-              value={formatCurrency(signal.estimated_arr)}
-              delta={signal.arr_delta !== '--' ? signal.arr_delta : undefined}
-              deltaPositive={signal.arr_delta?.startsWith('+')}
-              help="Projected annual revenue from this signal"
+      {/* ── KPI Cards ───────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Users with Signal"
+          value={kpi.users_with_signal.toLocaleString()}
+          sub={`within ${windowLabel} window`}
+        />
+        <KPICard
+          label="Converted Users"
+          value={kpi.converted_users.toLocaleString()}
+          sub={kpi.conversion_rate !== null
+            ? `${kpi.conversion_rate}% conversion rate`
+            : '--'}
+        />
+        <KPICard
+          label="Additional Net Revenue"
+          value={`$${kpi.additional_net_revenue}K`}
+          sub={`attributed within ${windowLabel}`}
+          highlight
+        />
+        <SignificanceCard
+          significance={kpi.statistical_significance}
+          pValue={kpi.p_value}
+        />
+      </div>
+
+      {/* ── Charts Grid ─────────────────────────────────── */}
+      {snapshots.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Revenue Breakdown */}
+          <ChartCard title="Revenue Breakdown" subtitle="Signal vs other customer revenue">
+            <RevenueChart snapshots={snapshots} height={280} />
+            <ChartLegend
+              items={[
+                { color: CHART_COLORS.signal, label: 'Signal customers' },
+                { color: CHART_COLORS.revenueBase, label: 'Other customers' },
+              ]}
             />
-          )}
+          </ChartCard>
+
+          {/* Signal Occurrences */}
+          <ChartCard title="Signal Occurrences" subtitle="Detection count over time">
+            <AreaChart
+              labels={monthLabels}
+              data={snapshots.map(s => s.occurrences)}
+              height={280}
+            />
+          </ChartCard>
+
+          {/* Conversion Rate */}
+          <ChartCard title="Conversion Rate" subtitle="Signal vs non-signal users">
+            <DualLineChart
+              labels={monthLabels}
+              seriesA={snapshots.map(s => s.conversion_rate_signal ?? 0)}
+              seriesB={snapshots.map(s => s.conversion_rate_nosignal ?? 0)}
+              formatValue={v => `${v.toFixed(1)}%`}
+              height={240}
+            />
+            <ChartLegend
+              items={[
+                { color: CHART_COLORS.signal, label: 'With signal' },
+                { color: CHART_COLORS.noSignal, label: 'Without signal' },
+              ]}
+            />
+          </ChartCard>
+
+          {/* Average Contract Value */}
+          <ChartCard title="Avg Contract Value" subtitle="ACV comparison">
+            <DualLineChart
+              labels={monthLabels}
+              seriesA={snapshots.map(s => s.acv_signal ?? 0)}
+              seriesB={snapshots.map(s => s.acv_nosignal ?? 0)}
+              formatValue={v => `$${v.toFixed(1)}K`}
+              height={240}
+            />
+            <ChartLegend
+              items={[
+                { color: CHART_COLORS.signal, label: 'With signal' },
+                { color: CHART_COLORS.noSignal, label: 'Without signal' },
+              ]}
+            />
+          </ChartCard>
         </div>
       )}
 
-      {/* Conversion Comparison (only when conversion data exists) */}
-      {hasConversionData && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Conversion Comparison</CardTitle>
-            <CardDescription>
-              Conversion rate comparison between users with and without this signal
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ConversionChart
-              conversionWith={signal.conversion_with}
-              conversionWithout={signal.conversion_without}
-              sampleWith={signal.sample_with}
-              sampleWithout={signal.sample_without}
-              height={140}
-            />
-
-            <button
-              onClick={() => setShowBreakdown(!showBreakdown)}
-              className="mt-4 text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              <svg className={cn("w-4 h-4 transition-transform", showBreakdown && "rotate-90")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              {showBreakdown ? 'Hide' : 'Show'} detailed breakdown
-            </button>
-
-            {showBreakdown && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <p className="font-medium mb-2">With Signal</p>
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      <p>Users: {formatNumber(signal.sample_with)}</p>
-                      <p>Converted: {formatNumber(Math.round(signal.sample_with * signal.conversion_with))}</p>
-                      <p>Rate: {(signal.conversion_with * 100).toFixed(2)}%</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-medium mb-2">Without Signal</p>
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      <p>Users: {formatNumber(signal.sample_without)}</p>
-                      <p>Converted: {formatNumber(Math.round(signal.sample_without * signal.conversion_without))}</p>
-                      <p>Rate: {(signal.conversion_without * 100).toFixed(2)}%</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Historical Accuracy (only when trend data exists) */}
-      {hasHistoricalData && (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Historical Accuracy</CardTitle>
-                <CardDescription>Signal performance over the last 6 months</CardDescription>
-              </div>
+      {/* ── Time-to-Conversion ──────────────────────────── */}
+      {curve && (
+        <ChartCard
+          title="Time-to-Conversion"
+          subtitle="How quickly users convert after exhibiting the signal"
+          actions={
+            <div className="flex items-center gap-1 text-xs">
               <button
-                onClick={() => setShowTrend(!showTrend)}
-                className="text-sm text-muted-foreground hover:text-foreground"
+                className={cn(
+                  'px-2 py-1 rounded',
+                  convCurveMode === 'cumulative'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={() => setConvCurveMode('cumulative')}
               >
-                {showTrend ? 'Hide' : 'Show'}
+                Cumulative
+              </button>
+              <button
+                className={cn(
+                  'px-2 py-1 rounded',
+                  convCurveMode === 'period'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={() => setConvCurveMode('period')}
+              >
+                Per Period
               </button>
             </div>
-          </CardHeader>
-          {showTrend && (
-            <CardContent>
-              <TrendChart
-                data={signal.accuracy_trend}
-                height={220}
-                showAverage={true}
-              />
-              <div className="mt-4 flex items-center justify-between text-sm border-t border-border pt-3">
-                <div>
-                  <span className="text-muted-foreground">Current:</span>
-                  <span className="ml-1 font-bold text-foreground">{(signal.accuracy_trend[signal.accuracy_trend.length - 1] * 100).toFixed(0)}%</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">6-month avg:</span>
-                  <span className="ml-1 font-bold text-foreground">{(signal.accuracy_trend.reduce((a, b) => a + b, 0) / signal.accuracy_trend.length * 100).toFixed(0)}%</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Trend:</span>
-                  <span className={cn(
-                    "ml-1 font-bold",
-                    signal.accuracy_trend[signal.accuracy_trend.length - 1] >= signal.accuracy_trend[0]
-                      ? "text-success"
-                      : "text-destructive"
-                  )}>
-                    {signal.accuracy_trend[signal.accuracy_trend.length - 1] >= signal.accuracy_trend[0] ? 'Improving' : 'Declining'}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
+          }
+        >
+          <DualLineChart
+            labels={Array.from({ length: 13 }, (_, i) => `P${i}`)}
+            seriesA={convCurveMode === 'cumulative' ? curve.signal_cumulative : curve.signal_period}
+            seriesB={convCurveMode === 'cumulative' ? curve.nosignal_cumulative : curve.nosignal_period}
+            formatValue={v => `${v.toFixed(1)}%`}
+            height={260}
+          />
+          <ChartLegend
+            items={[
+              { color: CHART_COLORS.signal, label: 'With signal' },
+              { color: CHART_COLORS.noSignal, label: 'Without signal' },
+            ]}
+          />
+        </ChartCard>
       )}
 
-      {/* Signal Definition */}
-      <CollapsibleSection title="Signal Definition" defaultOpen={!isDemo}>
-        <div className="grid grid-cols-2 gap-4 mb-3">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Event: <code className="bg-muted px-1 rounded-sm">{signal.event}</code>
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Condition: <code className="bg-muted px-1 rounded-sm">{signal.condition}</code>
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Source: {signal.source}</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Time window: {signal.time_window_days} days
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Created: {new Date(signal.created_at).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        {signal.description && (
-          <p className="text-sm text-muted-foreground">{signal.description}</p>
-        )}
-      </CollapsibleSection>
+      {/* ── Cohort Retention ────────────────────────────── */}
+      {retentionData && (
+        <ChartCard
+          title="Cohort Retention"
+          subtitle="How signal vs non-signal cohorts retain over time"
+          actions={
+            <div className="flex items-center gap-3">
+              {/* Tab selector */}
+              <div className="flex items-center gap-1 text-xs">
+                {(['users', 'events', 'revenue'] as RetentionTab[]).map(tab => (
+                  <button
+                    key={tab}
+                    className={cn(
+                      'px-2 py-1 rounded capitalize',
+                      retTab === tab
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                    onClick={() => setRetTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              {/* Stat mode (hidden for users tab) */}
+              {retTab !== 'users' && (
+                <div className="flex items-center gap-1 text-xs border-l border-border pl-3">
+                  {(['total', 'avg', 'median'] as RetentionStat[]).map(stat => (
+                    <button
+                      key={stat}
+                      className={cn(
+                        'px-2 py-1 rounded capitalize',
+                        retStat === stat
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                      onClick={() => setRetStat(stat)}
+                    >
+                      {stat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          }
+        >
+          {/* Heatmap table */}
+          <RetentionTable
+            signalValues={retentionData.signal}
+            nosignalValues={retentionData.nosignal}
+          />
 
-      {/* Understanding Metrics */}
-      <CollapsibleSection title="Understanding These Metrics">
-        <div className="space-y-3 text-sm text-muted-foreground">
-          <p><strong className="text-foreground">Match Count:</strong> How many times this event occurred in the given time window. Calculated instantly when the signal is created.</p>
-          <p><strong className="text-foreground">Lift:</strong> How many times more likely users are to convert compared to baseline. A 4x lift means users with this signal convert 4 times more often.</p>
-          <p><strong className="text-foreground">Confidence:</strong> Statistical certainty of the result. &gt;95% means we&apos;re highly confident this signal is real, not random noise.</p>
-          <p><strong className="text-foreground">Leads/mo:</strong> Number of users matching this signal pattern per month. Higher volume = more actionable signal.</p>
-        </div>
-      </CollapsibleSection>
+          {/* Retention line chart */}
+          <div className="mt-4">
+            <DualLineChart
+              labels={Array.from({ length: retentionData.signal.length }, (_, i) => `M${i}`)}
+              seriesA={retentionData.signal}
+              seriesB={retentionData.nosignal}
+              labelA="With signal"
+              labelB="Without signal"
+              formatValue={v => `${v.toFixed(0)}%`}
+              height={220}
+            />
+          </div>
+          <ChartLegend
+            items={[
+              { color: CHART_COLORS.signal, label: 'With signal' },
+              { color: CHART_COLORS.noSignal, label: 'Without signal' },
+            ]}
+          />
+        </ChartCard>
+      )}
     </div>
   )
 }
 
-// ────────────────────────────────────────────────
-// Helper components
-// ────────────────────────────────────────────────
+// ── Helper Components ──────────────────────────────────────
 
-function MetricCard({ label, value, delta, deltaPositive, help, pending }: {
+function BackLink() {
+  return (
+    <Link
+      href="/signals"
+      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      Back to Signals
+    </Link>
+  )
+}
+
+function KPICard({ label, value, sub, highlight }: {
   label: string
   value: string
-  delta?: string
-  deltaPositive?: boolean
-  help?: string
-  pending?: boolean
+  sub: string
+  highlight?: boolean
 }) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          {help && (
-            <span title={help}>
-              <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </span>
-          )}
-        </div>
-        {pending ? (
-          <div className="mt-1">
-            <Badge variant="secondary" className="text-xs">Pending</Badge>
-          </div>
-        ) : (
-          <>
-            <p className="text-2xl font-bold mt-1">{value}</p>
-            {delta && (
-              <p className={cn(
-                "text-sm mt-1",
-                deltaPositive ? "text-success" : "text-destructive"
-              )}>
-                {delta}
-              </p>
-            )}
-          </>
-        )}
+      <CardContent className="pt-5 pb-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className={cn('text-2xl font-bold mt-1', highlight && 'text-[#009E73]')}>
+          {value}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">{sub}</p>
       </CardContent>
     </Card>
   )
 }
 
-function CollapsibleSection({ title, children, defaultOpen = false }: {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
+function SignificanceCard({ significance, pValue }: {
+  significance: number | null
+  pValue: number | null
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const sig = significance ?? 0
+  const pval = pValue ?? 1
 
   return (
     <Card>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
-      >
-        <span className="font-medium">{title}</span>
-        <svg
-          className={cn("w-5 h-5 text-muted-foreground transition-transform", isOpen && "rotate-180")}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {isOpen && (
-        <CardContent className="pt-0 pb-4">
-          {children}
-        </CardContent>
-      )}
+      <CardContent className="pt-5 pb-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide">Statistical Significance</p>
+        <p className="text-2xl font-bold mt-1">{sig.toFixed(1)}%</p>
+        <p className="text-xs text-muted-foreground mt-1">p-value = {pval.toFixed(3)}</p>
+        {/* Significance meter */}
+        <div className="mt-2 relative h-1.5 bg-border rounded-full overflow-visible">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{
+              width: `${Math.min(sig, 100)}%`,
+              backgroundColor: sig >= 95 ? '#009E73' : sig >= 90 ? '#E69F00' : '#888',
+            }}
+          />
+          {/* 95% threshold marker */}
+          <div
+            className="absolute top-[-3px] w-0.5 h-[12px] bg-muted-foreground"
+            style={{ left: '95%' }}
+          />
+          <span
+            className="absolute text-[9px] text-muted-foreground"
+            style={{ left: '95%', top: '14px', transform: 'translateX(-50%)' }}
+          >
+            95%
+          </span>
+        </div>
+      </CardContent>
     </Card>
   )
 }
 
-// ────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────
-
-function formatCondition(operator: string, value: number): string {
-  const opMap: Record<string, string> = {
-    gte: '>=', gt: '>', eq: '=', lt: '<', lte: '<='
-  }
-  return `count ${opMap[operator] || '>='} ${value}`
+function ChartCard({ title, subtitle, children, actions }: {
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+  actions?: React.ReactNode
+}) {
+  return (
+    <Card>
+      <div className="px-6 pt-5 pb-3 flex items-start justify-between">
+        <div>
+          <h3 className="font-medium">{title}</h3>
+          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        </div>
+        {actions}
+      </div>
+      <CardContent className="pt-0 pb-4">
+        {children}
+      </CardContent>
+    </Card>
+  )
 }
 
-function formatNumber(n: number): string {
-  return new Intl.NumberFormat().format(n)
+function ChartLegend({ items }: {
+  items: Array<{ color: string; label: string }>
+}) {
+  return (
+    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
+      {items.map(item => (
+        <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+          {item.label}
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(n)
+function FilterSelect({ label, value, options, onChange }: {
+  label: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground"
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
 }
