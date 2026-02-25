@@ -2,10 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
 import { CopyButton } from '@/components/ui/copy-button'
-import { useSession } from '@/components/auth/session-provider'
-import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 import { cn } from '@/lib/utils/cn'
 
 // ---------------------------------------------------------------------------
@@ -129,20 +126,6 @@ const AGENT_CONFIGS: AgentConfig[] = [
 // ---------------------------------------------------------------------------
 
 export default function SetupTab() {
-  const { session, loading: sessionLoading } = useSession()
-
-  if (sessionLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner className="size-5" />
-      </div>
-    )
-  }
-
-  if (!session) {
-    return <GuestSignInPrompt message="Sign in to configure MCP" />
-  }
-
   return (
     <div className="space-y-6">
       <AgentSnippetsCard />
