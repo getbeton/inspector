@@ -29,9 +29,9 @@ export default function MemoryAssumptionsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Website Assumptions</h1>
+        <h1 className="text-2xl font-bold">Business Model DB</h1>
         <p className="text-muted-foreground">
-          What Beton understands about your business from your website
+          What Beton understands about your business model
         </p>
       </div>
 
