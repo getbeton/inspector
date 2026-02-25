@@ -1,7 +1,14 @@
 import { Suspense } from 'react'
+import type { Metadata } from 'next'
 import { getSession } from '@/lib/auth/session'
 import { DashboardLayout } from '@/components/layout'
 import { AuthTracker } from '@/components/analytics'
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: 'https://inspector.getbeton.ai',
+  },
+}
 
 export default async function DashboardRootLayout({
   children,
