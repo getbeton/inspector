@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   Sheet,
   SheetPopup,
@@ -109,10 +110,30 @@ export default function SessionDetailSheet({
                 Results
               </h4>
               <DetailRow label="EDA Results">
-                <span className="text-sm">{session.eda_count}</span>
+                {session.eda_count > 0 ? (
+                  <Link
+                    href={`/memory?sheet=${session.session_id}&tab=overview`}
+                    className="text-sm text-primary hover:underline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    {session.eda_count} — View
+                  </Link>
+                ) : (
+                  <span className="text-sm">0</span>
+                )}
               </DetailRow>
               <DetailRow label="Website Exploration">
-                <span className="text-sm">{session.has_website_result ? 'Yes' : 'No'}</span>
+                {session.has_website_result ? (
+                  <Link
+                    href="/memory/assumptions"
+                    className="text-sm text-primary hover:underline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    View
+                  </Link>
+                ) : (
+                  <span className="text-sm">No</span>
+                )}
               </DetailRow>
             </div>
 

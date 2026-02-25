@@ -160,9 +160,9 @@ function MemoryPageContent() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Exploration Logs</h1>
+        <h1 className="text-2xl font-bold">Website Check Logs</h1>
         <p className="text-muted-foreground">
-          History of agent exploration sessions
+          History of website check sessions
         </p>
       </div>
 
