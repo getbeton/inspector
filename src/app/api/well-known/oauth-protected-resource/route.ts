@@ -7,16 +7,27 @@ import type { NextRequest } from 'next/server'
  * MCP clients fetch this after receiving a 401 from the MCP endpoint
  * to discover which authorization server to use.
  *
- * Uses the request origin (not env vars) so URLs always match the domain
- * the MCP client actually connected to.
+ * Security fixes:
+ * - M2: Use NEXT_PUBLIC_APP_URL to avoid Host header injection
+ * - M3: Remove scopes_supported (not enforced)
+ * - L4: Add Cache-Control header
  */
 export async function GET(request: NextRequest) {
-  const baseUrl = new URL(request.url).origin
+  // M2 fix: Prefer configured APP_URL over request origin
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin
 
-  return Response.json({
-    resource: `${baseUrl}/mcp`,
-    authorization_servers: [baseUrl],
-    bearer_methods_supported: ['header'],
-    scopes_supported: ['mcp:tools'],
-  })
+  return Response.json(
+    {
+      resource: `${baseUrl}/mcp`,
+      authorization_servers: [baseUrl],
+      bearer_methods_supported: ['header'],
+      // M3 fix: Removed scopes_supported (not enforced server-side)
+    },
+    {
+      // L4 fix: Cache-Control for metadata endpoint
+      headers: {
+        'Cache-Control': 'public, max-age=3600',
+      },
+    }
+  )
 }

@@ -4,10 +4,15 @@ import { NextResponse } from 'next/server'
 import type { ApiKey, ApiKeyInsert } from '@/lib/supabase/types'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { z } from 'zod'
 import { encrypt, isEncryptionKeyConfigured } from '@/lib/crypto/encryption'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 
 const API_KEY_PREFIX = 'beton_'
 const API_KEY_EXPIRY_DAYS = 90
+
+// L5 fix: Validate key name
+const keyNameSchema = z.string().max(100).regex(/^[\w\s\-]+$/, 'Key name can only contain alphanumeric characters, spaces, underscores, and hyphens')
 
 /**
  * GET /api/auth/keys
@@ -90,8 +95,18 @@ export async function GET() {
 /**
  * POST /api/auth/keys
  * Generate a new API key
+ *
+ * Security fixes:
+ * - H5: Store key_prefix for O(1) lookup
+ * - M11: Role enforcement (admin/owner only)
+ * - M14: Rate limiting
+ * - L5: Name validation
  */
 export async function POST(request: Request) {
+  // M14 fix: Rate limit API key creation
+  const rateLimitResponse = applyRateLimit(request, 'api-keys', RATE_LIMITS.STRICT)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const supabase = await createClient()
 
@@ -110,13 +125,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
+    // M11 fix: Role enforcement on API key creation
+    if (!['admin', 'owner'].includes(membership.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    }
+
     // Parse request body
     const body = await request.json().catch(() => ({}))
-    const name = body.name || 'Default Key'
+
+    // L5 fix: Validate key name
+    const rawName = body.name || 'Default Key'
+    const nameResult = keyNameSchema.safeParse(rawName)
+    const name = nameResult.success ? nameResult.data : 'Default Key'
 
     // Generate API key: beton_<32 hex chars>
     const randomBytes = crypto.randomBytes(16).toString('hex')
     const apiKey = `${API_KEY_PREFIX}${randomBytes}`
+
+    // H5 fix: Extract prefix for O(1) lookup
+    const keyPrefix = apiKey.substring(0, 12)
 
     // Hash the key for storage (used for auth validation)
     const keyHash = await bcrypt.hash(apiKey, 10)
@@ -140,6 +167,7 @@ export async function POST(request: Request) {
       name,
       expires_at: expiresAt.toISOString(),
       ...(encryptedKey != null && { encrypted_key: encryptedKey }),
+      ...(keyPrefix && { key_prefix: keyPrefix }),
     }
 
     // Store in database

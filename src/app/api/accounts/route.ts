@@ -3,10 +3,24 @@
  *
  * List accounts for the current workspace with pagination, filtering, and sorting.
  * Supports both cookie-based browser auth and Bearer JWT auth (MCP proxy).
+ *
+ * Security fixes:
+ * - H6: sort_by column injection prevented by allowlist
+ * - L3: NaN guard on numeric query params
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
+
+// H6 fix: Allowlist of valid sort columns prevents column name injection
+const ALLOWED_SORT_COLUMNS = new Set([
+  'health_score',
+  'name',
+  'domain',
+  'arr',
+  'created_at',
+  'last_activity_at',
+])
 
 async function handleListAccounts(
   request: NextRequest,
@@ -15,11 +29,15 @@ async function handleListAccounts(
   const { supabase, workspaceId } = context
   const searchParams = request.nextUrl.searchParams
 
-  const page = parseInt(searchParams.get('page') || '1')
-  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
+  // L3 fix: NaN guard on numeric params
+  const page = parseInt(searchParams.get('page') || '1') || 1
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50') || 50, 100)
   const status = searchParams.get('status')
-  const sortBy = searchParams.get('sort_by') || 'health_score'
   const sortOrder = searchParams.get('sort_order') || 'desc'
+
+  // H6 fix: Validate sort_by against allowlist
+  const rawSortBy = searchParams.get('sort_by') || 'health_score'
+  const sortBy = ALLOWED_SORT_COLUMNS.has(rawSortBy) ? rawSortBy : 'health_score'
 
   let query = supabase
     .from('accounts')

@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     const limited = rateLimitResponse(workspaceId, { maxRequests: 20 });
     if (limited) return limited;
 
-    // Step 5: Audit log
-    log.warn(`[AUDIT] SQL proxy query workspace=${workspaceId} session=${session_id} query=${query.substring(0, 80)}...`);
+    // Step 5: Audit log — L9 fix: Increased truncation limit from 80 to 500 chars
+    log.warn(`[AUDIT] SQL proxy query workspace=${workspaceId} session=${session_id} query=${query.substring(0, 500)}`);
 
     // Steps 6-9: QueryService execution (wrapped with error handler for consistent formatting)
     // ConfigurationError, InvalidQueryError, RateLimitError, TimeoutError, PostHogAPIError

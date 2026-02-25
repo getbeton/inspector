@@ -85,7 +85,8 @@ describe('Signal tools', () => {
 
       expect(mockCallApi).toHaveBeenCalledWith(
         `/api/signals/${signalId}`,
-        'Bearer test-token'
+        'Bearer test-token',
+        { toolName: 'get_signal' }
       )
     })
   })
@@ -128,7 +129,8 @@ describe('Signal tools', () => {
 
       expect(mockCallApi).toHaveBeenCalledWith(
         `/api/signals/${signalId}/metrics`,
-        'Bearer test-token'
+        'Bearer test-token',
+        { toolName: 'get_signal_metrics' }
       )
     })
   })
