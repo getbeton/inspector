@@ -73,6 +73,7 @@ export function JoinCandidatesSection({
     return joins
   }, [edaResults])
 
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing external prop to local editing state */
   useEffect(() => {
     if (session?.confirmed_joins && session.confirmed_joins.length > 0) {
       setDraftPairs(session.confirmed_joins)
@@ -80,6 +81,7 @@ export function JoinCandidatesSection({
       setDraftPairs(suggestedJoins)
     }
   }, [session?.confirmed_joins, suggestedJoins])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handlePairChange = (index: number, updated: JoinPair) => {
     setDraftPairs(prev => prev.map((p, i) => (i === index ? updated : p)))

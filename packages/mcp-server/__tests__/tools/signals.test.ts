@@ -11,7 +11,7 @@ const mockCallApi = vi.mocked(callApi)
 // We test the tool registration by importing and calling the register function
 // with a mock McpServer
 describe('Signal tools', () => {
-  let registeredTools: Map<string, { handler: Function; schema: unknown }>
+  let registeredTools: Map<string, { handler: (...args: unknown[]) => unknown; schema: unknown }>
   let mockServer: { tool: ReturnType<typeof vi.fn> }
   const mockGetAuth = () => 'Bearer test-token'
 
@@ -20,7 +20,7 @@ describe('Signal tools', () => {
     registeredTools = new Map()
     mockServer = {
       tool: vi.fn(
-        (name: string, _desc: string, schema: unknown, handler: Function) => {
+        (name: string, _desc: string, schema: unknown, handler: (...args: unknown[]) => unknown) => {
           registeredTools.set(name, { handler, schema })
         }
       ),

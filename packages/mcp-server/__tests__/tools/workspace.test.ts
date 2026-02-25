@@ -8,7 +8,7 @@ import { callApi } from '../../src/lib/proxy'
 const mockCallApi = vi.mocked(callApi)
 
 describe('Workspace tools', () => {
-  let registeredTools: Map<string, { handler: Function }>
+  let registeredTools: Map<string, { handler: (...args: unknown[]) => unknown }>
   let mockServer: { tool: ReturnType<typeof vi.fn> }
   const mockGetAuth = () => 'Bearer test-token'
 
@@ -17,7 +17,7 @@ describe('Workspace tools', () => {
     registeredTools = new Map()
     mockServer = {
       tool: vi.fn(
-        (name: string, _desc: string, _schema: unknown, handler: Function) => {
+        (name: string, _desc: string, _schema: unknown, handler: (...args: unknown[]) => unknown) => {
           registeredTools.set(name, { handler })
         }
       ),
