@@ -10,7 +10,6 @@
 
 CREATE OR REPLACE FUNCTION redeem_mcp_auth_code(p_code TEXT)
 RETURNS TABLE (
-  id UUID,
   code TEXT,
   client_id TEXT,
   user_id UUID,
@@ -28,7 +27,6 @@ RETURNS TABLE (
   WHERE mcp_auth_codes.code = p_code
     AND mcp_auth_codes.used_at IS NULL
   RETURNING
-    mcp_auth_codes.id,
     mcp_auth_codes.code,
     mcp_auth_codes.client_id,
     mcp_auth_codes.user_id,
