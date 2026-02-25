@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 
 const STORAGE_KEY = 'beton_demo_mode'
 
@@ -9,16 +9,13 @@ const STORAGE_KEY = 'beton_demo_mode'
  * Demo mode lets new users explore the app with mock data before connecting real integrations.
  */
 export function useDemoMode() {
-  const [isDemoMode, setIsDemoMode] = useState(false)
-
-  // Read from localStorage on mount (client-only)
-  useEffect(() => {
+  const [isDemoMode, setIsDemoMode] = useState(() => {
     try {
-      setIsDemoMode(localStorage.getItem(STORAGE_KEY) === '1')
+      return typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY) === '1'
     } catch {
-      // ignore localStorage errors
+      return false
     }
-  }, [])
+  })
 
   const enterDemoMode = useCallback(() => {
     try {

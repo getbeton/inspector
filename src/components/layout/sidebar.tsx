@@ -163,6 +163,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
   // After mount, merge in any localStorage-persisted state (client-only).
   // This runs once and won't cause a visible flicker because sections that
   // the user previously expanded will open on the next paint.
+  /* eslint-disable react-hooks/set-state-in-effect -- hydrating client-only localStorage state after mount */
   useEffect(() => {
     const saved = loadExpandedSections()
     if (Object.keys(saved).length === 0) return
@@ -178,6 +179,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
       return changed ? next : prev
     })
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Persist expanded state to localStorage whenever it changes
   useEffect(() => {
@@ -185,6 +187,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
   }, [expanded])
 
   // Auto-expand sections when navigating to a sub-item via URL
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing navigation state to expand relevant sidebar sections */
   useEffect(() => {
     setExpanded((prev) => {
       const autoExpanded = getAutoExpandedSections(pathname)
@@ -199,6 +202,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
       return changed ? next : prev
     })
   }, [pathname])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggleSection = useCallback((label: string) => {
     setExpanded((prev) => ({ ...prev, [label]: !prev[label] }))

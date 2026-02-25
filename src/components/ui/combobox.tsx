@@ -111,6 +111,7 @@ export function Combobox({
   }, [grouped])
 
   // Reset state on open
+  /* eslint-disable react-hooks/set-state-in-effect -- resetting transient UI state when popover opens */
   useEffect(() => {
     if (open) {
       setSearch("")
@@ -120,6 +121,7 @@ export function Combobox({
       })
     }
   }, [open])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Scroll highlighted item into view
   useEffect(() => {

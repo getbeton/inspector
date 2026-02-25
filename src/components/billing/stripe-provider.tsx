@@ -7,7 +7,6 @@
  * Only loads Stripe when the publishable key is available.
  */
 
-import { useState, useEffect } from 'react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 
@@ -43,19 +42,11 @@ function getStripe(publishableKey: string): Promise<Stripe | null> {
  * Uses the publishable key from environment or props.
  */
 export function StripeProvider({ children, publishableKey }: StripeProviderProps) {
-  const [stripeReady, setStripeReady] = useState(false);
-
   // Get publishable key from props or environment
   const key = publishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
-  useEffect(() => {
-    if (key) {
-      setStripeReady(true);
-    }
-  }, [key]);
-
   // If no key, render children without Stripe context
-  if (!key || !stripeReady) {
+  if (!key) {
     return <>{children}</>;
   }
 

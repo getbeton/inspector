@@ -80,11 +80,13 @@ export function WebsiteSection({
   const [draft, setDraft] = useState<EditableFields>(() => toEditableFields(null))
   const [newAssumption, setNewAssumption] = useState('')
 
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing external prop to local editing state */
   useEffect(() => {
     if (websiteData) {
       setDraft(toEditableFields(websiteData))
     }
   }, [websiteData])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSave = async () => {
     let pricingModel: Record<string, any> | null = null

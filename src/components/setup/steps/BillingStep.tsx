@@ -161,8 +161,8 @@ function CardForm({ onSuccess, onError, onProcessing, buttonText }: CardFormProp
  * - Shows success state with card last4
  */
 export function BillingStep({ mtuCount, onComplete, className }: BillingStepProps) {
-  // State
-  const [state, setState] = useState<StepState>("loading");
+  // State — starts as null; the actual step state is derived below
+  const [explicitState, setExplicitState] = useState<StepState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [cardLast4, setCardLast4] = useState<string | null>(null);
@@ -182,12 +182,8 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
     ? `$${(usersOverLimit * 0.1).toFixed(2)}`
     : "$0.00";
 
-  // Initialize state when billing status loads
-  useEffect(() => {
-    if (!statusLoading) {
-      setState("info");
-    }
-  }, [statusLoading]);
+  // Derive state: show "loading" until billing status is ready, then use explicit state
+  const state: StepState = explicitState ?? (statusLoading ? "loading" : "info");
 
   /**
    * Start card collection flow
@@ -198,12 +194,12 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
     try {
       const result = await createSetupIntent.mutateAsync();
       setClientSecret(result.clientSecret);
-      setState("card_input");
+      setExplicitState("card_input");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to initialize payment";
       setError(message);
-      setState("error");
+      setExplicitState("error");
     }
   }, [createSetupIntent]);
 
@@ -213,7 +209,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
   const handleCardSuccess = useCallback(
     (last4: string) => {
       setCardLast4(last4);
-      setState("success");
+      setExplicitState("success");
     },
     []
   );
@@ -236,7 +232,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
    */
   const handleCardError = useCallback((message: string) => {
     setError(message);
-    setState("error");
+    setExplicitState("error");
   }, []);
 
   /**
@@ -244,7 +240,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
    */
   const handleProcessing = useCallback((processing: boolean) => {
     if (processing) {
-      setState("processing");
+      setExplicitState("processing");
     }
   }, []);
 
@@ -367,7 +363,7 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
 
       {/* Error State - Show retry button */}
       {state === "error" && (
-        <Button onClick={() => setState("info")} variant="outline" className="w-full">
+        <Button onClick={() => setExplicitState("info")} variant="outline" className="w-full">
           Try Again
         </Button>
       )}

@@ -57,9 +57,7 @@ export default function AddSignalPage() {
   const { data: setupStatus } = useSetupStatus()
   const attioConnected = setupStatus?.integrations?.attio ?? false
 
-  if (!sessionLoading && !session) return <GuestSignInPrompt message="Sign in to create custom signals" />
-
-  // Form state
+  // Form state — all hooks must be called before any early return
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [eventPatterns, setEventPatterns] = useState<string[]>([])
@@ -84,6 +82,8 @@ export default function AddSignalPage() {
   const [attioListError, setAttioListError] = useState<string | null>(null)
   const [autoUpdateCohort, setAutoUpdateCohort] = useState(false)
   const [autoUpdateAttioList, setAutoUpdateAttioList] = useState(false)
+
+  if (!sessionLoading && !session) return <GuestSignInPrompt message="Sign in to create custom signals" />
 
   // Stale detection
   const currentParams = JSON.stringify({

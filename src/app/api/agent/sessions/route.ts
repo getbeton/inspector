@@ -51,8 +51,8 @@ export async function GET(req: NextRequest) {
         // Get EDA counts and website result existence per session
         const sessionIds = (sessions || []).map(s => s.session_id);
 
-        let edaCounts: Record<string, number> = {};
-        let websiteSessions: Set<string> = new Set();
+        const edaCounts: Record<string, number> = {};
+        const websiteSessions: Set<string> = new Set();
 
         if (sessionIds.length > 0) {
             // Get internal UUIDs for session lookups
