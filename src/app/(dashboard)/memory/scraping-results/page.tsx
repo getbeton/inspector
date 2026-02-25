@@ -63,9 +63,9 @@ export default function ScrapingResultsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Web Scraping Results</h1>
+        <h1 className="text-2xl font-bold">Scraping Blocks</h1>
         <p className="text-muted-foreground">
-          Pages scraped by the agent during analysis sessions
+          Content blocks scraped by the agent during analysis
         </p>
       </div>
 

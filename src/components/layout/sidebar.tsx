@@ -78,7 +78,6 @@ const icons = {
 const navEntries: NavEntry[] = [
   { href: '/', label: 'Home', icon: icons.home },
   { href: '/signals', label: 'Signals', icon: icons.signals },
-  { href: '/identities', label: 'Identities', icon: icons.identities },
   {
     label: 'Memory',
     icon: icons.memory,

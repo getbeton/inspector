@@ -40,7 +40,12 @@ export default function SessionsTab() {
     )
   }
 
-  if (!sessions || sessions.length === 0) {
+  const INTERNAL_AGENTS = ['upsell_agent']
+  const externalSessions = sessions?.filter(
+    (s) => !INTERNAL_AGENTS.includes(s.agent_app_name)
+  ) ?? []
+
+  if (externalSessions.length === 0) {
     return <EmptyState />
   }
 
@@ -49,11 +54,11 @@ export default function SessionsTab() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <CardTitle>Connected Sessions</CardTitle>
-            <Badge variant="outline" size="sm">{sessions.length}</Badge>
+            <CardTitle>MCP Agent Sessions</CardTitle>
+            <Badge variant="outline" size="sm">{externalSessions.length}</Badge>
           </div>
           <CardDescription>
-            MCP agent sessions connected to your workspace.
+            External agent sessions connected via MCP.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,7 +84,7 @@ export default function SessionsTab() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((session) => (
+                {externalSessions.map((session) => (
                   <SessionRow
                     key={session.id}
                     session={session}
