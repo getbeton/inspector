@@ -120,7 +120,17 @@ export default function SignalsPage() {
     const totalArr = signals.reduce((sum, s) => sum + s.estimated_arr, 0)
     const totalLeads = signals.reduce((sum, s) => sum + s.leads_per_month, 0)
 
-    return { active, avgLift, totalArr, totalLeads }
+    // Improved stats
+    const signalsWithConfidence = signals.filter(s => s.confidence >= 0)
+    const avgConfidence = signalsWithConfidence.length > 0
+      ? signalsWithConfidence.reduce((sum, s) => sum + s.confidence, 0) / signalsWithConfidence.length
+      : 0
+    const highConfidenceCount = signalsWithConfidence.filter(s => s.confidence >= 0.95).length
+    const topSignal = signalsWithLift.length > 0
+      ? signalsWithLift.reduce((best, s) => s.lift > best.lift ? s : best)
+      : null
+
+    return { active, avgLift, totalArr, totalLeads, avgConfidence, highConfidenceCount, topSignal }
   }, [signals])
 
   const deleteMutation = useDeleteSignal()
@@ -209,29 +219,45 @@ export default function SignalsPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.active}</div>
-            <p className="text-sm text-muted-foreground">Active Signals</p>
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Active Signals</p>
+            <div className="text-2xl font-bold mt-1">{stats.active}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.highConfidenceCount} above 95% confidence
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.avgLift.toFixed(1)}x</div>
-            <p className="text-sm text-muted-foreground">Avg Lift</p>
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg Lift</p>
+            <div className="text-2xl font-bold mt-1">{stats.avgLift.toFixed(1)}x</div>
+            {stats.topSignal && (
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                Best: {stats.topSignal.name} ({stats.topSignal.lift.toFixed(1)}x)
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.totalLeads}</div>
-            <p className="text-sm text-muted-foreground">Leads/Month</p>
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Leads / Month</p>
+            <div className="text-2xl font-bold mt-1">{stats.totalLeads.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              across {stats.active} signal{stats.active !== 1 ? 's' : ''}
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalArr)}</div>
-            <p className="text-sm text-muted-foreground">Est. ARR</p>
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Est. ARR</p>
+            <div className="text-2xl font-bold mt-1 text-[#009E73]">{formatCurrency(stats.totalArr)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.avgConfidence > 0
+                ? `${(stats.avgConfidence * 100).toFixed(0)}% avg confidence`
+                : 'No confidence data yet'}
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -101,6 +101,108 @@ export interface RealSignalDetailResponse {
   }>
 }
 
+// ── Signal Analytics Types ──────────────────────────────────
+
+/** Conversion window options (days) */
+export type ConversionWindow = 7 | 14 | 30 | 60 | 90 | null
+
+/** Per-customer revenue breakdown within a month */
+export interface CustomerBreakdown {
+  name: string
+  spend: number
+  speed: 1 | 2 | 3 // conversion speed: 1=fast, 2=medium, 3=slow
+}
+
+/** Monthly snapshot for a signal at a given conversion window */
+export interface SignalAnalyticsSnapshot {
+  id: string
+  month: string // ISO date, first of month
+  conversion_window_days: number | null
+  users_with_signal: number
+  converted_users: number
+  additional_net_revenue: number
+  statistical_significance: number | null
+  p_value: number | null
+  revenue_signal: number
+  revenue_other: number
+  occurrences: number
+  conversion_rate_signal: number | null
+  conversion_rate_nosignal: number | null
+  acv_signal: number | null
+  acv_nosignal: number | null
+  customer_breakdown: CustomerBreakdown[]
+  computed_at: string
+}
+
+/** KPI summary for a signal at a given conversion window */
+export interface SignalKPI {
+  users_with_signal: number
+  converted_users: number
+  additional_net_revenue: number
+  statistical_significance: number | null
+  p_value: number | null
+  conversion_rate: number | null
+}
+
+/** Cohort retention data (M0-M8) */
+export interface CohortRetention {
+  tab: 'users' | 'events' | 'revenue'
+  stat_mode: 'total' | 'avg' | 'median'
+  signal_values: number[]   // M0-M8
+  nosignal_values: number[] // M0-M8
+}
+
+/** Time-to-conversion curve data (P0-P12) */
+export interface ConversionCurve {
+  signal_period: number[]      // P0-P12, per-period %
+  nosignal_period: number[]    // P0-P12, per-period %
+  signal_cumulative: number[]  // P0-P12, cumulative %
+  nosignal_cumulative: number[] // P0-P12, cumulative %
+}
+
+/** Full analytics response for a signal detail page */
+export interface SignalAnalyticsResponse {
+  signal_definition_id: string
+  conversion_window_days: number | null
+  kpi: SignalKPI
+  snapshots: SignalAnalyticsSnapshot[]
+  retention: CohortRetention[]
+  conversion_curve: ConversionCurve | null
+  available_windows: (number | null)[]
+}
+
+/** Filter parameters for signal analytics API */
+export interface SignalAnalyticsParams {
+  conversion_window?: number | null
+  period?: 'week' | 'month' | 'quarter'
+  plan?: string
+  segment?: string
+  range?: '3m' | '6m' | '12m' | 'all'
+}
+
+/** PostHog property mapping */
+export interface PostHogPropertyMapping {
+  id: string
+  mapping_type: 'plan' | 'segment' | 'revenue'
+  posthog_property: string
+  property_value: string
+  mapped_label: string
+  mapped_value: number | null
+  sort_order: number
+}
+
+/** Attio deal stage mapping */
+export interface AttioDealMapping {
+  id: string
+  attio_pipeline_id: string
+  attio_pipeline_name: string | null
+  attio_stage_id: string
+  attio_stage_name: string | null
+  stage_type: 'won' | 'lost' | 'open'
+  revenue_attribute_id: string | null
+  revenue_attribute_name: string | null
+}
+
 /**
  * Get list of signals from the real API
  */
@@ -201,6 +303,95 @@ export async function bulkUpdateSignals(
     { ids, action },
     { useMockData }
   )
+}
+
+/**
+ * Get signal analytics (time-series, KPIs, retention, conversion curves)
+ */
+export async function getSignalAnalytics(
+  signalId: string,
+  params?: SignalAnalyticsParams
+): Promise<SignalAnalyticsResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.conversion_window !== undefined) {
+    searchParams.set('window', params.conversion_window === null ? 'none' : String(params.conversion_window))
+  }
+  if (params?.period) searchParams.set('period', params.period)
+  if (params?.plan) searchParams.set('plan', params.plan)
+  if (params?.segment) searchParams.set('segment', params.segment)
+  if (params?.range) searchParams.set('range', params.range)
+
+  const qs = searchParams.toString()
+  const url = qs
+    ? `/api/signals/${signalId}/analytics?${qs}`
+    : `/api/signals/${signalId}/analytics`
+
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error('Failed to fetch signal analytics')
+  }
+  return res.json()
+}
+
+/**
+ * Get PostHog property mappings for the current workspace
+ */
+export async function getPropertyMappings(
+  mappingType?: 'plan' | 'segment' | 'revenue'
+): Promise<{ mappings: PostHogPropertyMapping[] }> {
+  const qs = mappingType ? `?type=${mappingType}` : ''
+  const res = await fetch(`/api/integrations/posthog/mappings${qs}`, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error('Failed to fetch property mappings')
+  }
+  return res.json()
+}
+
+/**
+ * Save PostHog property mappings
+ */
+export async function savePropertyMappings(
+  mappings: Omit<PostHogPropertyMapping, 'id'>[]
+): Promise<{ mappings: PostHogPropertyMapping[] }> {
+  const res = await fetch('/api/integrations/posthog/mappings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ mappings }),
+  })
+  if (!res.ok) {
+    throw new Error('Failed to save property mappings')
+  }
+  return res.json()
+}
+
+/**
+ * Get Attio deal mappings for the current workspace
+ */
+export async function getDealMappings(): Promise<{ mappings: AttioDealMapping[] }> {
+  const res = await fetch('/api/integrations/attio/deal-mappings', { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error('Failed to fetch deal mappings')
+  }
+  return res.json()
+}
+
+/**
+ * Save Attio deal mappings
+ */
+export async function saveDealMappings(
+  mappings: Omit<AttioDealMapping, 'id'>[]
+): Promise<{ mappings: AttioDealMapping[] }> {
+  const res = await fetch('/api/integrations/attio/deal-mappings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ mappings }),
+  })
+  if (!res.ok) {
+    throw new Error('Failed to save deal mappings')
+  }
+  return res.json()
 }
 
 /**
