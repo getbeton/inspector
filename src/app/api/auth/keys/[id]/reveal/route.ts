@@ -2,15 +2,25 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { NextResponse } from 'next/server'
 import { decrypt } from '@/lib/crypto/encryption'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 
 /**
  * GET /api/auth/keys/[id]/reveal
  * Decrypt and return the plaintext API key (requires authentication)
+ *
+ * Security fixes:
+ * - M13: Audit logging on key reveal
+ * - M14: Rate limiting on sensitive endpoint
+ * - Cache-Control: no-store to prevent browser caching of secrets
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // M14 fix: Rate limit key reveal
+  const rateLimitResponse = applyRateLimit(request, 'api-key-reveal', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { id } = await params
     const supabase = await createClient()
@@ -27,6 +37,9 @@ export async function GET(
     if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
+
+    // M13 fix: Audit log for key reveal
+    console.log(`[Audit] API key reveal: user=${user.id} key=${id} workspace=${membership.workspaceId}`)
 
     // Fetch the encrypted key for this specific key + workspace + user
     // Note: encrypted_key column added via migration 021 — cast until types regenerated
@@ -59,7 +72,15 @@ export async function GET(
 
     const plaintext = await decrypt(data.encrypted_key)
 
-    return NextResponse.json({ key: plaintext })
+    return NextResponse.json(
+      { key: plaintext },
+      {
+        headers: {
+          // Prevent browser caching of the revealed key
+          'Cache-Control': 'no-store',
+        },
+      }
+    )
   } catch (error) {
     console.error('Error in GET /api/auth/keys/[id]/reveal:', error)
     return NextResponse.json({ error: 'Failed to reveal key' }, { status: 500 })

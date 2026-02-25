@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import crypto from 'crypto'
+import { encrypt } from '@/lib/crypto/encryption'
 
 /**
  * GET /api/mcp/authorize — OAuth 2.0 Authorization Endpoint
@@ -14,6 +15,11 @@ import crypto from 'crypto'
  *
  * The auth code contains a reference to the user's Supabase session tokens,
  * which the MCP client exchanges at /api/mcp/token.
+ *
+ * Security fixes:
+ * - C1: Tokens encrypted at rest before storage
+ * - C2: redirect_uri validated against registered client URIs
+ * - M1: Uses getUser() for auth check (not getSession() which trusts JWT without server verification)
  */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -48,17 +54,28 @@ export async function GET(request: NextRequest) {
   }
 
   // --- Check if user has an active Supabase session (cookie-based) ---
+  // M1 fix: Use getUser() first (server-validated), then getSession() for token values
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!session) {
-    // No session → send to login, preserving all OAuth params for return
+  if (!user) {
+    // No authenticated user → send to login, preserving all OAuth params for return
     const loginUrl = new URL('/login', url.origin)
     loginUrl.searchParams.set('next', `${url.pathname}${url.search}`)
     return NextResponse.redirect(loginUrl.toString())
   }
 
-  // --- Validate client_id exists ---
+  // User is authenticated — now get session for token values
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session) {
+    // Authenticated but no session tokens (edge case) → redirect to login
+    const loginUrl = new URL('/login', url.origin)
+    loginUrl.searchParams.set('next', `${url.pathname}${url.search}`)
+    return NextResponse.redirect(loginUrl.toString())
+  }
+
+  // --- Validate client_id exists and redirect_uri is registered ---
   const admin = createAdminClient()
   const { data: client } = await (admin.from as any)('mcp_oauth_clients')
     .select('client_id, redirect_uris')
@@ -69,19 +86,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_client' }, { status: 401 })
   }
 
-  // --- Generate auth code and store with session tokens ---
+  // C2 fix: Validate redirect_uri against registered URIs
+  const registeredUris: string[] = (client as { redirect_uris: string[] }).redirect_uris || []
+  if (registeredUris.length > 0 && !registeredUris.includes(redirectUri)) {
+    return NextResponse.json(
+      { error: 'invalid_request', error_description: 'redirect_uri is not registered for this client' },
+      { status: 400 }
+    )
+  }
+
+  // --- Generate auth code and store with encrypted session tokens ---
   const code = crypto.randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+  // C1 fix: Encrypt tokens before storage
+  const [encryptedAccessToken, encryptedRefreshToken] = await Promise.all([
+    encrypt(session.access_token),
+    encrypt(session.refresh_token),
+  ])
 
   const { error: insertError } = await (admin.from as any)('mcp_auth_codes').insert({
     code,
     client_id: clientId,
-    user_id: session.user.id,
+    user_id: user.id,
     redirect_uri: redirectUri,
     code_challenge: codeChallenge,
     code_challenge_method: codeChallengeMethod || 'S256',
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
+    access_token: encryptedAccessToken,
+    refresh_token: encryptedRefreshToken,
     expires_at: expiresAt.toISOString(),
   })
 

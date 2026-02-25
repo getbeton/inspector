@@ -2,6 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { decrypt } from '@/lib/crypto/encryption'
+import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
 
 /**
  * POST /api/mcp/token — OAuth 2.0 Token Endpoint
@@ -12,8 +14,19 @@ import crypto from 'crypto'
  *
  * The access_token returned is a real Supabase JWT, so existing
  * createClientFromRequest() in API routes works unchanged.
+ *
+ * Security fixes:
+ * - C3: Atomic redemption via redeem_mcp_auth_code() Postgres function (TOCTOU race)
+ * - C1: Decrypt tokens that were encrypted at rest
+ * - H2: Rate limiting to prevent brute-force attempts
+ * - L1: Compute expires_in from JWT exp claim
+ * - L2: Accept client_id on refresh grant for logging
  */
 export async function POST(request: Request) {
+  // H2 fix: Rate limit token endpoint
+  const rateLimitResponse = applyRateLimit(request, 'mcp-token', RATE_LIMITS.VALIDATION)
+  if (rateLimitResponse) return rateLimitResponse
+
   // MCP clients may send form-urlencoded or JSON
   const contentType = request.headers.get('content-type') || ''
   let params: Record<string, string>
@@ -55,14 +68,15 @@ async function handleAuthorizationCode(params: Record<string, string>) {
 
   const admin = createAdminClient()
 
-  // Look up the auth code (must be unused)
-  const { data: authCode } = await (admin.from as any)('mcp_auth_codes')
-    .select('*')
-    .eq('code', code)
-    .is('used_at', null)
-    .single()
+  // C3 fix: Atomic redemption — single UPDATE...RETURNING prevents TOCTOU race
+  // Cast needed: redeem_mcp_auth_code is not in auto-generated types until migration 024 is applied
+  const { data: redeemed, error: redeemError } = await (admin as any).rpc('redeem_mcp_auth_code', {
+    p_code: code,
+  })
 
-  if (!authCode) {
+  const authCode = Array.isArray(redeemed) ? redeemed[0] : redeemed
+
+  if (redeemError || !authCode) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Invalid or already-used authorization code' },
       { status: 400 }
@@ -101,30 +115,38 @@ async function handleAuthorizationCode(params: Record<string, string>) {
     )
   }
 
-  // Mark code as used (single-use)
-  await (admin.from as any)('mcp_auth_codes')
-    .update({ used_at: new Date().toISOString() })
-    .eq('code', code)
+  // C1 fix: Decrypt tokens that were encrypted at rest
+  const [accessToken, refreshToken] = await Promise.all([
+    decrypt((authCode as Record<string, string>).access_token),
+    decrypt((authCode as Record<string, string>).refresh_token),
+  ])
 
-  // Return the Supabase session tokens as OAuth tokens
+  // L1 fix: Compute expires_in from JWT exp claim instead of hardcoded 3600
+  const expiresIn = computeExpiresIn(accessToken)
+
   return NextResponse.json({
-    access_token: (authCode as Record<string, string>).access_token,
+    access_token: accessToken,
     token_type: 'Bearer',
-    expires_in: 3600,
-    refresh_token: (authCode as Record<string, string>).refresh_token,
+    expires_in: expiresIn,
+    refresh_token: refreshToken,
   })
 }
 
 // ─── Refresh Token ──────────────────────────────────────────────────────────
 
 async function handleRefreshToken(params: Record<string, string>) {
-  const { refresh_token } = params
+  const { refresh_token, client_id } = params
 
   if (!refresh_token) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'Missing refresh_token' },
       { status: 400 }
     )
+  }
+
+  // L2 fix: Log client_id if provided (useful for audit trails)
+  if (client_id) {
+    console.log(`[MCP Token] Refresh grant for client_id: ${client_id}`)
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -153,10 +175,31 @@ async function handleRefreshToken(params: Record<string, string>) {
     )
   }
 
+  // L1 fix: Compute expires_in from JWT exp claim
+  const expiresIn = computeExpiresIn(data.session.access_token)
+
   return NextResponse.json({
     access_token: data.session.access_token,
     token_type: 'Bearer',
-    expires_in: 3600,
+    expires_in: expiresIn,
     refresh_token: data.session.refresh_token,
   })
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Compute expires_in from a JWT's exp claim. Falls back to 3600 if parsing fails.
+ */
+function computeExpiresIn(jwt: string): number {
+  try {
+    const payload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString())
+    if (typeof payload.exp === 'number') {
+      const remaining = payload.exp - Math.floor(Date.now() / 1000)
+      return remaining > 0 ? remaining : 3600
+    }
+  } catch {
+    // Fall through to default
+  }
+  return 3600
 }

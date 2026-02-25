@@ -496,6 +496,24 @@ export function registerAllTools(server: McpServer, workspaceId: string): void {
     },
     async ({ success_url, cancel_url }) => {
       try {
+        // H4 fix: Validate checkout URLs against allowed hosts
+        const isAllowedUrl = (urlStr: string): boolean => {
+          try {
+            const u = new URL(urlStr)
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL
+            if (u.hostname === 'localhost') return true
+            if (u.hostname.endsWith('.vercel.app')) return true
+            if (appUrl) {
+              try { if (new URL(appUrl).hostname === u.hostname) return true } catch {}
+            }
+            return false
+          } catch { return false }
+        }
+
+        if (!isAllowedUrl(success_url) || !isAllowedUrl(cancel_url)) {
+          return err('success_url and cancel_url must point to allowed domains')
+        }
+
         const { data: workspace, error: wsError } = await admin
           .from('workspaces')
           .select('stripe_customer_id')

@@ -77,9 +77,13 @@ export async function middleware(request: NextRequest) {
 
   // Redirect if accessing login while authenticated
   if (pathname === '/login' && user) {
-    // If `next` is set (e.g. MCP OAuth flow), honor it instead of going to /
+    // M6 fix: Validate `next` param to prevent open redirect
+    // Only allow relative paths that don't start with // (protocol-relative URLs)
     const next = request.nextUrl.searchParams.get('next')
-    const target = next || '/'
+    let target = '/'
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+      target = next
+    }
     return NextResponse.redirect(new URL(target, request.url))
   }
 
