@@ -26,6 +26,11 @@ export default function robots(): MetadataRoute.Robots {
         allow: ['/', '/llms.txt'],
         disallow: ['/api/', '/_next/', '/auth/', '/setup', '/settings/', '/memory/'],
       })),
+      // Block search engine crawlers — not meant to be indexed
+      ...['Googlebot', 'Googlebot-Image', 'Googlebot-News', 'Googlebot-Video', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot'].map(bot => ({
+        userAgent: bot,
+        disallow: ['/'],
+      })),
       // Block scraper bots
       ...['AhrefsBot', 'SemrushBot', 'MJ12bot', 'DotBot'].map(bot => ({
         userAgent: bot,
