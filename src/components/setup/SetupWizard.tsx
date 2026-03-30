@@ -17,6 +17,7 @@ import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
+import { PostgresStep } from "./steps/PostgresStep";
 import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
 import { getDefaultSampleData, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
@@ -24,6 +25,7 @@ import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
 import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
 import { FirecrawlPreview } from "./previews/FirecrawlPreview";
+import { PostgresPreview } from "./previews/PostgresPreview";
 import { SlackNotificationPreview } from "./previews/SlackNotificationPreview";
 import { CrmCardPreview } from "./previews/CrmCardPreview";
 import { useIntegrationDefinitions } from "@/lib/hooks/use-integration-definitions";
@@ -171,6 +173,8 @@ export function SetupWizard({
   const [firecrawlConnected, setFirecrawlConnected] = useState(false);
   const [firecrawlMode, setFirecrawlMode] = useState<"cloud" | "self_hosted" | null>(null);
   const [firecrawlProxy, setFirecrawlProxy] = useState<string | null>(null);
+  const [postgresConnected, setPostgresConnected] = useState(false);
+  const [postgresDbName, setPostgresDbName] = useState("");
 
   // Deal mapping state for live preview
   const [dealMappingState, setDealMappingState] = useState<DealMappingState>({
@@ -240,6 +244,8 @@ export function SetupWizard({
       if (at?.is_connected) setAttioConnected(true);
       const fc = definitions.find((d) => d.name === "firecrawl");
       if (fc?.is_connected) setFirecrawlConnected(true);
+      const pg = definitions.find((d) => d.name === "postgres");
+      if (pg?.is_connected) setPostgresConnected(true);
     }
   }, [definitions]);
 
@@ -367,6 +373,15 @@ export function SetupWizard({
   }, [advanceFrom]);
 
   const handleFirecrawlSkip = useCallback(() => {
+    advanceFrom("skipped");
+  }, [advanceFrom]);
+
+  const handlePostgresSuccess = useCallback(() => {
+    setPostgresConnected(true);
+    advanceFrom("completed");
+  }, [advanceFrom]);
+
+  const handlePostgresSkip = useCallback(() => {
     advanceFrom("skipped");
   }, [advanceFrom]);
 
@@ -588,6 +603,37 @@ export function SetupWizard({
               isConnected={firecrawlConnected}
               mode={firecrawlMode}
               proxyTier={firecrawlProxy}
+            />
+          ),
+        };
+
+      case "postgres":
+        return {
+          config: (
+            <div>
+              <PostgresStep
+                onSuccess={({ name }) => {
+                  setPostgresDbName(name);
+                  handlePostgresSuccess();
+                }}
+              />
+              {authBypassSkipButton}
+              {/* Postgres is optional — always show skip */}
+              {!authBypass && (
+                <button
+                  type="button"
+                  onClick={handlePostgresSkip}
+                  className="w-full mt-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Skip for now
+                </button>
+              )}
+            </div>
+          ),
+          preview: (
+            <PostgresPreview
+              isConnected={postgresConnected}
+              databaseName={postgresDbName || undefined}
             />
           ),
         };

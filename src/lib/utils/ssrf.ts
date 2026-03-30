@@ -9,6 +9,9 @@
  * IP and 127.0.0.1 could bypass these checks. This is an accepted risk here
  * because Firecrawl (the actual fetcher) runs in its own network — the SSRF
  * vector would be within Firecrawl's infra, not the Next.js server.
+ *
+ * For Postgres connections (which go directly from Vercel), use the
+ * DNS-resolving variant in `src/lib/integrations/postgres/security.ts`.
  */
 
 const BLOCKED_HOSTNAME_PATTERNS = [
@@ -37,7 +40,19 @@ const BLOCKED_HOSTS = new Set([
 ])
 
 /**
- * Check whether a hostname resolves to a private/internal address.
+ * Check whether a raw hostname (not a URL) is a private/internal address.
+ * Shared building block for both URL-based and raw-hostname SSRF checks.
+ *
+ * Returns true if the hostname should be blocked.
+ */
+export function isPrivateHostname(hostname: string): boolean {
+  const cleaned = hostname.replace(/^\[|\]$/g, '')
+  if (BLOCKED_HOSTS.has(cleaned)) return true
+  return BLOCKED_HOSTNAME_PATTERNS.some(p => p.test(cleaned))
+}
+
+/**
+ * Check whether a URL points to a private/internal address.
  * Returns true if the host is private (i.e. should be blocked).
  */
 export function isPrivateHost(urlStr: string): boolean {
@@ -49,11 +64,7 @@ export function isPrivateHost(urlStr: string): boolean {
       return true
     }
 
-    const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
-
-    if (BLOCKED_HOSTS.has(hostname)) return true
-
-    return BLOCKED_HOSTNAME_PATTERNS.some(p => p.test(hostname))
+    return isPrivateHostname(parsed.hostname)
   } catch {
     return true // invalid URL treated as blocked
   }
@@ -75,16 +86,11 @@ export function validateUrl(rawUrl: string): string | null {
     return 'Only HTTP and HTTPS protocols are allowed'
   }
 
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
-
-  if (BLOCKED_HOSTS.has(hostname)) {
-    return 'Access to this host is blocked (metadata endpoint)'
-  }
-
-  for (const pattern of BLOCKED_HOSTNAME_PATTERNS) {
-    if (pattern.test(hostname)) {
-      return 'Access to private/internal addresses is blocked'
+  if (isPrivateHostname(parsed.hostname)) {
+    if (BLOCKED_HOSTS.has(parsed.hostname.replace(/^\[|\]$/g, ''))) {
+      return 'Access to this host is blocked (metadata endpoint)'
     }
+    return 'Access to private/internal addresses is blocked'
   }
 
   return null
