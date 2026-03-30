@@ -87,8 +87,8 @@ export async function GET() {
     const { workspaceId } = await requireWorkspace()
     const supabase = await createClient()
 
-    // Two parallel queries: definitions (global) + configs (workspace-scoped)
-    const [definitionsResult, configsResult] = await Promise.all([
+    // Three parallel queries: definitions (global) + configs (workspace) + data_sources (workspace)
+    const [definitionsResult, configsResult, dataSourcesResult] = await Promise.all([
       supabase
         .from('integration_definitions')
         .select(
@@ -99,6 +99,15 @@ export async function GET() {
         .from('integration_configs')
         .select('integration_name, status, last_validated_at, is_active')
         .eq('workspace_id', workspaceId),
+      // Check if any Postgres data source is connected (for the 'postgres' definition)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from('data_sources')
+        .select('id, status, last_validated_at')
+        .eq('workspace_id', workspaceId)
+        .eq('source_type', 'postgres')
+        .eq('status', 'connected')
+        .limit(1),
     ])
 
     // Use DB rows when available; fall back to hardcoded definitions when the
@@ -131,8 +140,27 @@ export async function GET() {
       configs.map((c) => [c.integration_name, c])
     )
 
+    // Check for connected Postgres data sources (separate table)
+    const hasConnectedPostgres =
+      !dataSourcesResult.error &&
+      Array.isArray(dataSourcesResult.data) &&
+      dataSourcesResult.data.length > 0
+
+    const postgresLastValidated = hasConnectedPostgres
+      ? (dataSourcesResult.data[0] as { last_validated_at: string | null }).last_validated_at
+      : null
+
     // Enrich each definition with workspace connection status
     const enriched: IntegrationDefinition[] = definitions.map((def) => {
+      // Postgres uses the data_sources table, not integration_configs
+      if (def.name === 'postgres') {
+        return {
+          ...def,
+          is_connected: hasConnectedPostgres,
+          last_validated_at: postgresLastValidated,
+        }
+      }
+
       const config = configMap.get(def.name)
       const isConnected =
         !!config && config.is_active && config.status === 'connected'

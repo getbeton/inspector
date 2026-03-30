@@ -14,6 +14,7 @@ import { registerJoinsTools } from './tools/joins.js'
 import { registerMappingTools } from './tools/mapping.js'
 import { registerBillingTools } from './tools/billing.js'
 import { registerWorkspaceTools } from './tools/workspace.js'
+import { registerPostgresTools } from './tools/postgres.js'
 
 /**
  * Create a fully configured MCP server with all tools.
@@ -36,6 +37,7 @@ export function createMcpServer(
   registerMappingTools(server, getAuthHeader)
   registerBillingTools(server, getAuthHeader)
   registerWorkspaceTools(server, getAuthHeader)
+  registerPostgresTools(server, getAuthHeader)
 
   return server
 }

@@ -29,6 +29,7 @@ import {
 } from '@/lib/hooks/use-integrations'
 import { useIntegrationDefinitions } from '@/lib/hooks/use-integration-definitions'
 import type { IntegrationCategory, IntegrationDefinition } from '@/lib/integrations/types'
+import { DataSourcesSection } from '@/components/settings/DataSourcesSection'
 
 // ---------------------------------------------------------------------------
 // Category display labels
@@ -671,9 +672,12 @@ export default function SettingsIntegrationsPage() {
         ) : sortedCategories.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">No integrations available.</p>
         ) : (
-          sortedCategories.map(([category, defs]) => (
-            <CategorySection key={category} category={category} definitions={defs} />
-          ))
+          <>
+            {sortedCategories.map(([category, defs]) => (
+              <CategorySection key={category} category={category} definitions={defs.filter(d => d.name !== 'postgres')} />
+            ))}
+            <DataSourcesSection />
+          </>
         )}
       </CardContent>
     </Card>
