@@ -85,12 +85,16 @@ function createSupabaseMock(options?: {
   definitionsError?: { message: string } | null
   configsData?: typeof CONFIGS | null
   configsError?: { message: string } | null
+  dataSourcesData?: Array<{ id: string; status: string; last_validated_at: string | null }> | null
+  dataSourcesError?: { message: string } | null
 }) {
   const {
     definitionsData = DEFINITIONS,
     definitionsError = null,
     configsData = CONFIGS,
     configsError = null,
+    dataSourcesData = [],
+    dataSourcesError = null,
   } = options ?? {}
 
   // Definitions chain: from().select().order()
@@ -113,9 +117,22 @@ function createSupabaseMock(options?: {
     }),
   }
 
+  // Data sources chain: from().select().eq().eq().eq().limit()
+  const dsLimitMock = vi.fn().mockResolvedValue({
+    data: dataSourcesData,
+    error: dataSourcesError,
+  })
+  const dsEq3Mock = vi.fn().mockReturnValue({ limit: dsLimitMock })
+  const dsEq2Mock = vi.fn().mockReturnValue({ eq: dsEq3Mock })
+  const dsEq1Mock = vi.fn().mockReturnValue({ eq: dsEq2Mock })
+  const dsChain = {
+    select: vi.fn().mockReturnValue({ eq: dsEq1Mock }),
+  }
+
   const fromMock = vi.fn((table: string) => {
     if (table === 'integration_definitions') return defChain
     if (table === 'integration_configs') return configChain
+    if (table === 'data_sources') return dsChain
     return defChain // fallback
   })
 
