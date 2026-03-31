@@ -555,6 +555,164 @@ export class HubSpotClient {
     )
   }
 
+  /**
+   * Create a property group on an object type.
+   */
+  async createPropertyGroup(
+    objectType: string,
+    group: { name: string; label: string; displayOrder?: number }
+  ): Promise<{ name: string; label: string }> {
+    return this.request<{ name: string; label: string }>(
+      `/crm/v3/properties/${objectType}/groups`,
+      {
+        method: 'POST',
+        body: JSON.stringify(group),
+      },
+      'high'
+    )
+  }
+
+  // ============================================
+  // CRM Objects — Create / Update
+  // ============================================
+
+  /**
+   * Create a single CRM record.
+   */
+  async createRecord(
+    objectType: string,
+    properties: Record<string, string | number | boolean>
+  ): Promise<HubSpotRecord> {
+    return this.request<HubSpotRecord>(
+      `/crm/v3/objects/${objectType}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ properties }),
+      },
+      'high'
+    )
+  }
+
+  /**
+   * Update a single CRM record.
+   */
+  async updateRecord(
+    objectType: string,
+    recordId: string,
+    properties: Record<string, string | number | boolean>
+  ): Promise<HubSpotRecord> {
+    return this.request<HubSpotRecord>(
+      `/crm/v3/objects/${objectType}/${recordId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ properties }),
+      },
+      'high'
+    )
+  }
+
+  // ============================================
+  // Associations — Create
+  // ============================================
+
+  /**
+   * Create an association between two CRM records (v4 API).
+   */
+  async createAssociationV4(
+    fromObjectType: string,
+    fromObjectId: string,
+    toObjectType: string,
+    toObjectId: string,
+    associationTypeId: number
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/crm/v4/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify([
+          {
+            associationCategory: 'HUBSPOT_DEFINED',
+            associationTypeId,
+          },
+        ]),
+      },
+      'high'
+    )
+  }
+
+  /**
+   * Batch create associations between CRM records (v4 API).
+   */
+  async batchCreateAssociationsV4(
+    fromObjectType: string,
+    toObjectType: string,
+    inputs: Array<{
+      from: { id: string }
+      to: { id: string }
+      types: Array<{ associationCategory: string; associationTypeId: number }>
+    }>
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/crm/v4/associations/${fromObjectType}/${toObjectType}/batch/create`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ inputs }),
+      },
+      'high'
+    )
+  }
+
+  // ============================================
+  // Lists
+  // ============================================
+
+  /**
+   * Create a static contact list.
+   */
+  async createStaticList(
+    name: string
+  ): Promise<{ listId: string; name: string }> {
+    const result = await this.request<{
+      listId?: string
+      list_id?: string
+      id?: string
+      name?: string
+    }>(
+      '/crm/v3/lists',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          objectTypeId: '0-1', // contacts
+          processingType: 'MANUAL',
+        }),
+      },
+      'high'
+    )
+
+    return {
+      listId: String(result.listId || result.list_id || result.id || ''),
+      name: result.name || name,
+    }
+  }
+
+  /**
+   * Add contacts to a static list by contact IDs.
+   */
+  async addContactsToList(
+    listId: string,
+    contactIds: string[]
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/crm/v3/lists/${listId}/memberships/add`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(contactIds),
+      },
+      'high'
+    )
+  }
+
   // ============================================
   // Owners
   // ============================================
