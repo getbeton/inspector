@@ -65,6 +65,18 @@ export async function GET() {
     const posthogConnected = posthogConfig?.is_active && posthogConfig?.status === 'connected'
     const attioConnected = attioConfig?.is_active && attioConfig?.status === 'connected'
 
+    // Check HubSpot connections (optional integration — does not block setup)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: hubspotConnections } = await (supabase as any)
+      .from('hubspot_connections')
+      .select('id, is_active, status')
+      .eq('workspace_id', membership.workspaceId)
+      .eq('is_active', true)
+      .eq('status', 'connected')
+      .limit(1)
+
+    const hubspotConnected = hubspotConnections && hubspotConnections.length > 0
+
     // Check billing status (only in cloud mode)
     const billingRequired = isBillingEnabled()
     let billingConfigured = false
@@ -101,6 +113,7 @@ export async function GET() {
       integrations: {
         posthog: !!posthogConnected,
         attio: !!attioConnected,
+        hubspot: !!hubspotConnected,
       },
       billing: {
         required: billingRequired,

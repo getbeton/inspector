@@ -11,6 +11,7 @@ import { Check, AlertCircle, Eye, EyeOff, Link2, Key, Shield } from "lucide-reac
 import {
   trackIntegrationConnected,
   trackIntegrationConnectionFailed,
+  trackOnboardingStepSkipped,
 } from "@/lib/analytics"
 
 // ---------------------------------------------------------------------------
@@ -169,7 +170,9 @@ export function HubSpotStep({ onSuccess, onSkip, className }: HubSpotStepProps) 
 
       trackIntegrationConnected("hubspot", {
         category: "crm",
-      })
+        auth_type: "private_app",
+        portal_id: String(pId),
+      } as Record<string, string>)
 
       onSuccess({
         portalName: pName,
@@ -403,7 +406,13 @@ export function HubSpotStep({ onSuccess, onSkip, className }: HubSpotStepProps) 
       {!isSuccess && onSkip && (
         <button
           type="button"
-          onClick={onSkip}
+          onClick={() => {
+            trackOnboardingStepSkipped({
+              step_key: "hubspot",
+              step_name: "Connect HubSpot CRM",
+            })
+            onSkip()
+          }}
           className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           Skip for now
