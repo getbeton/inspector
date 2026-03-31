@@ -194,7 +194,32 @@ export async function resolveHubSpotConnection(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Record<string, any> | null> {
   const supabase = await createClient()
+  return _resolveConnection(supabase, workspaceId, connectionId)
+}
 
+/**
+ * Resolve which HubSpot connection to use — admin variant.
+ * Bypasses RLS. Use in agent routes, cron jobs, etc.
+ */
+export async function resolveHubSpotConnectionAdmin(
+  workspaceId: string,
+  connectionId?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<Record<string, any> | null> {
+  const supabase = createAdminClient()
+  return _resolveConnection(supabase, workspaceId, connectionId)
+}
+
+/**
+ * Shared implementation for connection resolution.
+ */
+async function _resolveConnection(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: { from: (...args: any[]) => any },
+  workspaceId: string,
+  connectionId?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<Record<string, any> | null> {
   if (connectionId) {
     const { data, error } = await supabase
       .from('hubspot_connections')

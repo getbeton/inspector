@@ -20,6 +20,7 @@ export {
   getHubSpotConnectionCredentials,
   getHubSpotConnectionCredentialsAdmin,
   resolveHubSpotConnection,
+  resolveHubSpotConnectionAdmin,
   type HubSpotCredentials,
 } from './config'
 export {
