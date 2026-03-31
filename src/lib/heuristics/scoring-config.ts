@@ -140,6 +140,35 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
       category: 'neutral',
       description: 'Decision maker on free plan',
     },
+
+    // HubSpot CRM signals — Expansion
+    hubspot_deal_stage_change: {
+      weight: 18,
+      category: 'expansion',
+      description: 'Deal stage progressed in HubSpot',
+    },
+    hubspot_new_deal: {
+      weight: 22,
+      category: 'expansion',
+      description: 'New deal created in HubSpot',
+    },
+    hubspot_lifecycle_change: {
+      weight: 15,
+      category: 'expansion',
+      description: 'Contact lifecycle stage advanced in HubSpot',
+    },
+    hubspot_meeting_booked: {
+      weight: 12,
+      category: 'expansion',
+      description: 'Meeting booked in HubSpot',
+    },
+
+    // HubSpot CRM signals — Churn risk
+    hubspot_ticket_created: {
+      weight: -14,
+      category: 'churn_risk',
+      description: 'Support ticket increase in HubSpot',
+    },
   },
 }
 

@@ -8,6 +8,8 @@
  * - Client: HubSpot API client
  * - Entities: Entity operations (upsert, batch create, custom properties)
  * - Associations: Association management
+ * - Polling: Sync engine for incremental data sync
+ * - Rate Limiter: Token bucket rate limiting
  */
 
 export * from './types'
@@ -23,6 +25,12 @@ export {
   resolveHubSpotConnectionAdmin,
   type HubSpotCredentials,
 } from './config'
+export {
+  HubSpotClient,
+  createHubSpotClient,
+  createHubSpotClientForConnection,
+  type HubSpotClientConfig,
+} from './client'
 export {
   upsertCompany,
   upsertContact,
@@ -42,3 +50,9 @@ export {
   ASSOCIATION_TYPE_IDS,
   type AssociationInput,
 } from './associations'
+export {
+  syncObjectType,
+  syncConnection,
+  type SyncResult,
+  type ConnectionSyncResult,
+} from './polling'
