@@ -18,12 +18,14 @@ import { AttioStep } from "./steps/AttioStep";
 import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
 import { PostgresStep } from "./steps/PostgresStep";
+import { HubSpotStep } from "./steps/HubSpotStep";
 import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
 import { getDefaultSampleData, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
 import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
 import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
+import { HubSpotConnectionPreview } from "./previews/HubSpotConnectionPreview";
 import { FirecrawlPreview } from "./previews/FirecrawlPreview";
 import { PostgresPreview } from "./previews/PostgresPreview";
 import { SlackNotificationPreview } from "./previews/SlackNotificationPreview";
@@ -175,6 +177,11 @@ export function SetupWizard({
   const [firecrawlProxy, setFirecrawlProxy] = useState<string | null>(null);
   const [postgresConnected, setPostgresConnected] = useState(false);
   const [postgresDbName, setPostgresDbName] = useState("");
+  const [hubspotConnected, setHubspotConnected] = useState(false);
+  const [hubspotPortalName, setHubspotPortalName] = useState("");
+  const [hubspotPortalId, setHubspotPortalId] = useState("");
+  const [hubspotAuthType, setHubspotAuthType] = useState<"oauth" | "private_app" | null>(null);
+  const [hubspotEnabledObjects, setHubspotEnabledObjects] = useState<string[]>([]);
 
   // Deal mapping state for live preview
   const [dealMappingState, setDealMappingState] = useState<DealMappingState>({
@@ -246,6 +253,8 @@ export function SetupWizard({
       if (fc?.is_connected) setFirecrawlConnected(true);
       const pg = definitions.find((d) => d.name === "postgres");
       if (pg?.is_connected) setPostgresConnected(true);
+      const hs = definitions.find((d) => d.name === "hubspot");
+      if (hs?.is_connected) setHubspotConnected(true);
     }
   }, [definitions]);
 
@@ -382,6 +391,27 @@ export function SetupWizard({
   }, [advanceFrom]);
 
   const handlePostgresSkip = useCallback(() => {
+    advanceFrom("skipped");
+  }, [advanceFrom]);
+
+  const handleHubSpotSuccess = useCallback(
+    (data: {
+      portalName: string;
+      portalId: string;
+      authType: "oauth" | "private_app";
+      enabledObjects: string[];
+    }) => {
+      setHubspotConnected(true);
+      setHubspotPortalName(data.portalName);
+      setHubspotPortalId(data.portalId);
+      setHubspotAuthType(data.authType);
+      setHubspotEnabledObjects(data.enabledObjects);
+      advanceFrom("completed");
+    },
+    [advanceFrom]
+  );
+
+  const handleHubSpotSkip = useCallback(() => {
     advanceFrom("skipped");
   }, [advanceFrom]);
 
@@ -634,6 +664,28 @@ export function SetupWizard({
             <PostgresPreview
               isConnected={postgresConnected}
               databaseName={postgresDbName || undefined}
+            />
+          ),
+        };
+
+      case "hubspot":
+        return {
+          config: (
+            <div>
+              <HubSpotStep
+                onSuccess={handleHubSpotSuccess}
+                onSkip={handleHubSpotSkip}
+              />
+              {authBypassSkipButton}
+            </div>
+          ),
+          preview: (
+            <HubSpotConnectionPreview
+              isConnected={hubspotConnected}
+              portalName={hubspotPortalName || undefined}
+              portalId={hubspotPortalId || undefined}
+              authType={hubspotAuthType}
+              enabledObjects={hubspotEnabledObjects}
             />
           ),
         };
