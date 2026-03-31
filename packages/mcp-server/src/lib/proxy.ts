@@ -50,6 +50,8 @@ export async function callApi(
     params?: Record<string, string>
     /** Tool name for request logging. If set, the invocation is logged. */
     toolName?: string
+    /** Additional headers to include in the request */
+    extraHeaders?: Record<string, string>
   }
 ): Promise<{ data: unknown; status: number }> {
   // M18 fix: Validate path against allowlist
@@ -75,6 +77,11 @@ export async function callApi(
 
   if (authHeader) {
     headers['Authorization'] = authHeader
+  }
+
+  // Merge extra headers (e.g., x-agent-secret for agent routes)
+  if (options?.extraHeaders) {
+    Object.assign(headers, options.extraHeaders)
   }
 
   // M16 fix: AbortController with 30s timeout
