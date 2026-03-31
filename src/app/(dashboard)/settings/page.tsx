@@ -30,6 +30,7 @@ import {
 import { useIntegrationDefinitions } from '@/lib/hooks/use-integration-definitions'
 import type { IntegrationCategory, IntegrationDefinition } from '@/lib/integrations/types'
 import { DataSourcesSection } from '@/components/settings/DataSourcesSection'
+import { HubSpotConnectionsSection } from '@/components/settings/HubSpotConnectionsSection'
 
 // ---------------------------------------------------------------------------
 // Category display labels
@@ -94,6 +95,12 @@ const FIELD_CONFIGS: Record<string, IntegrationFieldConfig> = {
       { id: 'api_key', label: 'API Key', type: 'password', placeholder: 'attio_...', credentialKey: 'apiKey' },
     ],
     helpUrl: 'https://app.attio.com/settings/api-keys',
+  },
+  hubspot: {
+    fields: [
+      { id: 'api_key', label: 'Private App Token', type: 'password', placeholder: 'pat-na1-...', credentialKey: 'apiKey' },
+    ],
+    helpUrl: 'https://app.hubspot.com/private-apps',
   },
   firecrawl: {
     fields: [
@@ -677,6 +684,7 @@ export default function SettingsIntegrationsPage() {
               <CategorySection key={category} category={category} definitions={defs.filter(d => d.name !== 'postgres')} />
             ))}
             <DataSourcesSection />
+            <HubSpotConnectionsSection />
           </>
         )}
       </CardContent>
