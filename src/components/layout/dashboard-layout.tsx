@@ -7,12 +7,17 @@ import { TestModeBanner } from './test-mode-banner'
 import { DashboardThresholdBanner, AccessBlockedOverlay } from '@/components/billing'
 import { SetupBanner } from '@/components/setup'
 
+import type { WorkspaceMembership } from '@/lib/auth/constants'
+
 interface DashboardLayoutProps {
   children: React.ReactNode
   user: {
     email: string
     name?: string
     workspace_name?: string
+    workspace_id?: string
+    role?: string
+    workspaces: WorkspaceMembership[]
   } | null
 }
 

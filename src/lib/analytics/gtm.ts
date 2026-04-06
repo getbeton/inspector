@@ -308,6 +308,48 @@ export function setOnboardingUserProperties(props: {
 }
 
 // ---------------------------------------------------------------------------
+// Workspace & team events
+// ---------------------------------------------------------------------------
+
+export function trackWorkspaceInviteSent(props: {
+  invite_type: 'email' | 'link'
+  role: string
+  invite_count: number
+}): void {
+  pushToDataLayer({ event: 'workspace_invite_sent', ...props })
+}
+
+export function trackWorkspaceInviteAccepted(props: {
+  invite_type: 'email' | 'link'
+  workspace_id: string
+}): void {
+  pushToDataLayer({ event: 'workspace_invite_accepted', ...props })
+}
+
+export function trackWorkspaceMemberRemoved(): void {
+  pushToDataLayer({ event: 'workspace_member_removed' })
+}
+
+export function trackWorkspaceSwitched(props: {
+  from_workspace_id?: string
+  to_workspace_id: string
+}): void {
+  pushToDataLayer({ event: 'workspace_switched', ...props })
+}
+
+export function trackWorkspaceDomainClaimed(domain: string): void {
+  pushToDataLayer({ event: 'workspace_domain_claimed', domain })
+}
+
+export function trackWorkspaceDomainJoinSuggested(domain: string): void {
+  pushToDataLayer({ event: 'workspace_domain_join_suggested', domain })
+}
+
+export function trackWorkspaceDomainJoinAccepted(domain: string): void {
+  pushToDataLayer({ event: 'workspace_domain_join_accepted', domain })
+}
+
+// ---------------------------------------------------------------------------
 // Identity management
 // ---------------------------------------------------------------------------
 

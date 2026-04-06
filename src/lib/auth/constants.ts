@@ -4,6 +4,14 @@
  */
 
 export const SESSION_COOKIE_NAME = 'beton_session'
+export const ACTIVE_WORKSPACE_COOKIE = 'beton_active_workspace'
+
+export interface WorkspaceMembership {
+  workspace_id: string
+  workspace_name: string
+  workspace_slug: string
+  role: string
+}
 
 export interface SessionUser {
   sub: string
@@ -11,5 +19,7 @@ export interface SessionUser {
   name: string
   workspace_id?: string
   workspace_name?: string
+  workspace_slug?: string
   role?: string
+  workspaces: WorkspaceMembership[]
 }

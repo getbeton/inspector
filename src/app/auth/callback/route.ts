@@ -1,18 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PUBLIC_EMAIL_DOMAINS } from '@/lib/utils/email-domains'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-
-/**
- * Public email domains — these don't indicate a company website.
- * If the user's email domain is in this list, we leave website_url null.
- */
-const PUBLIC_EMAIL_DOMAINS = new Set([
-  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com',
-  'live.com', 'yahoo.com', 'aol.com', 'icloud.com', 'me.com',
-  'protonmail.com', 'proton.me', 'zoho.com', 'mail.com',
-  'yandex.com', 'fastmail.com', 'tutanota.com',
-])
 
 /**
  * OAuth callback handler
@@ -62,8 +52,27 @@ export async function GET(request: NextRequest) {
 
       // Create workspace if doesn't exist
       if (!existingMember) {
-        // Generate slug from email
         const email = data.user.email || 'user'
+        const emailDomain = email.split('@')[1]?.toLowerCase()
+
+        // Check if the user's email domain matches a claimed workspace domain
+        if (emailDomain && !PUBLIC_EMAIL_DOMAINS.has(emailDomain)) {
+          const { data: domainMatch } = await (adminClient as any)
+            .from('workspace_domains')
+            .select('workspace_id, domain')
+            .eq('domain', emailDomain)
+            .maybeSingle()
+
+          if (domainMatch) {
+            // Redirect to domain-based join suggestion page
+            const joinUrl = new URL(`${origin}/join`)
+            joinUrl.searchParams.set('workspace', domainMatch.workspace_id)
+            joinUrl.searchParams.set('domain', domainMatch.domain)
+            return NextResponse.redirect(joinUrl.toString())
+          }
+        }
+
+        // No domain match found — create a personal workspace
         const slug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-')
         const name = data.user.user_metadata?.full_name || email.split('@')[0]
 
@@ -83,7 +92,6 @@ export async function GET(request: NextRequest) {
         }
 
         // Auto-detect company domain from email for website_url
-        const emailDomain = email.split('@')[1]?.toLowerCase()
         if (emailDomain && !PUBLIC_EMAIL_DOMAINS.has(emailDomain)) {
           await adminClient
             .from('workspaces')
