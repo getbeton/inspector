@@ -65,6 +65,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Git worktrees
+.worktrees/
+
 # Misc
 *.pem
 *.log
