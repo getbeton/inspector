@@ -4,12 +4,16 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils/cn'
 import { resetIdentity } from '@/lib/analytics'
+import type { WorkspaceMembership } from '@/lib/auth/constants'
 
 interface HeaderProps {
   user: {
     email: string
     name?: string
     workspace_name?: string
+    workspace_id?: string
+    role?: string
+    workspaces: WorkspaceMembership[]
   } | null
   className?: string
   onMenuClick?: () => void
@@ -21,6 +25,8 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false)
+  const [isSwitching, setIsSwitching] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
 
   const handleLogout = async () => {
@@ -68,6 +74,34 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
     }
   }
 
+  const handleSwitchWorkspace = async (workspaceId: string) => {
+    if (isSwitching) return
+    if (workspaceId === user?.workspace_id) {
+      setShowWorkspaceSwitcher(false)
+      return
+    }
+
+    try {
+      setIsSwitching(true)
+      const response = await fetch('/api/workspace/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ workspaceId }),
+      })
+
+      if (response.ok) {
+        window.location.reload()
+      } else {
+        console.error('Failed to switch workspace')
+        setIsSwitching(false)
+      }
+    } catch (e) {
+      console.error('Workspace switch error:', e)
+      setIsSwitching(false)
+    }
+  }
+
   const initials = user
     ? (user.name
       ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -94,11 +128,95 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
             <path d="M9 3v18" />
           </svg>
         </button>
-        <div>
-          <p className="text-sm text-muted-foreground">
-            {user ? (user.workspace_name || 'Workspace') : 'Beton Inspector'}
-          </p>
-        </div>
+
+        {/* Workspace switcher */}
+        {user ? (
+          <div className="relative">
+            <button
+              onClick={() => setShowWorkspaceSwitcher(!showWorkspaceSwitcher)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted transition-colors text-sm text-muted-foreground hover:text-foreground"
+            >
+              <span>{user.workspace_name || 'Workspace'}</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showWorkspaceSwitcher && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowWorkspaceSwitcher(false)}
+                />
+                <div className="absolute left-0 mt-2 w-72 bg-card border border-border rounded-md shadow-lg z-20">
+                  <div className="px-3 py-2 border-b border-border">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Workspaces</p>
+                  </div>
+                  <div className="py-1 max-h-64 overflow-y-auto">
+                    {user.workspaces.map((ws) => (
+                      <button
+                        key={ws.workspace_id}
+                        onClick={() => handleSwitchWorkspace(ws.workspace_id)}
+                        disabled={isSwitching}
+                        className={cn(
+                          'w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors',
+                          ws.workspace_id === user.workspace_id
+                            ? 'bg-primary/5 text-foreground'
+                            : 'text-foreground hover:bg-muted',
+                          isSwitching && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded bg-primary/10 text-primary flex items-center justify-center text-xs font-medium shrink-0">
+                            {ws.workspace_name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-sm truncate">{ws.workspace_name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                            ws.role === 'owner'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                              : ws.role === 'admin'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                          )}>
+                            {ws.role}
+                          </span>
+                          {ws.workspace_id === user.workspace_id && (
+                            <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-border py-1">
+                    <button
+                      onClick={() => {
+                        setShowWorkspaceSwitcher(false)
+                        router.push('/settings/workspace')
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create new workspace
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Beton Inspector
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Right side */}

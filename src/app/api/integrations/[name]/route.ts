@@ -5,6 +5,7 @@ import type { IntegrationConfig, IntegrationConfigInsert, Json } from '@/lib/sup
 import { encryptCredentials } from '@/lib/crypto/encryption'
 import { SUPPORTED_INTEGRATIONS } from '@/lib/integrations/supported'
 import { isPrivateHost } from '@/lib/utils/ssrf'
+import { requireRole, ForbiddenError } from '@/lib/auth/permissions'
 
 /**
  * GET /api/integrations/[name]
@@ -143,6 +144,9 @@ export async function POST(
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
+    // RBAC: only owner and admin can manage integrations
+    requireRole(membership.role, ['owner', 'admin'])
+
     const body = await request.json()
     const { api_key, project_id, region, host, ...otherConfig } = body
 
@@ -215,6 +219,9 @@ export async function POST(
       message: 'Configuration saved. Run /api/integrations/[name]/test to validate.'
     })
   } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     console.error('Error in POST /api/integrations/[name]:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -251,6 +258,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
 
+    // RBAC: only owner and admin can manage integrations
+    requireRole(membership.role, ['owner', 'admin'])
+
     // Delete config
     const { error } = await supabase
       .from('integration_configs')
@@ -265,6 +275,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     console.error('Error in DELETE /api/integrations/[name]:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

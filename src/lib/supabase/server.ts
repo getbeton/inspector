@@ -108,14 +108,15 @@ export async function getSession() {
 
 type WorkspaceMemberWithWorkspace = {
   workspace_id: string
+  role: string
   workspaces: { id: string; name: string; slug: string } | null
 }
 
 /**
- * Get user's workspace ID
- * Fetches from workspace_members table based on user ID
+ * Get user's active workspace
+ * Resolution: explicit workspaceId param → active workspace cookie → first membership
  */
-export async function getUserWorkspace() {
+export async function getUserWorkspace(workspaceId?: string) {
   const supabase = await createClient()
   const user = await getUser()
 
@@ -123,21 +124,45 @@ export async function getUserWorkspace() {
     return null
   }
 
-  const { data: rawData, error } = await supabase
-    .from('workspace_members')
-    .select('workspace_id, workspaces(id, name, slug)')
-    .eq('user_id', user.id)
-    .single()
+  // If specific workspace requested, fetch that one
+  if (workspaceId) {
+    const { data: rawData, error } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, role, workspaces(id, name, slug)')
+      .eq('user_id', user.id)
+      .eq('workspace_id', workspaceId)
+      .single()
 
-  const data = rawData as WorkspaceMemberWithWorkspace | null
+    const data = rawData as WorkspaceMemberWithWorkspace | null
+    if (error || !data) return null
 
-  if (error || !data) {
-    return null
+    return {
+      workspaceId: data.workspace_id,
+      workspace: data.workspaces,
+      role: data.role,
+    }
   }
 
+  // Otherwise resolve from cookie → first membership
+  const { cookies } = await import('next/headers')
+  const cookieStore = await cookies()
+  const activeId = cookieStore.get('beton_active_workspace')?.value
+
+  const { data: rawRows, error } = await supabase
+    .from('workspace_members')
+    .select('workspace_id, role, workspaces(id, name, slug)')
+    .eq('user_id', user.id)
+
+  const rows = (rawRows as WorkspaceMemberWithWorkspace[] | null) ?? []
+  if (error || rows.length === 0) return null
+
+  // Prefer active workspace from cookie, fall back to first
+  const match = rows.find(r => r.workspace_id === activeId) ?? rows[0]
+
   return {
-    workspaceId: data.workspace_id,
-    workspace: data.workspaces
+    workspaceId: match.workspace_id,
+    workspace: match.workspaces,
+    role: match.role,
   }
 }
 
@@ -170,6 +195,7 @@ export async function requireWorkspace() {
   return {
     user,
     workspaceId: workspaceData.workspaceId,
-    workspace: workspaceData.workspace
+    workspace: workspaceData.workspace,
+    role: workspaceData.role,
   }
 }
