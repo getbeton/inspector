@@ -34,7 +34,7 @@ Additionally, a TUI enables:
 
 ### F1: Dashboard Overview (default view)
 
-The landing screen when launching `inspector` with no arguments.
+The landing screen when launching `beton` with no arguments.
 
 **Layout:**
 ```
@@ -45,8 +45,8 @@ The landing screen when launching `inspector` with no arguments.
  │ Active: 14 │  │ Total: 342 │  │ PostHog    [*] │  │ Pro Plan │
  │ Avg Lift:  │  │ Healthy:   │  │ Attio      [*] │  │ MTU: 847 │
  │   2.4x     │  │   281      │  │ Firecrawl  [ ] │  │ /1000    │
- │ Leads/mo:  │  │ At Risk:   │  └────────────────┘  └──────────┘
- │   47       │  │   61       │
+ │ Leads/mo:  │  │ At Risk:   │  │ MCP sess:  2   │  └──────────┘
+ │   47       │  │   61       │  └────────────────┘
  │ Est ARR:   │  │ Churned: 0 │
  │   $284K    │  │            │
  └────────────┘  └────────────┘
@@ -62,17 +62,19 @@ The landing screen when launching `inspector` with no arguments.
   api-key-created          1.7x   71%     5      draft
   ...
  ──────────────────────────────────────────────────────────────────
- [s]ignals  [a]ccounts  [i]ntegrations  [m]emory  se[t]tings  [q]uit
+ [s]ignals  [a]ccounts  [i]ntegrations  [m]emory  mc[p]  [k]eys  se[t]tings  [q]uit
 ```
 
 **Data source:** `/api/signals`, `/api/billing/status`, dashboard metrics endpoint
 
 **Interactions:**
 - `s` / `1` - Navigate to Signals list
-- `a` / `2` - Navigate to Accounts/Identities list
+- `a` / `2` - Navigate to Accounts list
 - `i` / `3` - Navigate to Integrations
 - `m` / `4` - Navigate to Memory/Exploration logs
-- `t` / `5` - Navigate to Settings
+- `p` / `5` - Navigate to MCP sessions
+- `k` / `6` - Navigate to API keys
+- `t` / `7` - Navigate to Settings
 - `r` - Refresh all data
 - `q` / `Ctrl+C` - Quit
 - `?` - Show help overlay
@@ -102,7 +104,7 @@ The landing screen when launching `inspector` with no arguments.
 ```
 
 **Filtering (activated by `f`):**
-- Status: all / active / draft
+- Status: all / active / inactive / draft
 - Source: all / auto / custom
 - Min lift threshold (number input)
 - Min confidence threshold (number input)
@@ -146,10 +148,73 @@ The landing screen when launching `inspector` with no arguments.
 
 ---
 
-### F3: Identities / Accounts View
+### F3: Accounts & Identities
+
+The codebase distinguishes between **accounts** (companies with ARR, plan, health scores) and **identities** (individual users/contacts within an account). The TUI exposes both via sub-commands: `beton accounts` and `beton identities`.
+
+#### Accounts List View
 
 ```
- Identities (342 total)                      [/]search [f]ilter
+ Accounts (342 total)                        [/]search [f]ilter
+ ──────────────────────────────────────────────────────────────────
+  Account           ARR      Health  Expansion  Churn   Grade  Status
+  ───────────────── ──────── ─────── ────────── ─────── ────── ──────
+  Acme Corp          $48K      92       78        12     M100  active
+  Widgets Inc        $24K      87       65        18     M100  active
+  BigCo              $96K      76       42        35     M75   active
+  Startup XYZ         $6K      71       81        22     M75   trial
+  Legacy Ltd         $12K      34       15        72     M25   active
+  ...
+
+ ──────────────────────────────────────────────────────────────────
+ Page 1/12  [n]ext page  [p]rev page  [enter] detail  [Esc] back
+```
+
+**Stats bar at top:**
+```
+ Total: 342  |  Active: 281  |  Trial: 18  |  Churned: 43
+```
+
+**Filtering (activated by `f`):**
+- Status: all / active / trial / churned
+- Min health score threshold
+- Text search across name, domain
+
+**Sorting:** `o` to cycle: Health / Expansion / Churn Risk / ARR / Name
+
+#### Account Detail View
+
+```
+ Account: Acme Corp                                    [Esc] back
+ ──────────────────────────────────────────────────────────────────
+ Domain: acme.co    ARR: $48K    Plan: Pro    Status: active
+
+ SCORES                                        Grade: M100
+ ┌──────────────┬──────────────┬──────────────┐
+ │ Health       │ Expansion    │ Churn Risk   │
+ │     92       │     78       │     12       │
+ │ ████████████ │ █████████░░░ │ ██░░░░░░░░░░ │
+ └──────────────┴──────────────┴──────────────┘
+
+ CONTRIBUTING SIGNALS
+  Signal                   Category      Weight   Recency
+  ──────────────────────── ──────────── ──────── ─────────
+  heavy-api-usage          expansion     +12      2d ago
+  multi-seat-expansion     expansion      +8      5d ago
+  dashboard-power-user     health        +15      1d ago
+  invite-sent              expansion      +6      3d ago
+
+ CONTACTS (4)
+  jane@acme.co (Admin)    bob@acme.co (Developer)
+  sarah@acme.co (Owner)   dev@acme.co (Viewer)
+
+ [r]efresh  [i]dentities (full list)
+```
+
+#### Identities List View
+
+```
+ Identities (847 total)                      [/]search [f]ilter
  ──────────────────────────────────────────────────────────────────
   Identity              Company          Score  Events  Signals  Status
   ───────────────────── ──────────────── ────── ─────── ──────── ──────
@@ -161,7 +226,7 @@ The landing screen when launching `inspector` with no arguments.
   ...
 
  ──────────────────────────────────────────────────────────────────
- Sort: [S]core  [E]vents  [L]ast Seen         [Esc] back
+ Page 1/28  [n]ext  [p]rev  Sort: [S]core [E]vents [L]ast Seen  [Esc] back
 ```
 
 **Filtering (activated by `f`):**
@@ -169,10 +234,7 @@ The landing screen when launching `inspector` with no arguments.
 - Min score threshold
 - Text search across name, email, company
 
-**Stats bar at top:**
-```
- Total: 342  |  Active: 281  |  New (7d): 18  |  Churned: 43
-```
+**Pagination:** All list views use cursor-based pagination. 30 rows per page by default, configurable via `--page-size` in CLI mode or `[display] page_size` in config.
 
 ---
 
@@ -267,25 +329,25 @@ For scripting and pipelines, every TUI view has a CLI equivalent:
 
 ```bash
 # List signals as JSON
-inspector signals --json
+beton signals --json
 
 # Get single signal detail
-inspector signals show heavy-api-usage --json
+beton signals show heavy-api-usage --json
 
 # Filter signals
-inspector signals --status=active --min-lift=2.0 --json
+beton signals --status=active --min-lift=2.0 --json
 
 # List identities
-inspector identities --status=active --min-score=80 --json
+beton identities --status=active --min-score=80 --json
 
 # Check integration status
-inspector integrations --json
+beton integrations --json
 
 # Dashboard summary
-inspector dashboard --json
+beton dashboard --json
 
 # Create a signal
-inspector signals create \
+beton signals create \
   --name "high-api-usage" \
   --event "api_request" \
   --operator ">=" \
@@ -293,26 +355,45 @@ inspector signals create \
   --window 7
 
 # Export signals to CSV
-inspector signals export --output signals.csv
+beton signals export --output signals.csv
 
 # Preview signal matches
-inspector signals preview \
+beton signals preview \
   --event "api_request" \
   --operator ">=" \
   --value 50 \
   --window 7
 
 # Trigger signal detection sync
-inspector sync signals
+beton sync signals
 
 # Test integration connection
-inspector integrations test posthog
+beton integrations test posthog
 
 # Configure integration
-inspector integrations configure posthog \
+beton integrations configure posthog \
   --api-key "phx_..." \
   --project-id "12345"
+
+# Manage API keys
+beton keys list
+beton keys create --name "ci-pipeline"
+beton keys revoke <key-id>
+
+# MCP session status
+beton mcp sessions --json
+beton mcp logs --session <session-id>
 ```
+
+**JSON output contract:**
+All `--json` output follows a consistent envelope:
+```json
+{
+  "data": [...],
+  "meta": { "total": 342, "page": 1, "page_size": 30, "has_next": true }
+}
+```
+Single-resource commands (e.g., `beton signals show <id> --json`) omit `meta` and return `"data": {...}` directly. Error responses use `{"error": {"code": 3, "message": "..."}}` matching the exit code.
 
 **Exit codes:**
 - `0` - Success
@@ -324,18 +405,88 @@ inspector integrations configure posthog \
 **Piping support:**
 ```bash
 # Find high-lift active signals and post to Slack
-inspector signals --json --status=active --min-lift=2.5 \
+beton signals --json --status=active --min-lift=2.5 \
   | jq '.[] | "\(.name): \(.lift)x lift, \(.leads_per_month) leads/mo"' \
   | slack-notify --channel=#revops
 
 # Export churned identities for outreach
-inspector identities --json --status=churned --min-score=50 \
+beton identities --json --status=churned --min-score=50 \
   | jq -r '.[] | [.email, .company, .score] | @csv' \
   > outreach-list.csv
 
 # Health check in CI
-inspector integrations test posthog || echo "PostHog connection failed"
+beton integrations test posthog || echo "PostHog connection failed"
+
+# Per-workspace override without switching default
+beton --workspace=other-corp signals --json
 ```
+
+---
+
+### F8: MCP Sessions
+
+View and monitor Model Context Protocol sessions from AI tools (e.g., Claude Code) connected to Inspector.
+
+```
+ MCP Sessions                                          [Esc] back
+ ──────────────────────────────────────────────────────────────────
+
+ ACTIVE SESSIONS
+  Client App       Session ID     Status    Last Activity   Requests
+  ──────────────── ────────────── ───────── ─────────────── ────────
+  Claude Code      sess_mcp_a1b2  active    2m ago              47
+  Custom Agent     sess_mcp_c3d4  active    15m ago             12
+
+ RECENT SESSIONS
+  Client App       Session ID     Status    Duration        Requests
+  ──────────────── ────────────── ───────── ─────────────── ────────
+  Claude Code      sess_mcp_e5f6  closed    1h 23m              89
+  Claude Code      sess_mcp_g7h8  closed    45m                 34
+
+ ──────────────────────────────────────────────────────────────────
+ [enter] view logs  [r]efresh  Page 1/3  [n]ext  [p]rev
+```
+
+**Session Log Detail:**
+```
+ Session: sess_mcp_a1b2 (Claude Code)                  [Esc] back
+ ──────────────────────────────────────────────────────────────────
+ Status: active    Started: 2026-04-06 09:15    Requests: 47
+
+ RECENT REQUESTS
+  Time       Tool                    Status  Duration
+  ────────── ─────────────────────── ─────── ────────
+  09:42:15   list_signals            200     120ms
+  09:41:03   get_account_scores      200     85ms
+  09:40:22   get_dashboard_metrics   200     210ms
+  09:39:15   list_accounts           200     150ms
+  09:38:00   get_workspace           200     45ms
+  ...
+
+ [enter] view request/response detail  [r]efresh
+```
+
+---
+
+### F9: API Key Management
+
+Create and manage API keys used for TUI authentication, CI pipelines, and MCP connections.
+
+```
+ API Keys                                              [Esc] back
+ ──────────────────────────────────────────────────────────────────
+
+  Name             Key Prefix       Created          Last Used
+  ──────────────── ──────────────── ──────────────── ──────────────
+  ci-pipeline      beton_a1b2****   2026-03-15       2h ago
+  local-dev        beton_c3d4****   2026-03-20       5m ago
+  mcp-claude       beton_e5f6****   2026-04-01       12m ago
+
+ ──────────────────────────────────────────────────────────────────
+ [c]reate new key  [d]elete key  [Esc] back
+```
+
+**Create flow:** Prompts for key name, generates key, displays full key once (never shown again), confirms storage.
 
 ---
 
@@ -343,13 +494,13 @@ inspector integrations test posthog || echo "PostHog connection failed"
 
 ### Config File
 
-`~/.inspector/config.toml`:
+`~/.beton/config.toml`:
 ```toml
 [auth]
 # API key for headless/CI usage
-api_key = "insp_..."
+api_key = "beton_..."
 
-# Or Supabase session token (auto-managed by `inspector login`)
+# Or Supabase session token (auto-managed by `beton login`)
 # session_token = "..."
 
 [workspace]
@@ -367,25 +518,29 @@ auto_refresh = 30
 [api]
 # Inspector API base URL (for self-hosted)
 base_url = "https://app.getbeton.com"
+
+[global]
+# Override workspace per-command with --workspace flag
+# e.g., beton --workspace=other-corp signals
 ```
 
 ### Login Flow
 
 ```bash
 # Interactive login (opens browser for OAuth)
-inspector login
+beton login
 
 # API key auth (for CI/headless)
-inspector login --api-key "insp_..."
+beton login --api-key "beton_..."
 
 # Check auth status
-inspector whoami
+beton whoami
 
 # Switch workspace
-inspector workspace use acme-corp
+beton workspace use acme-corp
 
 # Logout
-inspector logout
+beton logout
 ```
 
 ---
@@ -397,12 +552,14 @@ inspector logout
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
 | Runtime | Node.js (same as Inspector backend) | Share types, API clients, and business logic with existing codebase |
-| TUI framework | [Ink](https://github.com/vadimdemedes/ink) (React for CLI) | Familiar React paradigm, reuse component patterns from web UI |
+| TUI framework | [Ink 4+](https://github.com/vadimdemedes/ink) (React for CLI) | Familiar React paradigm, reuse component patterns from web UI |
 | CLI parsing | Commander.js or yargs | Mature, well-documented, supports subcommands |
 | Terminal rendering | Ink built-ins + ink-table, ink-spinner | Rich terminal UI components |
-| HTTP client | Existing fetch wrappers from `lib/api/` | Reuse API hooks logic |
+| HTTP client | Existing `APIClient` from `lib/api/client.ts` | Reuse typed fetch wrappers |
 | Config | cosmiconfig + TOML | Standard config file resolution |
-| Keychain | keytar | Secure credential storage |
+| Credentials | Encrypted file at `~/.beton/credentials` | Portable, no native dependencies (keytar is deprecated) |
+
+> **Note:** Ink 4+ is ESM-only. The CLI entry point must use ESM module resolution. Since the existing Next.js project supports ESM, shared types can be imported directly. The CLI build pipeline (e.g., `tsup` or `esbuild`) should produce an ESM bundle with a `#!/usr/bin/env node` shebang.
 
 ### Project Structure
 
@@ -413,9 +570,12 @@ src/
 │   ├── commands/
 │   │   ├── dashboard.ts      # Default TUI view
 │   │   ├── signals.ts        # Signals list/detail/create/export
+│   │   ├── accounts.ts       # Accounts list/detail with scoring
 │   │   ├── identities.ts     # Identities list
 │   │   ├── integrations.ts   # Integration management
 │   │   ├── memory.ts         # Exploration logs
+│   │   ├── mcp.ts            # MCP session viewer
+│   │   ├── keys.ts           # API key management
 │   │   ├── sync.ts           # Trigger sync operations
 │   │   ├── login.ts          # Authentication
 │   │   └── workspace.ts      # Workspace switching
@@ -423,7 +583,11 @@ src/
 │   │   ├── Dashboard.tsx      # Ink component: dashboard layout
 │   │   ├── SignalsList.tsx    # Ink component: signals table
 │   │   ├── SignalDetail.tsx   # Ink component: signal detail view
-│   │   ├── IdentitiesList.tsx # Ink component: identities table
+│   │   ├── AccountsList.tsx    # Ink component: accounts table
+│   │   ├── AccountDetail.tsx   # Ink component: account scoring detail
+│   │   ├── IdentitiesList.tsx  # Ink component: identities table
+│   │   ├── McpSessions.tsx     # Ink component: MCP session viewer
+│   │   ├── ApiKeys.tsx         # Ink component: API key management
 │   │   ├── IntegrationCard.tsx
 │   │   ├── FilterBar.tsx
 │   │   ├── MetricCard.tsx
@@ -484,34 +648,38 @@ CLI args / keyboard input
 ## Milestones
 
 ### M1: Foundation (Week 1-2)
-- CLI skeleton with commander.js
-- Auth flow (`inspector login`, `inspector whoami`)
-- Config file management
-- API client with auth header injection
-- `--json` output mode for all commands
-- `inspector dashboard` (non-interactive, prints summary)
+- CLI skeleton with commander.js, ESM build pipeline (tsup/esbuild)
+- Auth flow (`beton login`, `beton whoami`, encrypted credential storage)
+- Config file management (`~/.beton/config.toml`)
+- API client with auth header injection and `--workspace` global flag
+- `--json` output mode with consistent envelope for all commands
+- `beton dashboard` (non-interactive, prints summary)
 
 ### M2: Read-Only TUI (Week 3-4)
 - Ink-based interactive dashboard
-- Signals list with filtering/sorting
-- Signal detail view with metrics and charts
+- Signals list with filtering/sorting and pagination
+- Signal detail view with metrics and ASCII charts
+- Accounts list with health/expansion/churn scores and concrete grades
+- Account detail view with score breakdown and contributing signals
 - Identities list with filtering
 - Keyboard navigation system
 - Auto-refresh
 
-### M3: Write Operations (Week 5-6)
+### M3: Write Operations & Management (Week 5-6)
 - Signal creation wizard (interactive)
 - Integration configure/test/disconnect
 - Signal activate/deactivate/delete
+- API key management (create, list, revoke)
 - Export to CSV
 - Trigger sync operations
 
 ### M4: Advanced Features (Week 7-8)
+- MCP session viewer with request logs
 - Memory/exploration logs viewer
 - Offline cache with stale data indicators
-- Watch mode (`inspector watch signals` -- live updating view)
+- Watch mode (`beton watch signals` -- live updating view)
 - Shell completions (bash, zsh, fish)
-- `inspector` as an npm global package / standalone binary (pkg)
+- `beton` as an npm global package / standalone binary (via `bun compile` or `pkg`)
 
 ---
 
@@ -534,7 +702,7 @@ CLI args / keyboard input
 
 ## Open Questions
 
-1. **Package distribution**: npm global install vs. standalone binary (via `pkg` or `bun compile`)? Standalone is better for non-Node environments but adds build complexity.
+1. **Package distribution**: npm global install vs. standalone binary (via `bun compile` or `pkg`)? Standalone is better for non-Node environments but adds build complexity.
 2. **API key scoping**: Should TUI API keys have different permission levels (read-only vs. full access)?
-3. **Workspace switching**: Support multiple workspaces in a single session, or require explicit switch?
-4. **Notification support**: Should `inspector watch` support desktop notifications (via `node-notifier`) for critical signals?
+3. **Notification support**: Should `beton watch` support desktop notifications (via `node-notifier`) for critical signals?
+4. **MCP tool invocation from TUI**: Should the TUI allow directly invoking MCP tools (e.g., `beton mcp call list_signals`), effectively making it an MCP client as well as the web app being an MCP server?
