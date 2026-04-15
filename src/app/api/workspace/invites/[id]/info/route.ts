@@ -1,5 +1,5 @@
 /**
- * GET /api/workspace/invites/[token]/info  — Public invite info (no auth required)
+ * GET /api/workspace/invites/[id]/info  — Public invite info (no auth required)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,14 +13,17 @@ import { createAdminClient } from '@/lib/supabase/admin'
  *
  * NO authentication required.
  *
+ * The route param is named `id` to match the sibling [id] dynamic segment,
+ * but the value is an invite token (not a UUID).
+ *
  * Returns: { workspaceName, inviterEmail, role, expiresAt }
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { token } = await params
+    const { id: token } = await params
 
     if (!token) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 })
