@@ -20,9 +20,9 @@ export async function GET() {
 
     const { data: memberships, error } = await (adminClient as any)
       .from('workspace_members')
-      .select('workspace_id, role, created_at, workspaces(id, name, slug)')
+      .select('workspace_id, role, joined_at, workspaces(id, name, slug)')
       .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
+      .order('joined_at', { ascending: true })
 
     if (error) {
       console.error('[Workspace List] Failed to fetch workspaces:', error)
@@ -36,7 +36,7 @@ export async function GET() {
         workspaceName: ws?.name || '',
         workspaceSlug: ws?.slug || '',
         role: m.role,
-        joinedAt: m.created_at,
+        joinedAt: m.joined_at,
       }
     })
 

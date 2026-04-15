@@ -30,7 +30,6 @@ interface Invite {
 interface Domain {
   id: string
   domain: string
-  verified: boolean
   created_at: string
 }
 
@@ -593,18 +592,7 @@ function DomainsSection() {
         <div className="space-y-2">
           {domains.map((d) => (
             <div key={d.id} className="flex items-center justify-between py-2 px-3 border border-border rounded-md">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-mono">{d.domain}</span>
-                {d.verified ? (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 font-medium">
-                    verified
-                  </span>
-                ) : (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 font-medium">
-                    unverified
-                  </span>
-                )}
-              </div>
+              <span className="text-sm font-mono">{d.domain}</span>
               <span className="text-xs text-muted-foreground">
                 Added {new Date(d.created_at).toLocaleDateString()}
               </span>

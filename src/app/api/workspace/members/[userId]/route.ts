@@ -68,7 +68,7 @@ export async function PATCH(
       .update({ role } as never)
       .eq('workspace_id', workspaceId)
       .eq('user_id', targetUserId)
-      .select('user_id, role, created_at')
+      .select('user_id, role, joined_at')
       .single()
 
     if (updateError) {
@@ -80,7 +80,7 @@ export async function PATCH(
       member: {
         userId: updated.user_id,
         role: updated.role,
-        joinedAt: updated.created_at,
+        joinedAt: updated.joined_at,
       },
     })
   } catch (err) {
