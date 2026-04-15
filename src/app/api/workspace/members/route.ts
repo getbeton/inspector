@@ -17,7 +17,7 @@ export async function GET() {
     // Fetch workspace members
     const { data: members, error } = await (adminClient as any)
       .from('workspace_members')
-      .select('user_id, role, created_at')
+      .select('user_id, role, joined_at')
       .eq('workspace_id', workspaceId)
 
     if (error) {
@@ -57,7 +57,7 @@ export async function GET() {
         email: userInfo?.email || '',
         name: userInfo?.name || '',
         role: m.role,
-        joinedAt: m.created_at,
+        joinedAt: m.joined_at,
       }
     })
 

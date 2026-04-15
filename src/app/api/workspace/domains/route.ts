@@ -17,7 +17,7 @@ export async function GET() {
 
     const { data: domains, error } = await (adminClient as any)
       .from('workspace_domains')
-      .select('id, domain, verified, created_at')
+      .select('id, domain, created_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: true })
 
@@ -50,7 +50,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { workspaceId, role } = await requireWorkspace()
+    const { user, workspaceId, role } = await requireWorkspace()
     requireRole(role, ['owner'])
     const adminClient = createAdminClient()
 
@@ -114,8 +114,9 @@ export async function POST(request: NextRequest) {
       .insert({
         workspace_id: workspaceId,
         domain: normalizedDomain,
+        added_by: user.id,
       } as never)
-      .select('id, domain, verified, created_at')
+      .select('id, domain, created_at')
       .single()
 
     if (insertError) {
