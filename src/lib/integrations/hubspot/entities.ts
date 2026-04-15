@@ -438,7 +438,7 @@ export async function batchCreateChain(
       // Associate deal -> company
       if (companyId) {
         try {
-          await createAssociation(client, 'deals', companyId, 'companies', dealResult.recordId)
+          await createAssociation(client, 'deals', dealResult.recordId, 'companies', companyId)
         } catch (assocErr) {
           log.warn('Failed to associate deal to company:', assocErr)
         }
@@ -447,7 +447,7 @@ export async function batchCreateChain(
       // Associate deal -> contact
       if (contactId) {
         try {
-          await createAssociation(client, 'deals', contactId, 'contacts', dealResult.recordId)
+          await createAssociation(client, 'deals', dealResult.recordId, 'contacts', contactId)
         } catch (assocErr) {
           log.warn('Failed to associate deal to contact:', assocErr)
         }
