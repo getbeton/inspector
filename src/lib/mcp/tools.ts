@@ -363,8 +363,8 @@ export function registerAllTools(server: McpServer, workspaceId: string): void {
     {},
     async () => {
       try {
-        const secret = process.env.AGENT_API_SECRET
-        if (!secret) return err('Agent API secret not configured. Warehouse tools require AGENT_API_SECRET.')
+        const secret = process.env.AGENT_SECRET
+        if (!secret) return err('Agent API secret not configured. Warehouse tools require AGENT_SECRET.')
 
         const res = await fetch(`${agentBaseUrl}/api/agent/list-tables`, {
           headers: {
@@ -385,8 +385,8 @@ export function registerAllTools(server: McpServer, workspaceId: string): void {
     { table_name: z.string().describe('The table name to inspect') },
     async ({ table_name }) => {
       try {
-        const secret = process.env.AGENT_API_SECRET
-        if (!secret) return err('Agent API secret not configured. Warehouse tools require AGENT_API_SECRET.')
+        const secret = process.env.AGENT_SECRET
+        if (!secret) return err('Agent API secret not configured. Warehouse tools require AGENT_SECRET.')
 
         const url = new URL(`${agentBaseUrl}/api/agent/list-columns`)
         url.searchParams.set('table_id', table_name)
