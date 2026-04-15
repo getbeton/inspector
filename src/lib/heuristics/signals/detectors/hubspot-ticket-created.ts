@@ -6,7 +6,7 @@
  */
 
 import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
-import { signalExists, createDetectedSignal } from '../helpers'
+import { signalExists, createDetectedSignal, getHubSpotIdsForAccount } from '../helpers'
 
 export const hubspotTicketCreatedDetector: SignalDetectorDefinition = {
   meta: {
@@ -34,13 +34,25 @@ export const hubspotTicketCreatedDetector: SignalDetectorDefinition = {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - timeWindowDays)
 
-    // Count tickets created recently
+    // Get account domain to scope query to this account's HubSpot records
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('domain')
+      .eq('id', accountId)
+      .single()
+
+    if (!account?.domain) return null
+
+    const ticketIds = await getHubSpotIdsForAccount(supabase, workspaceId, account.domain, 'tickets')
+    if (ticketIds.length === 0) return null
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: tickets, count } = await (supabase as any)
       .from('hubspot_records')
       .select('hubspot_id, properties', { count: 'exact' })
       .eq('workspace_id', workspaceId)
       .eq('object_type', 'tickets')
+      .in('hubspot_id', ticketIds)
       .gte('hubspot_created_at', cutoffDate.toISOString())
       .limit(5)
 

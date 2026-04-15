@@ -6,7 +6,7 @@
  */
 
 import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
-import { signalExists, createDetectedSignal } from '../helpers'
+import { signalExists, createDetectedSignal, getHubSpotIdsForAccount } from '../helpers'
 
 /** HubSpot lifecycle stages in order of progression */
 const LIFECYCLE_PROGRESSION = [
@@ -43,13 +43,25 @@ export const hubspotLifecycleChangeDetector: SignalDetectorDefinition = {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - timeWindowDays)
 
-    // Query recently updated contacts
+    // Get account domain to scope query to this account's HubSpot records
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('domain')
+      .eq('id', accountId)
+      .single()
+
+    if (!account?.domain) return null
+
+    const contactIds = await getHubSpotIdsForAccount(supabase, workspaceId, account.domain, 'contacts')
+    if (contactIds.length === 0) return null
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: contacts } = await (supabase as any)
       .from('hubspot_records')
       .select('hubspot_id, properties, hubspot_updated_at')
       .eq('workspace_id', workspaceId)
       .eq('object_type', 'contacts')
+      .in('hubspot_id', contactIds)
       .gte('hubspot_updated_at', cutoffDate.toISOString())
       .order('hubspot_updated_at', { ascending: false })
       .limit(10)

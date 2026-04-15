@@ -5,7 +5,7 @@
  */
 
 import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
-import { signalExists, createDetectedSignal } from '../helpers'
+import { signalExists, createDetectedSignal, getHubSpotIdsForAccount } from '../helpers'
 
 export const hubspotDealStageChangeDetector: SignalDetectorDefinition = {
   meta: {
@@ -42,13 +42,17 @@ export const hubspotDealStageChangeDetector: SignalDetectorDefinition = {
 
     if (!account?.domain) return null
 
-    // Search for HubSpot deal records that were recently updated
+    // Find deals associated with this account's HubSpot company
+    const dealIds = await getHubSpotIdsForAccount(supabase, workspaceId, account.domain, 'deals')
+    if (dealIds.length === 0) return null
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: deals } = await (supabase as any)
       .from('hubspot_records')
       .select('hubspot_id, properties, hubspot_updated_at')
       .eq('workspace_id', workspaceId)
       .eq('object_type', 'deals')
+      .in('hubspot_id', dealIds)
       .gte('hubspot_updated_at', cutoffDate.toISOString())
       .limit(10)
 

@@ -202,3 +202,61 @@ export function daysBetween(date1: Date | string, date2: Date | string = new Dat
   const d2 = typeof date2 === 'string' ? new Date(date2) : date2
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
 }
+
+/**
+ * Find HubSpot record IDs that belong to a specific Beton account.
+ *
+ * Matches by finding HubSpot company records whose `domain` property matches
+ * the account domain, then finding associated records of the target object type
+ * via the `hubspot_associations` table (checking both directions).
+ *
+ * Returns an array of HubSpot record IDs for the given object type,
+ * or an empty array if no matching records are found.
+ */
+export async function getHubSpotIdsForAccount(
+  supabase: AnySupabaseClient,
+  workspaceId: string,
+  accountDomain: string,
+  objectType: string
+): Promise<string[]> {
+  // Step 1: Find HubSpot companies matching the account domain
+  // Uses JSONB containment (@>) which is supported by the GIN index
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: companies } = await (supabase as any)
+    .from('hubspot_records')
+    .select('hubspot_id')
+    .eq('workspace_id', workspaceId)
+    .eq('object_type', 'companies')
+    .contains('properties', { domain: accountDomain.toLowerCase() })
+    .limit(10)
+
+  if (!companies || companies.length === 0) return []
+  const companyIds: string[] = companies.map((c: { hubspot_id: string }) => c.hubspot_id)
+
+  // For companies, return directly
+  if (objectType === 'companies') return companyIds
+
+  // Step 2: Find associated records (check both association directions in parallel)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [fwd, rev] = await Promise.all([
+    (supabase as any)
+      .from('hubspot_associations')
+      .select('from_hubspot_id')
+      .eq('from_object_type', objectType)
+      .eq('to_object_type', 'companies')
+      .in('to_hubspot_id', companyIds)
+      .limit(100),
+    (supabase as any)
+      .from('hubspot_associations')
+      .select('to_hubspot_id')
+      .eq('from_object_type', 'companies')
+      .eq('to_object_type', objectType)
+      .in('from_hubspot_id', companyIds)
+      .limit(100),
+  ])
+
+  const ids = new Set<string>()
+  for (const a of fwd.data || []) ids.add(a.from_hubspot_id)
+  for (const a of rev.data || []) ids.add(a.to_hubspot_id)
+  return [...ids]
+}

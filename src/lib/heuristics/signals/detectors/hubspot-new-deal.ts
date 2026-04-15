@@ -5,7 +5,7 @@
  */
 
 import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
-import { signalExists, createDetectedSignal } from '../helpers'
+import { signalExists, createDetectedSignal, getHubSpotIdsForAccount } from '../helpers'
 
 export const hubspotNewDealDetector: SignalDetectorDefinition = {
   meta: {
@@ -31,13 +31,25 @@ export const hubspotNewDealDetector: SignalDetectorDefinition = {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - timeWindowDays)
 
-    // Query deals created recently
+    // Get account domain to scope query to this account's HubSpot records
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('domain')
+      .eq('id', accountId)
+      .single()
+
+    if (!account?.domain) return null
+
+    const dealIds = await getHubSpotIdsForAccount(supabase, workspaceId, account.domain, 'deals')
+    if (dealIds.length === 0) return null
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: deals } = await (supabase as any)
       .from('hubspot_records')
       .select('hubspot_id, properties, hubspot_created_at')
       .eq('workspace_id', workspaceId)
       .eq('object_type', 'deals')
+      .in('hubspot_id', dealIds)
       .gte('hubspot_created_at', cutoffDate.toISOString())
       .order('hubspot_created_at', { ascending: false })
       .limit(5)

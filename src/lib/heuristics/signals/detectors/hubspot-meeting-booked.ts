@@ -6,7 +6,7 @@
  */
 
 import type { SignalDetectorDefinition, DetectorContext, DetectedSignal } from '../types'
-import { signalExists, createDetectedSignal } from '../helpers'
+import { signalExists, createDetectedSignal, getHubSpotIdsForAccount } from '../helpers'
 
 export const hubspotMeetingBookedDetector: SignalDetectorDefinition = {
   meta: {
@@ -32,14 +32,26 @@ export const hubspotMeetingBookedDetector: SignalDetectorDefinition = {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - timeWindowDays)
 
-    // Query recently created meetings from HubSpot
-    // Meetings in HubSpot are stored as engagement type "meetings"
+    // Get account domain to scope query to this account's HubSpot records
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('domain')
+      .eq('id', accountId)
+      .single()
+
+    if (!account?.domain) return null
+
+    const meetingIds = await getHubSpotIdsForAccount(supabase, workspaceId, account.domain, 'meetings')
+    if (meetingIds.length === 0) return null
+
+    // Note: meetings object_type is not currently synced (only contacts, companies, deals, tickets)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: meetings, count } = await (supabase as any)
       .from('hubspot_records')
       .select('hubspot_id, properties, hubspot_created_at', { count: 'exact' })
       .eq('workspace_id', workspaceId)
       .eq('object_type', 'meetings')
+      .in('hubspot_id', meetingIds)
       .gte('hubspot_created_at', cutoffDate.toISOString())
       .order('hubspot_created_at', { ascending: false })
       .limit(5)
