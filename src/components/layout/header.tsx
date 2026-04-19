@@ -109,7 +109,7 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
     : null
 
   return (
-    <header className={cn('h-16 bg-card border-b border-border flex items-center justify-between px-6', className)}>
+    <header className={cn('h-16 bg-card border-b-2 border-foreground flex items-center justify-between px-6', className)}>
       {/* Left side - Page title or breadcrumb */}
       <div className="flex items-center gap-4">
         {/* Sidebar toggle button - works on both mobile and desktop */}
@@ -121,7 +121,7 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
               onMenuClick?.()
             }
           }}
-          className="p-2 -ml-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
+          className="p-2 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -224,7 +224,7 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
         {user ? (
           <>
             {/* Notifications placeholder */}
-            <button className="p-2 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors">
+            <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
@@ -234,9 +234,9 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-3 p-1.5 rounded-md hover:bg-muted transition-colors"
+                className="flex items-center gap-3 p-1.5 hover:bg-muted transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
+                <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-bold">
                   {initials}
                 </div>
                 <div className="hidden sm:block text-left">
@@ -255,8 +255,8 @@ export function Header({ user, className, onMenuClick, onToggleSidebar, sidebarC
                     className="fixed inset-0 z-10"
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-md shadow-lg z-20">
-                    <div className="px-4 py-3 border-b border-border">
+                  <div className="absolute right-0 mt-2 w-56 bg-card border-2 border-foreground shadow-card z-20">
+                    <div className="px-4 py-3 border-b-2 border-foreground/20">
                       <p className="text-sm font-medium">{user.name || 'User'}</p>
                       <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                     </div>
