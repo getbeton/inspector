@@ -20,7 +20,7 @@ import type {
   Destination,
   ObjectId,
   SendTestResult,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'
 
 interface TestModalProps {
   destination: Destination

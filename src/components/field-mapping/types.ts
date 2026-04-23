@@ -7,4 +7,4 @@ export type {
   SampleSubject,
   SendTestResult,
   Source,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'

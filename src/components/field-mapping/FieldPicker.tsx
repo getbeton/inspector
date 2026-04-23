@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { FieldSchema } from '@/lib/field-mapping'
+import type { FieldSchema } from '@/lib/field-mapping/client'
 
 interface FieldPickerProps {
   fields: FieldSchema[]

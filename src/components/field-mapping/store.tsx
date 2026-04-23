@@ -16,7 +16,7 @@ import type {
   ObjectSchema,
   SampleSubject,
   Source,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'
 import { saveFieldMappings } from './api'
 
 /**

@@ -17,7 +17,7 @@ import type {
   MappingRow,
   ObjectSchema,
   SampleSubject,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'
 
 interface MappingSectionProps {
   objectSchema: ObjectSchema

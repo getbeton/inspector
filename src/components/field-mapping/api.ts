@@ -5,7 +5,7 @@ import type {
   ObjectSchema,
   SampleSubject,
   SendTestResult,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'
 
 export interface FieldMappingsPayload {
   objects: ObjectSchema[]

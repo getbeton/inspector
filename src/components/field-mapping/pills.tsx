@@ -2,8 +2,8 @@
 
 import { AlertTriangle, ArrowRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { evalSource } from '@/lib/field-mapping'
-import type { FieldSchema, SampleSubject, Source } from '@/lib/field-mapping'
+import { evalSource } from '@/lib/field-mapping/client'
+import type { FieldSchema, SampleSubject, Source } from '@/lib/field-mapping/client'
 
 /** Shared cell class so pill and empty trigger align perfectly in the grid. */
 const CELL_CLS =

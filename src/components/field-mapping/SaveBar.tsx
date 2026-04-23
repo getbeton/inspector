@@ -5,7 +5,7 @@ import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useFieldMappingStore } from './store'
-import type { ObjectId } from '@/lib/field-mapping'
+import type { ObjectId } from '@/lib/field-mapping/client'
 
 const OBJECT_LABELS: Record<ObjectId, string> = {
   deals: 'Deals',

@@ -21,9 +21,9 @@ import {
   FORMULA_FN_LIST,
   isBareStringLiteral,
 } from '@/lib/formula'
-import { BETON_PROPERTIES } from '@/lib/field-mapping'
-import { evalSource } from '@/lib/field-mapping'
-import type { FieldSchema, SampleSubject, Source } from '@/lib/field-mapping'
+import { BETON_PROPERTIES } from '@/lib/field-mapping/client'
+import { evalSource } from '@/lib/field-mapping/client'
+import type { FieldSchema, SampleSubject, Source } from '@/lib/field-mapping/client'
 
 type Tab = 'option' | 'property' | 'formula'
 

@@ -10,7 +10,7 @@ import type {
   MappingRow,
   ObjectId,
   ObjectSchema,
-} from '@/lib/field-mapping'
+} from '@/lib/field-mapping/client'
 
 interface FieldMappingPageProps {
   destination: Destination
