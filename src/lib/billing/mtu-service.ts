@@ -14,6 +14,7 @@
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createPostHogClient, PostHogClient } from '@/lib/integrations/posthog/client';
+import { getIntegrationCredentialsAdmin } from '@/lib/integrations/credentials';
 import { isBillingEnabled, getMtuLimit, BILLING_CONFIG } from '@/lib/utils/deployment';
 import type { MtuTracking, MtuTrackingInsert, WorkspaceBilling } from '@/lib/supabase/types';
 
@@ -124,26 +125,24 @@ function formatDateForHogQL(date: Date): string {
 
 /**
  * Gets the PostHog client for a workspace.
+ *
+ * Reads credentials from the canonical `integration_configs` table via the
+ * shared credentials abstraction. Uses the admin client so this works from
+ * cron contexts (no user session) as well as authed API routes.
  */
 async function getPostHogClientForWorkspace(workspaceId: string): Promise<PostHogClient | null> {
-  const supabase = await createServerClient();
+  const credentials = await getIntegrationCredentialsAdmin(workspaceId, 'posthog');
 
-  const { data: config, error } = await supabase
-    .from('posthog_workspace_config')
-    .select('posthog_api_key, posthog_project_id')
-    .eq('workspace_id', workspaceId)
-    .eq('is_active', true)
-    .eq('is_validated', true)
-    .single();
-
-  if (error || !config) {
+  if (!credentials || !credentials.isActive || credentials.status !== 'connected' || !credentials.projectId) {
     console.warn(`[MTU Service] No PostHog config found for workspace ${workspaceId}`);
     return null;
   }
 
-  // Type assertion since we're selecting specific fields
-  const typedConfig = config as { posthog_api_key: string; posthog_project_id: string };
-  return createPostHogClient(typedConfig.posthog_api_key, typedConfig.posthog_project_id);
+  return createPostHogClient(
+    credentials.apiKey,
+    credentials.projectId,
+    credentials.host ?? undefined,
+  );
 }
 
 /**

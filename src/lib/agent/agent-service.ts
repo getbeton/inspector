@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
 import { isIntegrationConfiguredAdmin } from '@/lib/integrations/credentials';
@@ -14,6 +15,44 @@ function getAgentApiUrl(): string {
 }
 
 export class AgentService {
+    /**
+     * Idempotent wrapper around `triggerAnalysis`.
+     *
+     * Skips the trigger if the workspace already has an agent session in a
+     * non-failed state (`created` / `running` / `completed`) within the lookback
+     * window. Failed/closed sessions are ignored so manual retries still work.
+     *
+     * Safe to call on every mount of the post-onboarding UI — it's the
+     * self-heal entry point for workspaces that landed on /memory without an
+     * active session (e.g. the free-tier onboarding path).
+     */
+    static async triggerAnalysisIfNotRecentlyRun(
+        workspaceId: string,
+        windowHours = 24
+    ): Promise<void> {
+        const supabase = createAdminClient();
+        const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+
+        const { data, error } = await supabase
+            .from('workspace_agent_sessions')
+            .select('session_id, status')
+            .eq('workspace_id', workspaceId)
+            .in('status', ['created', 'running', 'completed'])
+            .gte('created_at', cutoff)
+            .limit(1);
+
+        if (error) {
+            // Fail open: better to trigger twice than to block the user forever on
+            // a transient DB read error. Downstream guards keep this safe.
+            log.warn(`Idempotency check failed, proceeding with trigger: ${error.message}`);
+        } else if (data && data.length > 0) {
+            log.info(`Workspace ${workspaceId} has recent session ${data[0].session_id} (${data[0].status}); skipping trigger`);
+            return;
+        }
+
+        return AgentService.triggerAnalysis(workspaceId);
+    }
+
     /**
      * Triggers the Agent to start analysis for a workspace.
      *
@@ -65,11 +104,22 @@ export class AgentService {
         // 4. Create User/Session on Agent
         try {
             const sessionUrl = `${getAgentApiUrl()}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`;
-            await fetch(sessionUrl, {
+            const sessionRes = await fetch(sessionUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ created_by: 'inspector_mvp' })
             });
+
+            // If session-create fails (e.g. ml-backend redeploy broke the app path),
+            // surface it in workspace_agent_sessions.error_message instead of
+            // silently proceeding to /run which would also fail without a clear trace.
+            if (!sessionRes.ok) {
+                const body = await sessionRes.text().catch(() => '<no body>');
+                const msg = `Agent session create failed: ${sessionRes.status} ${body.slice(0, 500)}`;
+                log.error(msg);
+                updateSessionStatus(sessionId, 'failed', msg).catch(() => {});
+                return;
+            }
 
             // 5. Run Agent — no credentials sent; agent uses callback routes
             const runUrl = `${getAgentApiUrl()}/run`;

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useMemo, useCallback } from 'react'
+import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
@@ -46,6 +46,26 @@ function MemoryPageContent() {
   const workspaceId = isDemo ? undefined : setupStatus?.workspaceId
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
+
+  // Self-heal: if the workspace finished onboarding but has no agent session
+  // (e.g. free-tier user who landed here before the agent was wired to fire on
+  // onboarding-complete), kick off the analysis. The endpoint is idempotent,
+  // so a ref guard is just noise suppression, not correctness.
+  const selfHealFiredRef = useRef(false)
+  useEffect(() => {
+    if (setupLoading || sessionsLoading) return
+    if (!setupStatus?.setupComplete) return
+    if (sessions.length > 0) return
+    if (selfHealFiredRef.current) return
+    selfHealFiredRef.current = true
+
+    fetch('/api/onboarding/complete', {
+      method: 'POST',
+      credentials: 'include',
+    }).catch((err) => {
+      console.error('[MemoryPage] self-heal /api/onboarding/complete failed:', err)
+    })
+  }, [setupLoading, sessionsLoading, setupStatus, sessions])
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',

@@ -22,6 +22,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: vi.fn(),
+}));
+
 vi.mock('@/lib/agent/session', () => ({
   createSession: vi.fn(),
   updateSessionStatus: vi.fn(),
@@ -41,10 +45,12 @@ vi.mock('@/lib/utils/logger', () => ({
 }));
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
 import { isIntegrationConfiguredAdmin } from '@/lib/integrations/credentials';
 
 const mockCreateClient = createClient as ReturnType<typeof vi.fn>;
+const mockCreateAdminClient = createAdminClient as ReturnType<typeof vi.fn>;
 const mockCreateSession = createSession as ReturnType<typeof vi.fn>;
 const mockUpdateSessionStatus = updateSessionStatus as ReturnType<typeof vi.fn>;
 const mockIsIntegrationConfigured = isIntegrationConfiguredAdmin as ReturnType<typeof vi.fn>;
@@ -187,5 +193,106 @@ describe('AgentService.triggerAnalysis', () => {
     // Should still make the Agent API calls
     await new Promise(r => setTimeout(r, 10));
     expect(fetchCalls.length).toBe(2);
+  });
+
+  it('marks session failed and skips /run when session-create returns non-ok', async () => {
+    const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
+    mockCreateClient.mockResolvedValue(mock);
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      fetchCalls.push({ url, init: init || {} });
+      return new Response('App not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    await AgentService.triggerAnalysis('ws-bad-app');
+
+    // Only the session-create call should have fired — /run must be skipped
+    expect(fetchCalls.length).toBe(1);
+    expect(fetchCalls[0].url).toMatch(/\/apps\/upsell_agent\/users\/ws-bad-app\/sessions\/s_/);
+
+    // Session should be marked failed with the backend response
+    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+      expect.stringMatching(/^s_/),
+      'failed',
+      expect.stringContaining('404')
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// triggerAnalysisIfNotRecentlyRun — idempotency guard
+// ---------------------------------------------------------------------------
+
+function createSessionsQueryMock(rows: Array<{ session_id: string; status: string }>, error?: { message: string }) {
+  // Chain: from(...).select(...).eq(...).in(...).gte(...).limit(...) -> Promise<{data,error}>
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: rows, error: error || null }),
+  };
+
+  return {
+    from: vi.fn().mockReturnValue(chain),
+  };
+}
+
+describe('AgentService.triggerAnalysisIfNotRecentlyRun', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchCalls = [];
+    vi.stubEnv('AGENT_API_URL', 'https://agent.test.com');
+    mockCreateSession.mockResolvedValue(undefined);
+    mockUpdateSessionStatus.mockResolvedValue(undefined);
+    mockIsIntegrationConfigured.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it('skips trigger when a recent running/completed session exists', async () => {
+    mockCreateAdminClient.mockReturnValue(
+      createSessionsQueryMock([{ session_id: 's_existing', status: 'running' }])
+    );
+
+    await AgentService.triggerAnalysisIfNotRecentlyRun('ws-busy');
+
+    // Should NOT have hit the workspace-fetch code path or the agent API
+    expect(mockCreateClient).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(fetchCalls.length).toBe(0);
+  });
+
+  it('proceeds to triggerAnalysis when no recent session exists', async () => {
+    mockCreateAdminClient.mockReturnValue(createSessionsQueryMock([]));
+    const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
+    mockCreateClient.mockResolvedValue(mock);
+    mockFetchSuccess();
+
+    await AgentService.triggerAnalysisIfNotRecentlyRun('ws-fresh');
+
+    // Full trigger path should have run
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.stringMatching(/^s_/),
+      'ws-fresh'
+    );
+    expect(fetchCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('proceeds (fail-open) when the idempotency DB read errors', async () => {
+    mockCreateAdminClient.mockReturnValue(
+      createSessionsQueryMock([], { message: 'DB transient error' })
+    );
+    const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
+    mockCreateClient.mockResolvedValue(mock);
+    mockFetchSuccess();
+
+    await AgentService.triggerAnalysisIfNotRecentlyRun('ws-db-err');
+
+    // Must have fallen through to the trigger path rather than silently hanging
+    expect(mockCreateSession).toHaveBeenCalled();
   });
 });

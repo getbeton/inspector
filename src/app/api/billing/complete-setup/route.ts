@@ -500,8 +500,9 @@ export async function POST(
         : '')
     );
 
-    // Trigger Agent Analysis (Fire and forget, but handled inside service)
-    await AgentService.triggerAnalysis(workspaceId).catch(err => {
+    // Trigger Agent Analysis (idempotent — no-op if /api/onboarding/complete
+    // already fired during the free-tier / pre-card path).
+    await AgentService.triggerAnalysisIfNotRecentlyRun(workspaceId).catch(err => {
       log.error(`Failed to trigger agent analysis: ${err}`);
     });
 
