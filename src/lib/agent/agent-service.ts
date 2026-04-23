@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createModuleLogger } from '@/lib/utils/logger';
@@ -145,23 +146,31 @@ export class AgentService {
 
             log.info(`Agent run triggered for ${userId}/${sessionId}`);
 
-            // Fire-and-forget: Agent calls back to /api/agent/data/* to store results
-            fetch(runUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(runPayload)
-            }).then(async (res) => {
-                if (!res.ok) {
-                    const text = await res.text();
-                    log.error(`Agent run failed: ${res.status} ${text}`);
-                    updateSessionStatus(sessionId, 'failed', `Agent run failed: ${res.status}`).catch(() => {});
-                } else {
-                    log.info(`Agent run initiated successfully for workspace ${workspaceId}`);
-                    updateSessionStatus(sessionId, 'running').catch(() => {});
+            // Schedule the /run POST + status transition via `after()` so the Vercel
+            // lambda waits for it to complete before recycling. Without this, plain
+            // fire-and-forget promises can be killed mid-flight — leaving sessions
+            // stuck in `created` because `updateSessionStatus(..., 'running')` never runs.
+            // Agent execution on the ml-backend remains async: `/run` returns quickly
+            // after accepting the job, so `after()` only waits for that acceptance RTT.
+            after(async () => {
+                try {
+                    const res = await fetch(runUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(runPayload),
+                    });
+                    if (!res.ok) {
+                        const text = await res.text().catch(() => '<no body>');
+                        log.error(`Agent run failed: ${res.status} ${text}`);
+                        await updateSessionStatus(sessionId, 'failed', `Agent run failed: ${res.status}`).catch(() => {});
+                    } else {
+                        log.info(`Agent run initiated successfully for workspace ${workspaceId}`);
+                        await updateSessionStatus(sessionId, 'running').catch(() => {});
+                    }
+                } catch (err) {
+                    log.error(`Agent trigger error: ${err}`);
+                    await updateSessionStatus(sessionId, 'failed', String(err)).catch(() => {});
                 }
-            }).catch(err => {
-                log.error(`Agent trigger error: ${err}`);
-                updateSessionStatus(sessionId, 'failed', String(err)).catch(() => {});
             });
 
         } catch (e) {

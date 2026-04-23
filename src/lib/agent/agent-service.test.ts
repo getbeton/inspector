@@ -18,6 +18,13 @@ import { AgentService } from './agent-service';
 // Mocks
 // ---------------------------------------------------------------------------
 
+// `after()` from next/server needs a request context. In tests we stub it to
+// invoke the callback synchronously (fire-and-forget) so the /run fetch + the
+// status transition can still be observed in assertions.
+vi.mock('next/server', () => ({
+  after: (cb: () => Promise<void> | void) => { void cb(); },
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
