@@ -14,7 +14,7 @@
  * session within 24h short-circuits the trigger.
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getWorkspaceMembership } from '@/lib/supabase/helpers';
 import { computeSetupStatus } from '@/lib/setup/status';
@@ -51,10 +51,17 @@ export async function POST() {
       );
     }
 
-    // Fire-and-forget: the method itself logs success/failure and writes to
-    // workspace_agent_sessions. Don't block the response on the ml-backend RTT.
-    AgentService.triggerAnalysisIfNotRecentlyRun(membership.workspaceId).catch((err) => {
-      log.error(`Failed to trigger agent analysis for ${membership.workspaceId}: ${err}`);
+    // Schedule the trigger via after() so the Vercel lambda stays alive until
+    // createSession + the /run fetch complete. Without this, fire-and-forget
+    // gets killed when the response returns, leaving no session row and no
+    // agent run — exactly the "nothing happens after /api/onboarding/complete
+    // returns 200" we saw during Fix 4 E2E testing.
+    after(async () => {
+      try {
+        await AgentService.triggerAnalysisIfNotRecentlyRun(membership.workspaceId);
+      } catch (err) {
+        log.error(`Failed to trigger agent analysis for ${membership.workspaceId}: ${err}`);
+      }
     });
 
     return NextResponse.json({ ok: true });
