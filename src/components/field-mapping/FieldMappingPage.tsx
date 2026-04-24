@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { FieldMappingStoreProvider } from './store'
+import { FieldMappingStoreProvider, useFieldMappingStore } from './store'
 import { MappingSection } from './MappingSection'
 import { SaveBar } from './SaveBar'
 import { TestModal } from './TestModal'
+import { ImpactPanel } from './ImpactPanel'
 import type {
   Destination,
   MappingRow,
@@ -28,8 +29,6 @@ export function FieldMappingPage({
   workspaceId,
   embedded = false,
 }: FieldMappingPageProps) {
-  const [testFor, setTestFor] = useState<ObjectId | null>(null)
-
   return (
     <FieldMappingStoreProvider
       destination={destination}
@@ -37,7 +36,47 @@ export function FieldMappingPage({
       initialMappings={mappings}
       workspaceId={workspaceId}
     >
-      {!embedded ? <SaveBar /> : null}
+      <FieldMappingContent destination={destination} objects={objects} embedded={embedded} />
+    </FieldMappingStoreProvider>
+  )
+}
+
+function FieldMappingContent({
+  destination,
+  objects,
+  embedded,
+}: {
+  destination: Destination
+  objects: ObjectSchema[]
+  embedded: boolean
+}) {
+  const { mappings, saveAll, isSaving } = useFieldMappingStore()
+  const [testFor, setTestFor] = useState<ObjectId | null>(null)
+  const [showImpact, setShowImpact] = useState(false)
+
+  // Any dirty row that needs server-side link resolution → open ImpactPanel
+  // for a dry-run preview before saving.
+  const hasLinkingRow = Object.values(mappings).some((rows) =>
+    rows.some(
+      (r) =>
+        r.source &&
+        (r.source.type.startsWith('link_') || r.source.type.startsWith('actor_')),
+    ),
+  )
+
+  const handleRequestSave = () => {
+    if (hasLinkingRow) setShowImpact(true)
+    else void saveAll()
+  }
+
+  const handleConfirmImpact = async () => {
+    await saveAll()
+    setShowImpact(false)
+  }
+
+  return (
+    <>
+      {!embedded ? <SaveBar onRequestSave={handleRequestSave} /> : null}
       <div className={embedded ? '' : 'max-w-[1360px] mx-auto px-8 pb-20'}>
         {!embedded ? (
           <header className="pt-6 pb-4">
@@ -70,6 +109,15 @@ export function FieldMappingPage({
       </div>
 
       <TestModal destination={destination} objectId={testFor} onClose={() => setTestFor(null)} />
-    </FieldMappingStoreProvider>
+
+      <ImpactPanel
+        open={showImpact}
+        destination={destination}
+        mappings={mappings}
+        onConfirm={handleConfirmImpact}
+        onCancel={() => setShowImpact(false)}
+        isSaving={isSaving}
+      />
+    </>
   )
 }
