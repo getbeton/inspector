@@ -50,7 +50,7 @@ function SelectPopup({
       <SelectPrimitive.Positioner sideOffset={4}>
         <SelectPrimitive.Popup
           className={cn(
-            "z-50 max-h-64 min-w-[var(--anchor-width)] overflow-auto border-2 border-foreground/20 bg-background py-1 shadow-md",
+            "z-50 max-h-64 min-w-[var(--anchor-width)] overflow-auto border-2 border-foreground bg-background py-1 shadow-card",
             className,
           )}
           data-slot="select-popup"
@@ -73,7 +73,7 @@ function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "flex cursor-default items-center gap-2 px-3 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground",
+        "flex cursor-default items-center gap-2 px-3 py-2 text-sm outline-none select-none data-highlighted:bg-primary/10 data-highlighted:text-primary",
         className,
       )}
       data-slot="select-item"

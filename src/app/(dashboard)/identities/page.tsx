@@ -149,7 +149,7 @@ export default function IdentitiesPage() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="px-3 py-2 border border-border rounded-md bg-background text-sm"
+          className="h-9 px-3 text-sm"
         >
           <option value="score">Sort by Score</option>
           <option value="last_seen">Sort by Last Seen</option>

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from '@/components/auth/session-provider'
 import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils/cn'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -36,18 +38,8 @@ interface Domain {
 // ─── Role Badge ──────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: string }) {
-  return (
-    <span className={cn(
-      'text-xs px-2 py-0.5 rounded-full font-medium',
-      role === 'owner'
-        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
-        : role === 'admin'
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-    )}>
-      {role}
-    </span>
-  )
+  const variant = role === 'owner' ? 'warning' : role === 'admin' ? 'info' : 'draft'
+  return <Badge variant={variant}>{role}</Badge>
 }
 
 // ─── Spinner ─────────────────────────────────────────────────────────────────
@@ -178,7 +170,7 @@ function MembersSection({ currentUserId, currentUserRole }: { currentUserId: str
                             value={member.role}
                             onChange={(e) => handleChangeRole(member.userId, e.target.value)}
                             disabled={actionLoading === member.userId}
-                            className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground disabled:opacity-50"
+                            className="h-7 text-xs px-2"
                           >
                             <option value="admin">admin</option>
                             <option value="member">member</option>
@@ -315,16 +307,15 @@ function InvitesSection({ currentUserRole }: { currentUserRole: string }) {
                   {new Date(invite.expires_at).toLocaleDateString()}
                 </td>
                 <td className="py-3 pr-4">
-                  <span className={cn(
-                    'text-xs px-2 py-0.5 rounded-full font-medium',
-                    status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                      : status === 'accepted'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                  )}>
+                  <Badge
+                    variant={
+                      status === 'pending' ? 'warning'
+                      : status === 'accepted' ? 'active'
+                      : 'draft'
+                    }
+                  >
                     {status}
-                  </span>
+                  </Badge>
                 </td>
                 {isAdminOrOwner && (
                   <td className="py-3">
@@ -439,16 +430,16 @@ function InviteForm({ onInviteSent }: { onInviteSent: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Mode toggle */}
-      <div className="flex gap-1 p-0.5 bg-muted rounded-md w-fit">
+      {/* Mode toggle — segmented control with neobrutalist borders */}
+      <div className="inline-flex border-2 border-foreground/20 w-fit">
         <button
           type="button"
           onClick={() => { setMode('email'); setGeneratedLink(null); setError(null); setSuccess(null) }}
           className={cn(
-            'px-3 py-1 text-sm rounded transition-colors',
+            'h-8 px-3 text-xs font-heading font-bold uppercase tracking-wider border-r-2 border-foreground/20 transition-colors',
             mode === 'email'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
           Email invite
@@ -457,10 +448,10 @@ function InviteForm({ onInviteSent }: { onInviteSent: () => void }) {
           type="button"
           onClick={() => { setMode('link'); setGeneratedLink(null); setError(null); setSuccess(null) }}
           className={cn(
-            'px-3 py-1 text-sm rounded transition-colors',
+            'h-8 px-3 text-xs font-heading font-bold uppercase tracking-wider transition-colors',
             mode === 'link'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
           Generate link
@@ -474,41 +465,37 @@ function InviteForm({ onInviteSent }: { onInviteSent: () => void }) {
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
             placeholder="alice@company.com, bob@company.com"
-            className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="flex-1 h-9 px-3 text-sm border-2 border-foreground/20 bg-background text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:border-foreground focus:shadow-[2px_2px_0_var(--color-foreground)]"
           />
         )}
 
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
-          className="px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground"
+          className="h-9 px-3 text-sm"
         >
           <option value="member">Member</option>
           <option value="admin">Admin</option>
         </select>
 
-        <button
-          type="submit"
-          disabled={sending}
-          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors whitespace-nowrap"
-        >
+        <Button type="submit" disabled={sending} className="whitespace-nowrap">
           {sending
             ? 'Sending...'
             : mode === 'email'
               ? 'Send Invites'
               : 'Generate Link'
           }
-        </button>
+        </Button>
       </div>
 
       {/* Generated link display */}
       {generatedLink && (
-        <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+        <div className="flex items-center gap-2 p-2 border-2 border-foreground/20 bg-muted">
           <code className="flex-1 text-xs truncate">{generatedLink}</code>
           <button
             type="button"
             onClick={handleCopyGenerated}
-            className="text-xs text-primary hover:text-primary/80 font-medium whitespace-nowrap transition-colors"
+            className="text-xs text-primary hover:text-primary/80 font-medium whitespace-nowrap transition-colors underline underline-offset-2"
           >
             {copiedLink ? 'Copied!' : 'Copy'}
           </button>
@@ -519,7 +506,7 @@ function InviteForm({ onInviteSent }: { onInviteSent: () => void }) {
         <p className="text-sm text-destructive">{error}</p>
       )}
       {success && !generatedLink && (
-        <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
+        <p className="text-sm text-success">{success}</p>
       )}
     </form>
   )
@@ -591,7 +578,7 @@ function DomainsSection() {
       {domains.length > 0 ? (
         <div className="space-y-2">
           {domains.map((d) => (
-            <div key={d.id} className="flex items-center justify-between py-2 px-3 border border-border rounded-md">
+            <div key={d.id} className="flex items-center justify-between py-2 px-3 border-2 border-foreground/20 bg-background">
               <span className="text-sm font-mono">{d.domain}</span>
               <span className="text-xs text-muted-foreground">
                 Added {new Date(d.created_at).toLocaleDateString()}
@@ -610,15 +597,11 @@ function DomainsSection() {
           value={newDomain}
           onChange={(e) => setNewDomain(e.target.value)}
           placeholder="example.com"
-          className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="flex-1 h-9 px-3 text-sm border-2 border-foreground/20 bg-background text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:border-foreground focus:shadow-[2px_2px_0_var(--color-foreground)]"
         />
-        <button
-          type="submit"
-          disabled={adding || !newDomain.trim()}
-          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
+        <Button type="submit" disabled={adding || !newDomain.trim()}>
           {adding ? 'Claiming...' : 'Claim Domain'}
-        </button>
+        </Button>
       </form>
       {addError && (
         <p className="text-sm text-destructive">{addError}</p>
@@ -650,17 +633,15 @@ export default function SettingsWorkspacePage() {
 
   return (
     <div className="max-w-4xl space-y-8">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-semibold">Workspace Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage team members, invitations, and workspace configuration.
-        </p>
-      </div>
+      {/* Page subtitle — layout renders the <h1>Settings</h1> header; this
+          scopes the page to the workspace subsection without duplicating h1. */}
+      <p className="text-sm text-muted-foreground">
+        Workspace · manage team members, invitations, and configuration.
+      </p>
 
       {/* Members section */}
-      <section className="border border-border rounded-lg">
-        <div className="px-6 py-4 border-b border-border">
+      <section className="border-2 border-foreground/20 bg-card shadow-card">
+        <div className="px-6 py-4 border-b-2 border-foreground/20">
           <h2 className="text-lg font-semibold">Members</h2>
           <p className="text-sm text-muted-foreground mt-0.5">People who have access to this workspace.</p>
         </div>
@@ -671,8 +652,8 @@ export default function SettingsWorkspacePage() {
 
       {/* Invite form section (admin+ only) */}
       {isAdminOrOwner && (
-        <section className="border border-border rounded-lg">
-          <div className="px-6 py-4 border-b border-border">
+        <section className="border-2 border-foreground/20 bg-card shadow-card">
+          <div className="px-6 py-4 border-b-2 border-foreground/20">
             <h2 className="text-lg font-semibold">Invite People</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Send email invites or generate a shareable link.</p>
           </div>
@@ -683,8 +664,8 @@ export default function SettingsWorkspacePage() {
       )}
 
       {/* Pending invites section */}
-      <section className="border border-border rounded-lg">
-        <div className="px-6 py-4 border-b border-border">
+      <section className="border-2 border-foreground/20 bg-card shadow-card">
+        <div className="px-6 py-4 border-b-2 border-foreground/20">
           <h2 className="text-lg font-semibold">Pending Invites</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Invitations that have not yet been accepted.</p>
         </div>
@@ -695,8 +676,8 @@ export default function SettingsWorkspacePage() {
 
       {/* Domain claims section (owner only) */}
       {isOwner && (
-        <section className="border border-border rounded-lg">
-          <div className="px-6 py-4 border-b border-border">
+        <section className="border-2 border-foreground/20 bg-card shadow-card">
+          <div className="px-6 py-4 border-b-2 border-foreground/20">
             <h2 className="text-lg font-semibold">Domain Claims</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Claim your company domain so new sign-ups are auto-suggested to join this workspace.</p>
           </div>

@@ -103,8 +103,8 @@ export function EventPicker({ value, onChange, placeholder, className }: EventPi
           render={<div />}
           className={cn(
             'flex items-center gap-1.5 flex-wrap min-h-[2.25rem] w-full px-3 py-1.5',
-            'rounded-lg border border-input bg-background text-sm cursor-pointer',
-            'hover:bg-muted/50 transition-colors',
+            'border-2 border-foreground/20 bg-background text-sm cursor-pointer transition-all',
+            'hover:border-foreground focus-within:border-foreground focus-within:shadow-[2px_2px_0_var(--color-foreground)]',
           )}
         >
           {value.length > 0 ? (
@@ -194,7 +194,7 @@ export function EventPicker({ value, onChange, placeholder, className }: EventPi
               {isLoading ? (
                 <div className="p-2 space-y-2">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="h-8 bg-muted animate-pulse rounded-md" />
+                    <div key={i} className="h-8 bg-muted animate-pulse" />
                   ))}
                 </div>
               ) : filtered.length === 0 ? (
@@ -212,9 +212,9 @@ export function EventPicker({ value, onChange, placeholder, className }: EventPi
                       type="button"
                       onClick={() => toggleEvent(event.name)}
                       className={cn(
-                        'w-full text-left px-2 py-1.5 rounded-md text-sm transition-colors',
-                        'flex items-center gap-2',
-                        isSelected ? 'bg-primary/5' : 'hover:bg-muted/50'
+                        'w-full text-left px-2 py-2 text-sm transition-colors',
+                        'flex items-center gap-2 border-2 border-transparent',
+                        isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
                       )}
                     >
                       <Checkbox
