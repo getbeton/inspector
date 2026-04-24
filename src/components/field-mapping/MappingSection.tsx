@@ -172,11 +172,6 @@ export function MappingSection({ objectSchema, destination, onTest }: MappingSec
           </div>
 
           <>
-            {visible.length === 0 ? (
-              <div className="px-5 py-6 text-center text-sm text-foreground/50 border-b border-foreground/10">
-                No fields mapped yet. Use the button below to pick one.
-              </div>
-            ) : null}
             {visible.map(({ field, row }) => {
                 const missingReq = field.required && (!row.source || row.source.type === 'none')
                 const rowDirty = isDirty(field.id)
