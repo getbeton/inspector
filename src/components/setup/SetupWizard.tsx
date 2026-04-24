@@ -316,6 +316,15 @@ export function SetupWizard({
           has_firecrawl: firecrawlConnected,
         });
 
+        // Fire-and-forget: kick off the agent analysis. The endpoint is
+        // idempotent and performs its own setupComplete check server-side.
+        fetch("/api/onboarding/complete", {
+          method: "POST",
+          credentials: "include",
+        }).catch((err) => {
+          console.error("[SetupWizard] /api/onboarding/complete failed:", err);
+        });
+
         router.push("/memory");
       } else {
         setCurrentStepIndex(nextIndex);
