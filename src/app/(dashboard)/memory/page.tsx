@@ -47,15 +47,17 @@ function MemoryPageContent() {
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
 
-  // Self-heal: if the workspace finished onboarding but has no agent session
-  // (e.g. free-tier user who landed here before the agent was wired to fire on
-  // onboarding-complete), kick off the analysis. The endpoint is idempotent,
-  // so a ref guard is just noise suppression, not correctness.
+  // Self-heal: once setup is complete, ping the trigger endpoint per mount.
+  // Server-side idempotency (triggerAnalysisIfNotRecentlyRun, 24h window on
+  // created/running/completed) is the source of truth. Do NOT gate on
+  // sessions.length — a workspace with only stale/failed sessions (old
+  // pre-Fix 4 stuck 'created' rows, or prior runs that 500'd) still needs a
+  // fresh trigger on return, and the client has no reliable view of what
+  // counts as "recent".
   const selfHealFiredRef = useRef(false)
   useEffect(() => {
-    if (setupLoading || sessionsLoading) return
+    if (setupLoading) return
     if (!setupStatus?.setupComplete) return
-    if (sessions.length > 0) return
     if (selfHealFiredRef.current) return
     selfHealFiredRef.current = true
 
@@ -65,7 +67,7 @@ function MemoryPageContent() {
     }).catch((err) => {
       console.error('[MemoryPage] self-heal /api/onboarding/complete failed:', err)
     })
-  }, [setupLoading, sessionsLoading, setupStatus, sessions])
+  }, [setupLoading, setupStatus])
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',
