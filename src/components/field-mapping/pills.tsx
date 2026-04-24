@@ -72,6 +72,46 @@ export function SourcePill({ source, onEdit }: SourcePillProps) {
     )
   }
 
+  // Entity-linking variants — compact chip describing resolution strategy
+  if (
+    source.type === 'link_subject_person' ||
+    source.type === 'link_subject_company_by_domain' ||
+    source.type === 'link_subject_company_via_person' ||
+    source.type === 'link_specific_record' ||
+    source.type === 'actor_subject_email' ||
+    source.type === 'actor_account_owner'
+  ) {
+    const labelByType: Record<string, string> = {
+      link_subject_person: "→ subject's Person",
+      link_subject_company_by_domain: "→ Company by domain",
+      link_subject_company_via_person: "→ Company via Person",
+      link_specific_record: '→ pinned record',
+      actor_subject_email: "→ subject's email as owner",
+      actor_account_owner: '→ account.owner_email as owner',
+    }
+    const secondary =
+      source.type === 'link_specific_record'
+        ? `${source.targetObject}/${source.recordId.slice(0, 8)}…`
+        : undefined
+    return (
+      <button
+        type="button"
+        onClick={onEdit}
+        className={cn(
+          CELL_CLS,
+          'border-foreground/20 bg-background',
+          'hover:border-foreground hover:shadow-[2px_2px_0_var(--color-foreground)] hover:-translate-x-px hover:-translate-y-px transition-all',
+        )}
+      >
+        <span className="text-foreground/40 text-[10px] uppercase shrink-0">link</span>
+        <span className="font-semibold truncate">{labelByType[source.type]}</span>
+        {secondary ? (
+          <span className="text-foreground/50 text-[10px] truncate">{secondary}</span>
+        ) : null}
+      </button>
+    )
+  }
+
   return null
 }
 

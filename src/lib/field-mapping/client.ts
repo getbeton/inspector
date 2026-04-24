@@ -14,14 +14,17 @@ export type {
   Destination,
   FetchSampleSubjectsOptions,
   FieldSchema,
+  ImpactSummary,
+  LinkOutcome,
   MappingRow,
   ObjectId,
   ObjectSchema,
   SampleSubject,
   SendTestResult,
   Source,
+  WorkspaceMember,
 } from './types'
 
 export { BETON_PROPERTIES, type BetonProperty } from './beton-properties'
 
-export { buildPayload, evalSource } from './payload'
+export { buildPayload, evalSource, isLinkMarker, type LinkMarker } from './payload'

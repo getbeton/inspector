@@ -74,7 +74,10 @@ export function TestModal({ destination, objectId, onClose }: TestModalProps) {
                   : 'Send the test to see the evaluated payload.'}
               </pre>
               {result && stage === 'done' ? (
-                <ResultBanner result={result} />
+                <>
+                  <ResultBanner result={result} />
+                  <OutcomesList result={result} />
+                </>
               ) : null}
             </div>
             <div className="space-y-3">
@@ -153,7 +156,57 @@ function ResultBanner({ result }: { result: SendTestResult }) {
           </Badge>
         </div>
         <p className="text-xs text-foreground/70 mt-1">{result.detail}</p>
+        {ok && result.webUrl ? (
+          <a
+            className="text-xs text-primary underline underline-offset-2 mt-1 inline-block"
+            href={result.webUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View in Attio →
+          </a>
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+function OutcomesList({ result }: { result: SendTestResult }) {
+  const outcomes = result.outcomes ?? []
+  if (outcomes.length === 0) return null
+
+  const statusLabel: Record<string, { text: string; className: string }> = {
+    matched: { text: '✓ matched', className: 'text-success' },
+    created: { text: '+ created', className: 'text-primary' },
+    null: { text: '○ null', className: 'text-foreground/50' },
+    error: { text: '! error', className: 'text-destructive' },
+    resolved: { text: '✓ resolved', className: 'text-foreground/60' },
+  }
+
+  return (
+    <div className="mt-3 border-2 border-foreground/15 p-3 bg-muted/20">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-foreground/60 mb-2">
+        Link resolution outcomes
+      </div>
+      <ul className="space-y-1.5 text-xs">
+        {outcomes.map((o) => {
+          const meta = statusLabel[o.status] ?? statusLabel.resolved
+          return (
+            <li key={o.fieldId} className="flex items-center gap-2">
+              <span className={cn('font-bold w-20 shrink-0', meta.className)}>{meta.text}</span>
+              <span className="font-mono text-foreground/80 truncate">{o.fieldId}</span>
+              {o.recordId ? (
+                <span className="font-mono text-[10px] text-foreground/50 truncate">
+                  {o.recordId.slice(0, 8)}…
+                </span>
+              ) : null}
+              {o.reason ? (
+                <span className="text-foreground/60 truncate">— {o.reason}</span>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

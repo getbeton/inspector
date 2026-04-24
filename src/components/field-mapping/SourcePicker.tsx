@@ -23,9 +23,9 @@ import {
 } from '@/lib/formula'
 import { BETON_PROPERTIES } from '@/lib/field-mapping/client'
 import { evalSource } from '@/lib/field-mapping/client'
-import type { FieldSchema, SampleSubject, Source } from '@/lib/field-mapping/client'
+import type { FieldSchema, ObjectId, SampleSubject, Source } from '@/lib/field-mapping/client'
 
-type Tab = 'option' | 'property' | 'formula'
+type Tab = 'option' | 'property' | 'formula' | 'link'
 
 interface SourcePickerProps {
   field: FieldSchema
@@ -66,6 +66,8 @@ const POSTHOG_GROUP_PROPS = [
   { id: 'mrr', label: 'mrr', kind: 'number' },
 ]
 
+const LINKABLE_KINDS = new Set(['record', 'ref', 'actor'])
+
 export function SourcePicker({
   field,
   subject,
@@ -78,14 +80,27 @@ export function SourcePicker({
     Array.isArray(field.options) &&
     field.options.length > 0
 
-  const initialTab: Tab =
-    existing?.type === 'formula'
-      ? 'formula'
-      : existing?.type === 'option'
-        ? 'option'
-        : hasOptions
-          ? 'option'
-          : 'property'
+  const isLinkable = LINKABLE_KINDS.has(field.kind)
+  const isActor = field.kind === 'actor'
+  const isRecord = field.kind === 'record' || field.kind === 'ref'
+
+  const initialTab: Tab = (() => {
+    if (existing?.type === 'formula') return 'formula'
+    if (existing?.type === 'option') return 'option'
+    if (
+      existing?.type === 'link_subject_person' ||
+      existing?.type === 'link_subject_company_by_domain' ||
+      existing?.type === 'link_subject_company_via_person' ||
+      existing?.type === 'link_specific_record' ||
+      existing?.type === 'actor_subject_email' ||
+      existing?.type === 'actor_account_owner'
+    ) {
+      return 'link'
+    }
+    if (isLinkable) return 'link'
+    if (hasOptions) return 'option'
+    return 'property'
+  })()
 
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -165,6 +180,7 @@ export function SourcePicker({
 
   const tabs = [
     hasOptions ? { v: 'option' as const, label: 'Option' } : null,
+    isLinkable ? { v: 'link' as const, label: 'Link' } : null,
     { v: 'property' as const, label: 'Property' },
     { v: 'formula' as const, label: 'Formula' },
   ].filter(Boolean) as Array<{ v: Tab; label: string }>
@@ -192,6 +208,18 @@ export function SourcePicker({
               </button>
             ))}
           </div>
+
+          {/* Link tab — only for record-reference / actor-reference fields */}
+          {tab === 'link' && isLinkable ? (
+            <LinkTabContent
+              field={field}
+              isRecord={isRecord}
+              isActor={isActor}
+              existing={existing}
+              subject={subject}
+              onCommit={commit}
+            />
+          ) : null}
 
           {/* Option tab */}
           {tab === 'option' && hasOptions ? (
@@ -403,5 +431,232 @@ export function SourcePicker({
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Link tab — renders inside the SourcePicker for record/actor fields
+// ─────────────────────────────────────────────────────────────────────────
+interface LinkTabContentProps {
+  field: FieldSchema
+  isRecord: boolean
+  isActor: boolean
+  existing: Source
+  subject: SampleSubject | null
+  onCommit: (src: Source) => void
+}
+
+interface RecordSearchResult {
+  id: string
+  display: string
+  secondary?: string
+}
+
+function LinkTabContent({
+  field,
+  isRecord,
+  isActor,
+  existing,
+  onCommit,
+}: LinkTabContentProps) {
+  const target = field.targetObjectId
+  const selectedType = existing?.type
+
+  // Record-reference options, filtered by target object type.
+  const recordOptions: Array<{ type: Source['type']; label: string; hint: string }> = []
+  if (isRecord) {
+    if (target === 'people') {
+      recordOptions.push({
+        type: 'link_subject_person',
+        label: "Subject's Person (by email)",
+        hint: "Looks up an Attio Person by the subject's email. Creates one if missing.",
+      })
+    }
+    if (target === 'companies') {
+      recordOptions.push({
+        type: 'link_subject_company_by_domain',
+        label: "Subject's Company (by domain)",
+        hint: "Derives the domain from the subject's email. Creates the Company if missing.",
+      })
+      recordOptions.push({
+        type: 'link_subject_company_via_person',
+        label: "Subject's Company (via Person.company)",
+        hint: 'Asserts the Person first, then reads its linked Company.',
+      })
+    }
+    // Always allow picking a specific record — handled separately below.
+  }
+
+  const actorOptions: Array<{ type: Source['type']; label: string; hint: string; disabled?: boolean }> = []
+  if (isActor) {
+    actorOptions.push({
+      type: 'actor_subject_email',
+      label: "Subject's email",
+      hint: 'Sets the owner to the subject\'s email — only resolves if that email matches a workspace member.',
+    })
+    actorOptions.push({
+      type: 'actor_account_owner',
+      label: "Account owner's email",
+      hint: 'Uses accounts.owner_email for this subject. Disabled if unset.',
+    })
+  }
+
+  // Specific-record search state
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<RecordSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    if (!isRecord || !target) return
+    const trimmed = q.trim()
+    if (trimmed.length < 2) {
+      setResults([])
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    fetch(`/api/integrations/attio/records/search?objectId=${target}&q=${encodeURIComponent(trimmed)}`)
+      .then((r) => r.ok ? r.json() : { results: [] })
+      .then((data) => {
+        if (cancelled) return
+        setResults(Array.isArray(data?.results) ? data.results : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setResults([])
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [q, isRecord, target])
+
+  return (
+    <div className="flex flex-col">
+      <div className="p-4 space-y-3">
+        {isRecord && !target ? (
+          <div className="text-xs text-warning">
+            This field doesn't declare a target object type. Use Formula to supply a specific record ID.
+          </div>
+        ) : null}
+
+        {recordOptions.map((opt) => (
+          <LinkOptionRow
+            key={opt.type}
+            selected={selectedType === opt.type}
+            label={opt.label}
+            hint={opt.hint}
+            onClick={() => onCommit({ type: opt.type } as Source)}
+          />
+        ))}
+
+        {actorOptions.map((opt) => (
+          <LinkOptionRow
+            key={opt.type}
+            selected={selectedType === opt.type}
+            label={opt.label}
+            hint={opt.hint}
+            onClick={() => onCommit({ type: opt.type } as Source)}
+          />
+        ))}
+
+        {isRecord && target ? (
+          <div className="border-t border-foreground/10 pt-3 space-y-2">
+            <label className="text-[10px] uppercase tracking-wider font-bold text-foreground/50 block">
+              Pick a specific {target.slice(0, -1)}
+            </label>
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={`Search ${target}…`}
+            />
+            {q.trim().length >= 2 ? (
+              <div className="border-2 border-foreground/15 max-h-[200px] overflow-y-auto">
+                {searching ? (
+                  <div className="px-3 py-2 text-xs text-foreground/50">Searching…</div>
+                ) : results.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-foreground/50">No matches.</div>
+                ) : (
+                  results.map((r) => {
+                    const selected =
+                      existing?.type === 'link_specific_record' &&
+                      existing.recordId === r.id
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() =>
+                          onCommit({
+                            type: 'link_specific_record',
+                            targetObject: target as ObjectId,
+                            recordId: r.id,
+                          })
+                        }
+                        className={cn(
+                          'w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-foreground/5 text-left',
+                          selected && 'bg-primary/10',
+                        )}
+                      >
+                        <span className="font-semibold truncate">{r.display}</span>
+                        {r.secondary ? (
+                          <span className="font-mono text-[10px] text-foreground/50 truncate">
+                            {r.secondary}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isActor ? (
+          <p className="text-[10px] text-foreground/50 leading-relaxed pt-2">
+            For anything more custom (conditional routing, static email), switch to the{' '}
+            <strong>Formula</strong> tab and use <code className="font-mono">member(&quot;…&quot;)</code>.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function LinkOptionRow({
+  label,
+  hint,
+  selected,
+  onClick,
+}: {
+  label: string
+  hint: string
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'w-full text-left px-3 py-2 border-2 transition-colors',
+        selected
+          ? 'border-foreground bg-primary/5'
+          : 'border-foreground/15 hover:border-foreground/40 bg-background',
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'w-3 h-3 rounded-full border-2 shrink-0',
+            selected ? 'border-foreground bg-primary' : 'border-foreground/30',
+          )}
+        />
+        <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="text-[11px] text-foreground/60 mt-1 ml-5">{hint}</p>
+    </button>
   )
 }
