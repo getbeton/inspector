@@ -171,13 +171,13 @@ export function MappingSection({ objectSchema, destination, onTest }: MappingSec
             <div />
           </div>
 
-          {visible.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-foreground/50">
-              No fields mapped yet.
-            </div>
-          ) : (
-            <>
-              {visible.map(({ field, row }) => {
+          <>
+            {visible.length === 0 ? (
+              <div className="px-5 py-6 text-center text-sm text-foreground/50 border-b border-foreground/10">
+                No fields mapped yet. Use the button below to pick one.
+              </div>
+            ) : null}
+            {visible.map(({ field, row }) => {
                 const missingReq = field.required && (!row.source || row.source.type === 'none')
                 const rowDirty = isDirty(field.id)
                 return (
@@ -260,28 +260,27 @@ export function MappingSection({ objectSchema, destination, onTest }: MappingSec
                 )
               })}
 
-              {/* Add field trigger */}
-              <div className="px-5 py-2 border-b border-foreground/10 bg-muted/10">
-                <FieldPicker
-                  fields={objectSchema.fields}
-                  takenIds={takenIds}
-                  onPick={(fid) => addRow(objectSchema.id, fid)}
-                  trigger={
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 h-7 px-2 text-xs text-foreground/60 hover:text-foreground border-2 border-dashed border-foreground/20 hover:border-foreground bg-transparent hover:bg-background transition-colors"
-                    >
-                      <Plus className="size-3.5" />
-                      <span>Add field…</span>
-                      <span className="text-foreground/40 ml-1">
-                        {totalFields - takenIds.size} available
-                      </span>
-                    </button>
-                  }
-                />
-              </div>
-            </>
-          )}
+            {/* Add field trigger — always visible, even when nothing's mapped yet */}
+            <div className="px-5 py-2 border-b border-foreground/10 bg-muted/10">
+              <FieldPicker
+                fields={objectSchema.fields}
+                takenIds={takenIds}
+                onPick={(fid) => addRow(objectSchema.id, fid)}
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 h-7 px-2 text-xs text-foreground/60 hover:text-foreground border-2 border-dashed border-foreground/20 hover:border-foreground bg-transparent hover:bg-background transition-colors"
+                  >
+                    <Plus className="size-3.5" />
+                    <span>Add field…</span>
+                    <span className="text-foreground/40 ml-1">
+                      {totalFields - takenIds.size} available
+                    </span>
+                  </button>
+                }
+              />
+            </div>
+          </>
         </>
       ) : null}
     </div>
