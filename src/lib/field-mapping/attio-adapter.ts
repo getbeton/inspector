@@ -1,4 +1,5 @@
 import {
+  createRecord,
   discoverObjects,
   getObjectAttributes,
   upsertRecord,
@@ -121,11 +122,15 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
         const apiKey = await apiKeyFor(workspaceId)
         const slug = OBJECT_TO_SLUG[objectId]
 
-        // Pick a matching attribute to enable upsert (defaults to 'domain' on companies/workspaces,
-        // 'email_addresses' on people, or the first mapped field on deals).
-        const matchOn = chooseMatchOn(objectId, rows)
+        // Pick a matching attribute for upsert only when a natural unique key
+        // is in the payload. Otherwise fall back to create — Attio rejects
+        // PUT /records when matching_attribute isn't unique (e.g. 'stage' on Deals).
+        const matchOn = chooseMatchOn(objectId, payload)
 
-        const result = await upsertRecord(apiKey, slug, payload, matchOn)
+        const result = matchOn
+          ? await upsertRecord(apiKey, slug, payload, matchOn)
+          : await createRecord(apiKey, slug, payload)
+
         return {
           status: 'success',
           code: 200,
@@ -186,12 +191,27 @@ function attioKindToUiKind(t: string): string {
   }
 }
 
-function chooseMatchOn(objectId: ObjectId, rows: MappingRow[]): string {
-  const fieldIds = new Set(rows.map((r) => r.fieldId))
-  if (objectId === 'people' && fieldIds.has('email_addresses')) return 'email_addresses'
-  if (fieldIds.has('domain')) return 'domain'
-  // Fallback — just pick the first mapped field.
-  return rows[0]?.fieldId ?? 'domain'
+/**
+ * Returns the attribute to upsert on, or null to force create-only.
+ *
+ * Attio's PUT /records endpoint requires the `matching_attribute` to actually
+ * be a unique key on the object. Using a non-unique field (e.g. 'stage' on
+ * Deals) is rejected with a 400. So we only return a match key when we're
+ * confident the object supports it AND the payload carries a non-empty value
+ * for that key.
+ */
+function chooseMatchOn(
+  objectId: ObjectId,
+  payload: Record<string, unknown>,
+): string | null {
+  const has = (k: string) => {
+    const v = payload[k]
+    return v !== null && v !== undefined && v !== ''
+  }
+  if (objectId === 'people' && has('email_addresses')) return 'email_addresses'
+  if ((objectId === 'companies' || objectId === 'workspaces') && has('domain')) return 'domain'
+  // Deals (and any other object without a safe natural key) → create-only.
+  return null
 }
 
 function attioErrorToResult(err: unknown, payload: Record<string, unknown>): SendTestResult {

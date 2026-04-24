@@ -435,6 +435,43 @@ export async function upsertRecord(
 }
 
 /**
+ * Create a new record (no upsert).
+ * Use this when there's no natural unique key to match on — e.g. Deals, Notes.
+ *
+ * @see https://docs.attio.com/rest-api/endpoint-reference/records/create-a-record
+ */
+export async function createRecord(
+  apiKey: string,
+  objectSlug: string,
+  values: Record<string, unknown>
+): Promise<AttioUpsertResult> {
+  const formattedValues: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== null && value !== undefined) {
+      formattedValues[key] = value
+    }
+  }
+
+  const response = await fetch(`${ATTIO_BASE_URL}/objects/${objectSlug}/records`, {
+    method: 'POST',
+    headers: createHeaders(apiKey),
+    body: JSON.stringify({ data: { values: formattedValues } }),
+  })
+
+  const data = await handleResponse<{
+    data?: {
+      id?: { record_id?: string }
+    }
+  }>(response)
+
+  const record = data.data || {}
+  return {
+    recordId: record.id?.record_id || '',
+    action: 'created',
+  }
+}
+
+/**
  * Get a specific record by ID
  */
 export async function getRecord(
