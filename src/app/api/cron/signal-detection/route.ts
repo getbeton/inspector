@@ -1,135 +1,158 @@
 /**
- * Vercel Cron: Signal Detection
+ * Vercel Cron: Signal Detection (daily tracking pass)
  *
- * Runs daily at 6 AM UTC to detect signals for all accounts.
- * Triggered by Vercel Cron scheduler.
+ * Runs daily at 6 AM UTC. For every workspace with a configured PostHog
+ * integration, iterate all active `signal_definitions` rows (manual and
+ * agent-emitted) and refresh their aggregate metrics in `signal_aggregates`.
+ *
+ * Discovery (deciding WHICH patterns are worth tracking) is no longer
+ * Inspector's job — inspector-ml-backend owns it and writes new definitions
+ * via `POST /api/agent/signals`. This cron is purely the tracking layer.
  *
  * Security: Requires CRON_SECRET header for authentication.
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { processAllAccounts, getDetectorSummary } from '@/lib/heuristics/signals'
-import { createModuleLogger } from '@/lib/utils/logger'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { PostHogClient } from '@/lib/integrations/posthog/client'
+import { getIntegrationCredentialsAdmin } from '@/lib/integrations/credentials'
+import { getPostHogHost } from '@/lib/integrations/posthog/regions'
 import { verifyCronAuth } from '@/lib/middleware/cron-auth'
+import { upsertSignalMetrics } from '@/lib/signals/metrics-calculator'
+import { evaluateDefinition, type EvaluatableDefinition } from '@/lib/signals/evaluator'
+import { createModuleLogger } from '@/lib/utils/logger'
 
 const log = createModuleLogger('[Cron Signal Detection]')
 
-// Maximum execution time for Vercel Pro (5 minutes)
 export const maxDuration = 300
 
-/**
- * GET /api/cron/signal-detection
- *
- * Triggered by Vercel Cron on schedule defined in vercel.json
- */
+interface DefinitionRow extends EvaluatableDefinition {
+  id: string
+  workspace_id: string
+  is_active: boolean | null
+  status: string | null
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now()
 
-  // Verify cron secret (fail-closed: rejects if CRON_SECRET is unset)
   if (!verifyCronAuth(request)) {
     log.error('Unauthorized request - invalid or missing CRON_SECRET')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  log.info('Signal detection job started')
-  log.debug(`Available detectors: ${getDetectorSummary().length}`)
+  log.info('Signal tracking job started')
 
-  try {
-    const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
 
-    // Get all workspaces
-    const { data: workspaces, error: workspaceError } = await supabase
-      .from('workspaces')
-      .select('id, slug') as { data: Array<{ id: string; slug: string }> | null; error: unknown }
+  const { data: workspaces, error: workspaceError } = await supabase
+    .from('workspaces')
+    .select('id, slug') as { data: Array<{ id: string; slug: string }> | null; error: unknown }
 
-    if (workspaceError || !workspaces) {
-      log.error('Failed to fetch workspaces:', workspaceError)
-      return NextResponse.json(
-        { error: 'Failed to fetch workspaces', details: String(workspaceError) },
-        { status: 500 }
-      )
-    }
-
-    log.info(`Processing ${workspaces.length} workspaces`)
-
-    const results = {
-      workspacesProcessed: 0,
-      totalAccountsProcessed: 0,
-      totalSignalsDetected: 0,
-      totalSignalsPersisted: 0,
-      totalErrors: 0,
-      workspaceResults: [] as Array<{
-        workspaceId: string
-        slug: string
-        accounts: number
-        detected: number
-        persisted: number
-        errors: number
-      }>,
-    }
-
-    // Process each workspace
-    for (const workspace of workspaces) {
-      try {
-        log.debug(`Processing workspace: ${workspace.slug}`)
-
-        const workspaceResult = await processAllAccounts(supabase, workspace.id, {
-          category: 'all',
-          limit: 500, // Process up to 500 accounts per workspace
-        })
-
-        results.workspacesProcessed++
-        results.totalAccountsProcessed += workspaceResult.processed
-        results.totalSignalsDetected += workspaceResult.totalDetected
-        results.totalSignalsPersisted += workspaceResult.totalPersisted
-        results.totalErrors += workspaceResult.totalErrors
-
-        results.workspaceResults.push({
-          workspaceId: workspace.id,
-          slug: workspace.slug,
-          accounts: workspaceResult.processed,
-          detected: workspaceResult.totalDetected,
-          persisted: workspaceResult.totalPersisted,
-          errors: workspaceResult.totalErrors,
-        })
-
-        log.debug(
-          `Workspace ${workspace.slug}: ${workspaceResult.processed} accounts, ${workspaceResult.totalDetected} signals detected`
-        )
-      } catch (err) {
-        log.error(`Error processing workspace ${workspace.slug}:`, err)
-        results.totalErrors++
-      }
-    }
-
-    const duration = Date.now() - startTime
-    log.info(`Signal detection completed in ${duration}ms`)
-    log.info(`Summary: ${results.totalSignalsPersisted} signals persisted across ${results.totalAccountsProcessed} accounts`)
-
-    return NextResponse.json({
-      success: true,
-      duration_ms: duration,
-      summary: {
-        workspaces_processed: results.workspacesProcessed,
-        accounts_processed: results.totalAccountsProcessed,
-        signals_detected: results.totalSignalsDetected,
-        signals_persisted: results.totalSignalsPersisted,
-        errors: results.totalErrors,
-      },
-      workspaces: results.workspaceResults,
-    })
-  } catch (err) {
-    const duration = Date.now() - startTime
-    log.error('Signal detection job failed:', err)
-
+  if (workspaceError || !workspaces) {
+    log.error('Failed to fetch workspaces:', workspaceError)
     return NextResponse.json(
-      {
-        success: false,
-        duration_ms: duration,
-        error: err instanceof Error ? err.message : 'Unknown error',
-      },
-      { status: 500 }
+      { error: 'Failed to fetch workspaces', details: String(workspaceError) },
+      { status: 500 },
     )
   }
+
+  const results = {
+    workspacesProcessed: 0,
+    definitionsEvaluated: 0,
+    definitionsFailed: 0,
+    workspacesSkipped: 0,
+    perWorkspace: [] as Array<{
+      workspaceId: string
+      slug: string
+      evaluated: number
+      failed: number
+      skipped?: string
+    }>,
+  }
+
+  for (const workspace of workspaces) {
+    const workspaceResult = {
+      workspaceId: workspace.id,
+      slug: workspace.slug,
+      evaluated: 0,
+      failed: 0,
+    }
+    try {
+      const posthogCreds = await getIntegrationCredentialsAdmin(workspace.id, 'posthog')
+      if (!posthogCreds?.apiKey || !posthogCreds?.projectId) {
+        results.workspacesSkipped++
+        results.perWorkspace.push({ ...workspaceResult, skipped: 'PostHog not configured' })
+        continue
+      }
+
+      const posthog = new PostHogClient({
+        apiKey: posthogCreds.apiKey,
+        projectId: posthogCreds.projectId,
+        host: getPostHogHost(posthogCreds.region),
+      })
+
+      const { data: definitions, error: defError } = await supabase
+        .from('signal_definitions')
+        .select(
+          'id, workspace_id, type, source, event_name, query_template, parameter_set, is_active, status',
+        )
+        .eq('workspace_id', workspace.id)
+        .eq('is_active', true) as { data: DefinitionRow[] | null; error: unknown }
+
+      if (defError || !definitions) {
+        log.error(`Failed to fetch definitions for ${workspace.slug}:`, defError)
+        results.workspacesSkipped++
+        results.perWorkspace.push({ ...workspaceResult, skipped: 'Failed to fetch definitions' })
+        continue
+      }
+
+      for (const definition of definitions) {
+        if (definition.status === 'rejected' || definition.status === 'candidate') {
+          continue
+        }
+        try {
+          const matchCount = await evaluateDefinition(posthog, definition)
+          await upsertSignalMetrics(supabase, workspace.id, definition.type, matchCount)
+          workspaceResult.evaluated++
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          log.error(`Definition ${definition.id} (${definition.type}) failed: ${msg}`)
+          workspaceResult.failed++
+        }
+      }
+
+      results.workspacesProcessed++
+      results.definitionsEvaluated += workspaceResult.evaluated
+      results.definitionsFailed += workspaceResult.failed
+      results.perWorkspace.push(workspaceResult)
+    } catch (err) {
+      log.error(`Workspace ${workspace.slug} failed:`, err)
+      results.workspacesSkipped++
+      results.perWorkspace.push({
+        ...workspaceResult,
+        skipped: err instanceof Error ? err.message : 'Unknown error',
+      })
+    }
+  }
+
+  const duration = Date.now() - startTime
+  log.info(
+    `Signal tracking completed in ${duration}ms: ` +
+      `${results.definitionsEvaluated} evaluated, ${results.definitionsFailed} failed, ` +
+      `${results.workspacesSkipped} workspaces skipped`,
+  )
+
+  return NextResponse.json({
+    success: true,
+    duration_ms: duration,
+    summary: {
+      workspaces_processed: results.workspacesProcessed,
+      workspaces_skipped: results.workspacesSkipped,
+      definitions_evaluated: results.definitionsEvaluated,
+      definitions_failed: results.definitionsFailed,
+    },
+    workspaces: results.perWorkspace,
+  })
 }

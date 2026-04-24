@@ -31,7 +31,7 @@ async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     totalSignals: metrics.total_signals ?? metrics.totalSignals ?? 0,
     activeSignals: metrics.signals_this_period ?? metrics.activeSignals ?? 0,
     totalAccounts: metrics.total_accounts ?? metrics.totalAccounts ?? 0,
-    avgLift: metrics.avg_health_score ?? metrics.avgLift ?? 0,
+    avgLift: metrics.avgLift ?? 0,
     recentSignals: data.recent_signals ?? undefined,
   }
 }

@@ -18,7 +18,7 @@ export async function GET() {
     // Note: `as any` cast needed because Supabase types may not include all tables yet
     const { data: account } = await (supabase as any)
       .from('accounts')
-      .select('id, name, domain, health_score, signal_count')
+      .select('id, name, domain, signal_count')
       .eq('workspace_id', workspaceId)
       .order('signal_count', { ascending: false })
       .limit(1)
@@ -43,7 +43,6 @@ export async function GET() {
           user_email: fallback.user_email,
           signal_name: signal?.name || fallback.signal_name,
           signal_type: signal?.signal_type || fallback.signal_type,
-          health_score: account.health_score ?? fallback.health_score,
           signal_count: account.signal_count ?? fallback.signal_count,
           deal_value: fallback.deal_value,
           detected_at: signal?.detected_at?.split('T')[0] || fallback.detected_at,

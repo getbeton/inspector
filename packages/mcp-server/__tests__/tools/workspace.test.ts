@@ -27,11 +27,10 @@ describe('Workspace tools', () => {
     registerWorkspaceTools(mockServer as any, mockGetAuth)
   })
 
-  it('should register 4 workspace tools', () => {
-    expect(mockServer.tool).toHaveBeenCalledTimes(4)
+  it('should register 3 workspace tools', () => {
+    expect(mockServer.tool).toHaveBeenCalledTimes(3)
     expect(registeredTools.has('get_workspace')).toBe(true)
     expect(registeredTools.has('get_integration_status')).toBe(true)
-    expect(registeredTools.has('get_account_scores')).toBe(true)
     expect(registeredTools.has('list_accounts')).toBe(true)
   })
 
@@ -83,19 +82,4 @@ describe('Workspace tools', () => {
     })
   })
 
-  describe('get_account_scores', () => {
-    it('should call /api/heuristics/scores/:id', async () => {
-      const accountId = '550e8400-e29b-41d4-a716-446655440000'
-      mockCallApi.mockResolvedValue({ data: { scores: {} }, status: 200 })
-
-      const handler = registeredTools.get('get_account_scores')!.handler
-      await handler({ account_id: accountId })
-
-      expect(mockCallApi).toHaveBeenCalledWith(
-        `/api/heuristics/scores/${accountId}`,
-        'Bearer test-token',
-        { toolName: 'get_account_scores' }
-      )
-    })
-  })
 })
