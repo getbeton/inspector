@@ -221,4 +221,49 @@
     letter-spacing: 0.05em;
     line-height: 1.2;
   }
+
+  /*
+    Native <select> neobrutalist defaults.
+
+    Most <select> in the codebase are unstyled bare selects. We override the
+    UA styles here so they pick up the Beton look without touching each call
+    site: 2px squared border, custom chevron, focus-lift shadow.
+
+    NOTE: Browsers render the <option> menu itself as a native OS popup — that
+    cannot be themed via CSS. For surfaces that need a fully Beton-styled
+    popup, use the <Select> primitive in src/components/ui/select.tsx.
+  */
+  select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: hsl(var(--background));
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230f0f0f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+    border: 2px solid hsl(var(--foreground) / 0.2);
+    border-radius: 0;
+    padding-right: 32px;
+    padding-inline-end: 32px;
+    font-family: inherit;
+    color: hsl(var(--foreground));
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+
+  select:focus-visible {
+    outline: none;
+    border-color: hsl(var(--foreground));
+    box-shadow: 2px 2px 0 hsl(var(--foreground));
+  }
+
+  select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Dark-mode chevron: invert to near-white */
+  .dark select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f5f5f5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  }
 }
