@@ -56,8 +56,8 @@ async function handler(
 
   const { payload, nullFields } = buildPayload(rows, fields, subject)
 
-  const result = await adapter.sendTest(ctx.workspaceId, objectId, payload, rows)
-  return NextResponse.json({ ...result, payload, nullFields, subject })
+  const result = await adapter.sendTest(ctx.workspaceId, objectId, payload, rows, fields)
+  return NextResponse.json({ ...result, payload: result.payload ?? payload, nullFields, subject })
 }
 
 export const POST = withErrorHandler(

@@ -117,26 +117,33 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
       objectId: ObjectId,
       payload: Record<string, unknown>,
       rows: MappingRow[],
+      fields: FieldSchema[],
     ): Promise<SendTestResult> {
       const apiKey = await apiKeyFor(workspaceId)
       const slug = OBJECT_TO_SLUG[objectId]
+
+      // Shape each value into Attio's expected wire format based on the
+      // destination field's type. Simple types pass through; email/phone/
+      // personal-name/location get wrapped into the array-of-object forms
+      // Attio requires.
+      const shaped = shapeAttioPayload(payload, fields)
 
       try {
         // Pick a matching attribute for upsert only when a natural unique key
         // is in the payload. Otherwise fall back to create — Attio rejects
         // PUT /records when matching_attribute isn't unique (e.g. 'stage' on Deals).
-        const matchOn = chooseMatchOn(objectId, payload)
+        const matchOn = chooseMatchOn(objectId, shaped)
 
         const result = matchOn
-          ? await upsertRecord(apiKey, slug, payload, matchOn)
-          : await createRecord(apiKey, slug, payload)
+          ? await upsertRecord(apiKey, slug, shaped, matchOn)
+          : await createRecord(apiKey, slug, shaped)
 
         return {
           status: 'success',
           code: 200,
           title: 'Test record created in Attio',
           detail: `Record ${result.recordId} ${result.action}.`,
-          payload,
+          payload: shaped,
         }
       } catch (err) {
         // On error, best-effort fetch of the schema so we can translate
@@ -145,7 +152,7 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
         try {
           attrs = await getObjectAttributes(apiKey, slug)
         } catch {}
-        return attioErrorToResult(err, payload, attrs)
+        return attioErrorToResult(err, shaped, attrs)
       }
     },
   }
@@ -194,6 +201,65 @@ function attioKindToUiKind(t: string): string {
       return 'boolean'
     default:
       return 'text'
+  }
+}
+
+/**
+ * Reshape a generic {fieldId: rawValue} payload into Attio's wire format.
+ *
+ * Most Attio attributes accept a primitive "shorthand" (e.g. "name": "Jane"),
+ * but structured types (email-address, phone-number, personal-name, location,
+ * record-reference) require the full array-of-object form. Applying the
+ * shaping here lets the rest of the stack (formula engine, buildPayload,
+ * send-test route) stay destination-agnostic.
+ */
+function shapeAttioPayload(
+  payload: Record<string, unknown>,
+  fields: FieldSchema[],
+): Record<string, unknown> {
+  const byId = new Map(fields.map((f) => [f.id, f]))
+  const out: Record<string, unknown> = {}
+  for (const [fieldId, value] of Object.entries(payload)) {
+    if (value === null || value === undefined || value === '') continue
+    const field = byId.get(fieldId)
+    if (!field) {
+      // Unknown field — pass through so Attio can 400 with a clear message.
+      out[fieldId] = value
+      continue
+    }
+    out[fieldId] = shapeAttioValue(field.kind, value)
+  }
+  return out
+}
+
+function shapeAttioValue(kind: string, value: unknown): unknown {
+  // Already shaped by the caller (e.g. formula returned an object) — trust it.
+  if (Array.isArray(value)) return value
+  if (typeof value === 'object' && value !== null) return value
+
+  const str = String(value)
+  switch (kind) {
+    case 'email':
+      return [{ email_address: str }]
+    case 'phone':
+      return [{ original_phone_number: str }]
+    case 'personal_name':
+    case 'personal-name':
+      return [{ full_name: str }]
+    case 'location':
+      // Treat bare strings as a single-line address. Users who want more
+      // structure can emit a JSON object from a formula.
+      return [{ line_1: str }]
+    case 'record':
+    case 'ref':
+      // Record references need {target_object, target_record_id}. We don't
+      // resolve references yet — pass the raw value through so Attio returns
+      // a clear per-attribute error (which humanizeAttioMessage will friendly).
+      return value
+    default:
+      // text, number, currency, date, datetime, select, status, url, domain,
+      // boolean, domain, etc. — Attio accepts primitive shorthand.
+      return value
   }
 }
 

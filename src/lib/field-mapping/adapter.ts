@@ -1,6 +1,7 @@
 import type {
   Destination,
   FetchSampleSubjectsOptions,
+  FieldSchema,
   MappingRow,
   ObjectId,
   ObjectSchema,
@@ -33,12 +34,15 @@ export interface DestinationAdapter {
   /**
    * Send a test record to the destination's sandbox.
    * The payload is pre-built by the caller (via buildPayload + formula engine).
+   * Adapters may use the `fields` schema to reshape values per the destination's
+   * per-type wire format (e.g. Attio requires arrays for email/phone/location).
    */
   sendTest(
     workspaceId: string,
     objectId: ObjectId,
     payload: Record<string, unknown>,
     rows: MappingRow[],
+    fields: FieldSchema[],
   ): Promise<SendTestResult>
 }
 
