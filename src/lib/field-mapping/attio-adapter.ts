@@ -118,10 +118,10 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
       payload: Record<string, unknown>,
       rows: MappingRow[],
     ): Promise<SendTestResult> {
-      try {
-        const apiKey = await apiKeyFor(workspaceId)
-        const slug = OBJECT_TO_SLUG[objectId]
+      const apiKey = await apiKeyFor(workspaceId)
+      const slug = OBJECT_TO_SLUG[objectId]
 
+      try {
         // Pick a matching attribute for upsert only when a natural unique key
         // is in the payload. Otherwise fall back to create — Attio rejects
         // PUT /records when matching_attribute isn't unique (e.g. 'stage' on Deals).
@@ -139,7 +139,13 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
           payload,
         }
       } catch (err) {
-        return attioErrorToResult(err, payload)
+        // On error, best-effort fetch of the schema so we can translate
+        // opaque attribute UUIDs in the message to human-readable names.
+        let attrs: AttioAttribute[] = []
+        try {
+          attrs = await getObjectAttributes(apiKey, slug)
+        } catch {}
+        return attioErrorToResult(err, payload, attrs)
       }
     },
   }
@@ -214,7 +220,11 @@ function chooseMatchOn(
   return null
 }
 
-function attioErrorToResult(err: unknown, payload: Record<string, unknown>): SendTestResult {
+function attioErrorToResult(
+  err: unknown,
+  payload: Record<string, unknown>,
+  attrs: AttioAttribute[] = [],
+): SendTestResult {
   if (err instanceof AttioAuthError) {
     return {
       status: 'error',
@@ -240,7 +250,7 @@ function attioErrorToResult(err: unknown, payload: Record<string, unknown>): Sen
       status: 'error',
       code: 422,
       title: 'Validation failed (422)',
-      detail: err.message,
+      detail: humanizeAttioMessage(err.message, attrs),
       payload,
     }
   }
@@ -249,7 +259,7 @@ function attioErrorToResult(err: unknown, payload: Record<string, unknown>): Sen
       status: 'error',
       code: 404,
       title: 'Attio resource not found',
-      detail: err.message,
+      detail: humanizeAttioMessage(err.message, attrs),
       payload,
     }
   }
@@ -258,7 +268,7 @@ function attioErrorToResult(err: unknown, payload: Record<string, unknown>): Sen
       status: 'error',
       code: 500,
       title: 'Attio error',
-      detail: err.message,
+      detail: humanizeAttioMessage(err.message, attrs),
       payload,
     }
   }
@@ -266,7 +276,32 @@ function attioErrorToResult(err: unknown, payload: Record<string, unknown>): Sen
     status: 'error',
     code: 500,
     title: 'Unexpected error',
-    detail: err instanceof Error ? err.message : 'Unknown error',
+    detail: humanizeAttioMessage(
+      err instanceof Error ? err.message : 'Unknown error',
+      attrs,
+    ),
     payload,
   }
+}
+
+/**
+ * Replace Attio attribute UUIDs in an error message with human-readable names.
+ * Example:
+ *   before: Required value for attribute with ID "50766a8f-b48b-47a0-8ae1-e546526787eb" was not provided.
+ *   after:  Required value for attribute "Deal owner" (slug: owner) was not provided.
+ *
+ * Falls back to the original message if no match is found, so the user never
+ * loses information even when the schema fetch has drifted.
+ */
+function humanizeAttioMessage(message: string, attrs: AttioAttribute[]): string {
+  if (!message || attrs.length === 0) return message
+  const byId = new Map(attrs.map((a) => [a.id, a]))
+  return message.replace(
+    /attribute with ID "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/gi,
+    (match, uuid) => {
+      const attr = byId.get(uuid)
+      if (!attr) return match
+      return `attribute "${attr.title}" (slug: ${attr.slug})`
+    },
+  )
 }
