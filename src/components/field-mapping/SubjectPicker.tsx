@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { Check, ChevronDown, Search } from 'lucide-react'
@@ -26,9 +26,10 @@ export function SubjectPicker({
   const [q, setQ] = useState('')
   const current = subjects.find((s) => s.id === currentId) ?? subjects[0] ?? null
 
-  useEffect(() => {
-    if (!open) setQ('')
-  }, [open])
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (!next) setQ('')
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -42,7 +43,7 @@ export function SubjectPicker({
   }, [subjects, q])
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
           <button

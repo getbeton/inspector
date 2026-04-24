@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -37,13 +37,13 @@ export function TestModal({ destination, objectId, onClose }: TestModalProps) {
 
   const [stage, setStage] = useState<'idle' | 'sending' | 'done'>('idle')
   const [result, setResult] = useState<SendTestResult & { payload?: Record<string, unknown> | null } | null>(null)
+  const [lastObjectId, setLastObjectId] = useState<ObjectId | null>(objectId)
 
-  useEffect(() => {
-    if (objectId) {
-      setStage('idle')
-      setResult(null)
-    }
-  }, [objectId])
+  if (objectId && objectId !== lastObjectId) {
+    setLastObjectId(objectId)
+    setStage('idle')
+    setResult(null)
+  }
 
   const handleSend = async () => {
     if (!obj) return
