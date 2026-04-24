@@ -13,6 +13,7 @@ import {
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import type { DestinationAdapter } from './adapter'
 import { fetchSampleSubjects } from './sample-subjects'
+import { resolveAttioLinks } from './resolve-links'
 import type {
   FetchSampleSubjectsOptions,
   FieldSchema,
@@ -122,11 +123,17 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
       const apiKey = await apiKeyFor(workspaceId)
       const slug = OBJECT_TO_SLUG[objectId]
 
-      // Shape each value into Attio's expected wire format based on the
-      // destination field's type. Simple types pass through; email/phone/
-      // personal-name/location get wrapped into the array-of-object forms
-      // Attio requires.
-      const shaped = shapeAttioPayload(payload, fields)
+      // 1. Resolve entity-linking markers in the payload into real record-ref
+      //    arrays / email arrays via Attio assert calls. Records the per-field
+      //    outcome so the TestModal can render which links matched vs created.
+      const resolved = await resolveAttioLinks(payload, fields, apiKey, {
+        autoLinkPersonToCompany: true,
+      })
+
+      // 2. Re-shape any remaining primitive values that need Attio's wire
+      //    form (email-address, phone-number, etc.). Already-resolved
+      //    record-ref arrays pass through unchanged.
+      const shaped = shapeAttioPayload(resolved.payload, fields)
 
       try {
         // Pick a matching attribute for upsert only when a natural unique key
@@ -144,6 +151,8 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
           title: 'Test record created in Attio',
           detail: `Record ${result.recordId} ${result.action}.`,
           payload: shaped,
+          outcomes: resolved.outcomes,
+          webUrl: result.webUrl,
         }
       } catch (err) {
         // On error, best-effort fetch of the schema so we can translate
@@ -152,20 +161,34 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
         try {
           attrs = await getObjectAttributes(apiKey, slug)
         } catch {}
-        return attioErrorToResult(err, shaped, attrs)
+        const result = attioErrorToResult(err, shaped, attrs)
+        return { ...result, outcomes: resolved.outcomes }
       }
     },
   }
 }
 
 function attrToFieldSchema(attr: AttioAttribute): FieldSchema {
+  const slugs = attr.targetObjectSlugs ?? []
+  const mapped = slugs
+    .map((s) => attioSlugToObjectId(s))
+    .filter((o): o is ObjectId => o !== null)
   return {
     id: attr.slug,
     label: attr.title,
     kind: attioKindToUiKind(attr.type),
     required: attr.isRequired,
     options: attr.selectOptions?.map((o) => o.value),
+    targetObjectId: mapped[0],
   }
+}
+
+function attioSlugToObjectId(slug: string): ObjectId | null {
+  if (slug === 'deals') return 'deals'
+  if (slug === 'people') return 'people'
+  if (slug === 'companies') return 'companies'
+  if (slug === 'workspaces') return 'workspaces'
+  return null
 }
 
 function attioKindToUiKind(t: string): string {
@@ -195,6 +218,8 @@ function attioKindToUiKind(t: string): string {
     case 'record-reference':
     case 'reference':
       return 'record'
+    case 'actor-reference':
+      return 'actor'
     case 'location':
       return 'location'
     case 'checkbox':

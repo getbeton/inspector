@@ -73,6 +73,8 @@ export interface AttioAttribute {
   isUnique: boolean
   isWritable: boolean
   selectOptions?: Array<{ value: string; label: string }>
+  /** For record-reference attributes: allowed target object slugs (e.g. ['people']). */
+  targetObjectSlugs?: string[]
 }
 
 /**
@@ -92,6 +94,18 @@ export interface AttioUpsertResult {
   recordId: string
   action: 'created' | 'updated' | 'upserted'
   matchingAttribute?: string
+  webUrl?: string
+  /** True when the upsert produced a brand-new record (vs matched an existing one). */
+  wasCreated?: boolean
+}
+
+export interface AttioWorkspaceMember {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  avatarUrl: string | null
+  accessLevel: 'admin' | 'member' | 'suspended' | string
 }
 
 /**
@@ -230,18 +244,31 @@ export async function getObjectAttributes(
       is_required?: boolean
       is_unique?: boolean
       is_writable?: boolean
+      config?: {
+        record_reference?: {
+          allowed_objects?: Array<{ api_slug?: string }>
+          allowed_object_ids?: string[]
+        }
+      }
     }>
   }>(response)
 
-  const attributes: AttioAttribute[] = (data.data || []).map((attr) => ({
-    id: attr.id?.attribute_id || '',
-    slug: attr.api_slug || '',
-    title: attr.title || '',
-    type: attr.type || '',
-    isRequired: attr.is_required || false,
-    isUnique: attr.is_unique || false,
-    isWritable: attr.is_writable !== false,
-  }))
+  const attributes: AttioAttribute[] = (data.data || []).map((attr) => {
+    const allowed = attr.config?.record_reference?.allowed_objects ?? []
+    const slugs = allowed
+      .map((o) => o.api_slug)
+      .filter((s): s is string => !!s)
+    return {
+      id: attr.id?.attribute_id || '',
+      slug: attr.api_slug || '',
+      title: attr.title || '',
+      type: attr.type || '',
+      isRequired: attr.is_required || false,
+      isUnique: attr.is_unique || false,
+      isWritable: attr.is_writable !== false,
+      targetObjectSlugs: slugs.length ? slugs : undefined,
+    }
+  })
 
   // Fetch select/status options for applicable attributes (in parallel)
   const optionFetches = attributes
@@ -423,14 +450,24 @@ export async function upsertRecord(
   const data = await handleResponse<{
     data?: {
       id?: { record_id?: string }
+      web_url?: string
+      created_at?: string
+      updated_at?: string
     }
   }>(response)
 
   const record = data.data || {}
+  // Attio's upsert response returns created_at + updated_at. If they match to the second,
+  // the record was newly created. This is the only signal we get — there's no explicit flag.
+  const created = record.created_at ?? ''
+  const updated = record.updated_at ?? ''
+  const wasCreated = Boolean(created) && created.slice(0, 19) === updated.slice(0, 19)
   return {
     recordId: record.id?.record_id || '',
-    action: 'upserted',
+    action: wasCreated ? 'created' : 'updated',
     matchingAttribute,
+    webUrl: record.web_url,
+    wasCreated,
   }
 }
 
@@ -736,6 +773,233 @@ export async function upsertPersonRecords(
       r.status === 'fulfilled'
     )
     .map((r) => r.value)
+}
+
+// ============================================
+// Entity linking helpers
+// ============================================
+
+/**
+ * List workspace members (humans who can be Deal/Person/Company owners).
+ * Suspended members are filtered out so they never resolve at sync time.
+ *
+ * @see https://docs.attio.com/rest-api/endpoint-reference/workspace-members/list-workspace-members
+ */
+export async function listWorkspaceMembers(
+  apiKey: string
+): Promise<AttioWorkspaceMember[]> {
+  const response = await fetch(`${ATTIO_BASE_URL}/workspace_members`, {
+    method: 'GET',
+    headers: createHeaders(apiKey),
+  })
+  const data = await handleResponse<{
+    data?: Array<{
+      id?: { workspace_member_id?: string }
+      first_name?: string
+      last_name?: string
+      email_address?: string
+      avatar_url?: string | null
+      access_level?: string
+    }>
+  }>(response)
+
+  return (data.data || [])
+    .map((m) => ({
+      id: m.id?.workspace_member_id || '',
+      email: m.email_address || '',
+      firstName: m.first_name || '',
+      lastName: m.last_name || '',
+      avatarUrl: m.avatar_url ?? null,
+      accessLevel: m.access_level || 'member',
+    }))
+    .filter((m) => m.accessLevel !== 'suspended')
+}
+
+/**
+ * Assert a Person by email (find or create). Also returns the Person's
+ * linked Company record_id if any, so callers can reuse without a second
+ * query.
+ */
+export async function assertPersonByEmail(
+  apiKey: string,
+  email: string
+): Promise<{ recordId: string; wasCreated: boolean; companyRecordId: string | null; webUrl?: string }> {
+  // Attio's People assert endpoint accepts a bare email string as
+  // email_addresses under the shorthand form.
+  const result = await upsertRecord(
+    apiKey,
+    'people',
+    { email_addresses: email },
+    'email_addresses'
+  )
+
+  // Fetch the Person record to read the linked company (no dedicated field on
+  // the assert response). Cheap call and lets us power `via_person` resolution.
+  let companyRecordId: string | null = null
+  if (result.recordId) {
+    const person = await getRecord(apiKey, 'people', result.recordId)
+    const company = person?.values?.company
+    if (Array.isArray(company) && company.length > 0) {
+      const first = company[0] as { target_record_id?: string } | undefined
+      companyRecordId = first?.target_record_id ?? null
+    }
+  }
+
+  return {
+    recordId: result.recordId,
+    wasCreated: Boolean(result.wasCreated),
+    companyRecordId,
+    webUrl: result.webUrl,
+  }
+}
+
+/**
+ * Assert a Company by domain (find or create).
+ */
+export async function assertCompanyByDomain(
+  apiKey: string,
+  domain: string
+): Promise<{ recordId: string; wasCreated: boolean; webUrl?: string }> {
+  const result = await upsertRecord(
+    apiKey,
+    'companies',
+    { domains: domain },
+    'domains'
+  )
+  return {
+    recordId: result.recordId,
+    wasCreated: Boolean(result.wasCreated),
+    webUrl: result.webUrl,
+  }
+}
+
+/**
+ * Link an existing Person record to an existing Company by setting the
+ * Person's `company` attribute. Idempotent — Attio silently no-ops if the
+ * link already exists.
+ */
+export async function linkPersonToCompany(
+  apiKey: string,
+  personRecordId: string,
+  companyRecordId: string
+): Promise<void> {
+  const response = await fetch(
+    `${ATTIO_BASE_URL}/objects/people/records/${personRecordId}`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(apiKey),
+      body: JSON.stringify({
+        data: {
+          values: {
+            company: [
+              { target_object: 'companies', target_record_id: companyRecordId },
+            ],
+          },
+        },
+      }),
+    }
+  )
+  if (!response.ok) {
+    await handleResponse(response)
+  }
+}
+
+/**
+ * Search records by a human query (name/email/domain) for the type-ahead
+ * picker. Uses Attio's query endpoint with a broad filter.
+ */
+export async function searchRecordsForPicker(
+  apiKey: string,
+  objectSlug: string,
+  q: string,
+  limit: number = 10
+): Promise<Array<{ id: string; display: string; secondary?: string }>> {
+  const query = q.trim()
+  if (!query) return []
+
+  // Attio doesn't have a cross-attribute "search" operator; we query by the
+  // most useful attribute per object and fall back to name.
+  const filter = buildSearchFilter(objectSlug, query)
+
+  const response = await fetch(
+    `${ATTIO_BASE_URL}/objects/${objectSlug}/records/query`,
+    {
+      method: 'POST',
+      headers: createHeaders(apiKey),
+      body: JSON.stringify({ filter, limit }),
+    }
+  )
+
+  const data = await handleResponse<{
+    data?: Array<{
+      id?: { record_id?: string }
+      values?: Record<string, unknown>
+    }>
+  }>(response)
+
+  return (data.data || []).map((rec) => ({
+    id: rec.id?.record_id || '',
+    display: pickDisplayForRecord(objectSlug, rec.values || {}),
+    secondary: pickSecondaryForRecord(objectSlug, rec.values || {}),
+  }))
+}
+
+function buildSearchFilter(objectSlug: string, q: string): Record<string, unknown> {
+  // Attio query filter. Use $contains where available.
+  if (objectSlug === 'people') {
+    return { email_addresses: { email_address: { $contains: q } } }
+  }
+  if (objectSlug === 'companies') {
+    return { domains: { domain: { $contains: q } } }
+  }
+  // Fallback: filter by name
+  return { name: { $contains: q } }
+}
+
+function pickDisplayForRecord(
+  objectSlug: string,
+  values: Record<string, unknown>
+): string {
+  if (objectSlug === 'people') {
+    const name = extractFirstTextValue(values.name, 'full_name') ?? ''
+    const email = extractFirstTextValue(values.email_addresses, 'email_address') ?? ''
+    return name || email || '(unnamed)'
+  }
+  if (objectSlug === 'companies') {
+    const name = extractFirstTextValue(values.name, 'value') ?? ''
+    const domain = extractFirstTextValue(values.domains, 'domain') ?? ''
+    return name || domain || '(unnamed)'
+  }
+  const name = extractFirstTextValue(values.name, 'value') ?? ''
+  return name || '(unnamed)'
+}
+
+function pickSecondaryForRecord(
+  objectSlug: string,
+  values: Record<string, unknown>
+): string | undefined {
+  if (objectSlug === 'people') {
+    return extractFirstTextValue(values.email_addresses, 'email_address') ?? undefined
+  }
+  if (objectSlug === 'companies') {
+    return extractFirstTextValue(values.domains, 'domain') ?? undefined
+  }
+  return undefined
+}
+
+function extractFirstTextValue(
+  val: unknown,
+  key: string
+): string | null {
+  if (!Array.isArray(val) || val.length === 0) return null
+  const first = val[0] as Record<string, unknown> | undefined
+  if (!first) return null
+  const v = first[key]
+  if (typeof v === 'string' && v.length > 0) return v
+  // Fallback to `value` field which some Attio attributes nest under.
+  const alt = first.value
+  if (typeof alt === 'string' && alt.length > 0) return alt
+  return null
 }
 
 /**

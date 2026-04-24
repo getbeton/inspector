@@ -131,6 +131,12 @@ function validateRow(objectId: string, row: MappingRow): string | null {
   if (src.type === 'option' && !src.value) {
     return `Option source missing value on ${objectId}.${row.fieldId}`
   }
+  if (src.type === 'link_specific_record') {
+    if (!src.targetObject || !src.recordId) {
+      return `link_specific_record missing targetObject or recordId on ${objectId}.${row.fieldId}`
+    }
+  }
+  // link_subject_*, actor_* carry no additional payload — nothing to validate here.
   return null
 }
 
