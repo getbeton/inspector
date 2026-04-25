@@ -366,7 +366,7 @@ export default function AddSignalPage() {
                 <select
                   value={conditionOperator}
                   onChange={(e) => setConditionOperator(e.target.value)}
-                  className="px-3 py-2 border border-border rounded-md bg-background text-sm"
+                  className="h-9 px-3 text-sm"
                 >
                   {CONDITION_OPERATORS.map(op => (
                     <option key={op.id} value={op.id}>{op.label}</option>

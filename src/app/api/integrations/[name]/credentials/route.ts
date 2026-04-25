@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import { SUPPORTED_INTEGRATIONS } from '@/lib/integrations/supported'
+import { requireRole, ForbiddenError } from '@/lib/auth/permissions'
 
 /**
  * GET /api/integrations/[name]/credentials
@@ -33,6 +34,9 @@ export async function GET(
     if (!membership) {
       return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
     }
+
+    // RBAC: only owner and admin can access credentials
+    requireRole(membership.role, ['owner', 'admin'])
 
     const credentials = await getIntegrationCredentials(membership.workspaceId, name)
 
@@ -71,6 +75,9 @@ export async function GET(
       configJson: configRow?.config_json ?? null,
     })
   } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     console.error('Error in GET /api/integrations/[name]/credentials:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

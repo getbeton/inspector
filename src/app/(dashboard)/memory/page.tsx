@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useMemo, useCallback } from 'react'
+import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExplorationFiltersBar, type ExplorationFilters } from '@/components/exploration/exploration-filters-bar'
@@ -46,6 +46,28 @@ function MemoryPageContent() {
   const workspaceId = isDemo ? undefined : setupStatus?.workspaceId
 
   const { data: sessions = [], isLoading: sessionsLoading } = useExplorationSessions(workspaceId)
+
+  // Self-heal: once setup is complete, ping the trigger endpoint per mount.
+  // Server-side idempotency (triggerAnalysisIfNotRecentlyRun, 24h window on
+  // created/running/completed) is the source of truth. Do NOT gate on
+  // sessions.length — a workspace with only stale/failed sessions (old
+  // pre-Fix 4 stuck 'created' rows, or prior runs that 500'd) still needs a
+  // fresh trigger on return, and the client has no reliable view of what
+  // counts as "recent".
+  const selfHealFiredRef = useRef(false)
+  useEffect(() => {
+    if (setupLoading) return
+    if (!setupStatus?.setupComplete) return
+    if (selfHealFiredRef.current) return
+    selfHealFiredRef.current = true
+
+    fetch('/api/onboarding/complete', {
+      method: 'POST',
+      credentials: 'include',
+    }).catch((err) => {
+      console.error('[MemoryPage] self-heal /api/onboarding/complete failed:', err)
+    })
+  }, [setupLoading, setupStatus])
 
   const [filters, setFilters] = useState<ExplorationFilters>({
     search: '',

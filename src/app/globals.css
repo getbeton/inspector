@@ -1,10 +1,28 @@
 @import 'tailwindcss';
 @import "tw-animate-css";
+
 /*
-  ---break---
+  ============================================================================
+  Beton Inspector — Design Tokens
+  Neobrutalist · Colorblind-safe · Black/white foundation · High contrast
+
+  Source of truth for color, radius, shadow. See also:
+    - beton-design-system/project/colors_and_type.css (design bundle)
+    - src/components/ui/{button,card,badge,input}.tsx (variant usage)
+
+  Conventions:
+    - Dark mode is OPT-IN via `.dark` class (no prefers-color-scheme).
+    - All radii are 0 except `--radius-full` for avatar circles / status dots.
+    - Shadows are HARD-OFFSET, no blur. `4px 4px 0 var(--color-foreground)`.
+    - Semantic colors follow the Wong colorblind-safe palette (Nature 2011):
+        success = teal (NOT green), destructive = orange (NOT red).
+  ============================================================================
 */
+
+/* ---- Dark-mode custom variant (replaces `@media (prefers-color-scheme)`) ---- */
 @custom-variant dark (&:is(.dark *));
 
+/* ---- Tailwind theme → CSS variables bridge ---- */
 @theme {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -22,37 +40,57 @@
   --color-success-foreground: hsl(var(--success-foreground));
   --color-warning: hsl(var(--warning));
   --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
   --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--border-strong));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  /* Wong palette — raw swatches, usable directly for charts/data-viz */
   --color-signal-blue: #0173b2;
   --color-signal-teal: #029e73;
   --color-signal-amber: #fbc15e;
   --color-signal-orange: #de8f05;
   --color-signal-pink: #cc78bc;
+  --color-signal-sky: #56b4e9;
+  --color-signal-vermillion: #d55e00;
+  --color-signal-yellow: #ece133;
   --color-signal-neutral: #666666;
   --color-signal-light: #eeeeee;
 
-  /* Neobrutalist shadows */
-  --shadow-card: 4px 4px 0 var(--color-foreground);
+  /* Squared corners. Only `--radius-full` is rounded. */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+  --radius-4xl: 4px;
+  --radius-full: 9999px;
 
-  --font-heading: 'Cal Sans', ui-sans-serif, system-ui, sans-serif;
+  /* Hard-offset block shadows (no blur). */
+  --shadow-card: 4px 4px 0 hsl(var(--foreground));
+  --shadow-card-sm: 2px 2px 0 hsl(var(--foreground));
+  --shadow-card-lg: 6px 6px 0 hsl(var(--foreground));
+  --shadow-focus: 2px 2px 0 hsl(var(--foreground));
+
+  --font-heading: 'Cal Sans', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-sans:
     var(--font-sans), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono:
+    'Geist Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 }
 
 /*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  Tailwind v4 default border color changed to `currentcolor`. Preserve v3
+  behaviour across the codebase.
 */
 @layer base {
   *,
@@ -60,254 +98,97 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-border, currentcolor);
   }
 }
 
-@layer base {
-  :root {
-    /* Light mode colors - colorblind-friendly palette */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 6%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 6%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 6%;
-
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 40%;
-
-    --accent: 200 100% 50%;
-    --accent-foreground: 0 0% 100%;
-
-    /* Colorblind-safe primary (blue) */
-    --primary: 201 100% 35%;
-    --primary-foreground: 0 0% 100%;
-
-    /* Colorblind-safe secondary (teal) */
-    --secondary: 168 98% 33%;
-    --secondary-foreground: 0 0% 100%;
-
-    /* Colorblind-safe destructive (orange instead of red) */
-    --destructive: 33 100% 44%;
-    --destructive-foreground: 0 0% 100%;
-
-    /* Colorblind-safe success (teal) */
-    --success: 168 98% 33%;
-    --success-foreground: 0 0% 100%;
-
-    /* Colorblind-safe warning (amber) */
-    --warning: 45 100% 51%;
-    --warning-foreground: 0 0% 6%;
-
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 201 100% 35%;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      /* Dark mode colors */
-      --background: 0 0% 6%;
-      --foreground: 0 0% 96%;
-
-      --card: 0 0% 10%;
-      --card-foreground: 0 0% 96%;
-
-      --popover: 0 0% 10%;
-      --popover-foreground: 0 0% 96%;
-
-      --muted: 0 0% 20%;
-      --muted-foreground: 0 0% 60%;
-
-      --accent: 200 100% 60%;
-      --accent-foreground: 0 0% 6%;
-
-      --primary: 201 100% 45%;
-      --primary-foreground: 0 0% 6%;
-
-      --secondary: 168 98% 43%;
-      --secondary-foreground: 0 0% 6%;
-
-      --destructive: 33 100% 54%;
-      --destructive-foreground: 0 0% 6%;
-
-      /* Colorblind-safe success (teal) */
-      --success: 168 98% 43%;
-      --success-foreground: 0 0% 6%;
-
-      /* Colorblind-safe warning (amber) */
-      --warning: 45 100% 60%;
-      --warning-foreground: 0 0% 6%;
-
-      --border: 0 0% 20%;
-      --input: 0 0% 20%;
-      --ring: 201 100% 45%;
-    }
-  }
-}
-
-@layer base {
-  body {
-    @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-      "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-      sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-}
-
-/*
-  ---break---
-*/
-
-@theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-warning: var(--warning);
-  --color-success-foreground: var(--success-foreground);
-  --color-success: var(--success);
-  --color-info-foreground: var(--info-foreground);
-  --color-info: var(--info);
-}
-
-/*
-  ---break---
-*/
-
+/* ---- Light mode tokens (default) ---- */
 :root {
-  --radius: 0;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --destructive-foreground: var(--color-red-700);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-700);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
+  --background: 0 0% 100%;
+  --foreground: 0 0% 6%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 6%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 6%;
+
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 40%;
+
+  --accent: 200 100% 50%;
+  --accent-foreground: 0 0% 100%;
+
+  /* Wong blue */
+  --primary: 201 100% 35%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Wong teal (doubles as success) */
+  --secondary: 168 98% 33%;
+  --secondary-foreground: 0 0% 100%;
+
+  --success: 168 98% 33%;
+  --success-foreground: 0 0% 100%;
+
+  /* Wong amber */
+  --warning: 45 100% 51%;
+  --warning-foreground: 0 0% 6%;
+
+  /* Wong orange — NOT red. Red/green is the classic CB failure. */
+  --destructive: 33 100% 44%;
+  --destructive-foreground: 0 0% 100%;
+
+  --info: 201 100% 35%;
+  --info-foreground: 0 0% 100%;
+
+  --border: 0 0% 90%;
+  --border-strong: 0 0% 6%;
+  --input: 0 0% 90%;
+  --ring: 201 100% 35%;
 }
 
-/*
-  ---break---
-*/
-
+/* ---- Dark mode tokens (opt-in via `.dark` on <html> or parent) ---- */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --destructive-foreground: var(--color-red-400);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-400);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-400);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-400);
+  --background: 0 0% 6%;
+  --foreground: 0 0% 96%;
+
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 96%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 96%;
+
+  --muted: 0 0% 20%;
+  --muted-foreground: 0 0% 60%;
+
+  --accent: 200 100% 60%;
+  --accent-foreground: 0 0% 6%;
+
+  --primary: 201 100% 45%;
+  --primary-foreground: 0 0% 6%;
+
+  --secondary: 168 98% 43%;
+  --secondary-foreground: 0 0% 6%;
+
+  --success: 168 98% 43%;
+  --success-foreground: 0 0% 6%;
+
+  --warning: 45 100% 60%;
+  --warning-foreground: 0 0% 6%;
+
+  --destructive: 33 100% 54%;
+  --destructive-foreground: 0 0% 6%;
+
+  --info: 201 100% 45%;
+  --info-foreground: 0 0% 6%;
+
+  --border: 0 0% 20%;
+  --border-strong: 0 0% 96%;
+  --input: 0 0% 20%;
+  --ring: 201 100% 45%;
 }
 
-/*
-  ---break---
-*/
-
-/* Cal Sans — heading font for neobrutalist style */
+/* ---- Cal Sans — heading font for the neobrutalist signature ---- */
 @font-face {
   font-family: 'Cal Sans';
   src: url('/fonts/cal-sans-semibold.woff2') format('woff2');
@@ -323,13 +204,66 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family:
+      var(--font-sans),
+      -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+      "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Neobrutalist headings: Cal Sans, uppercase, wide tracking */
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     line-height: 1.2;
+  }
+
+  /*
+    Native <select> neobrutalist defaults.
+
+    Most <select> in the codebase are unstyled bare selects. We override the
+    UA styles here so they pick up the Beton look without touching each call
+    site: 2px squared border, custom chevron, focus-lift shadow.
+
+    NOTE: Browsers render the <option> menu itself as a native OS popup — that
+    cannot be themed via CSS. For surfaces that need a fully Beton-styled
+    popup, use the <Select> primitive in src/components/ui/select.tsx.
+  */
+  select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: hsl(var(--background));
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230f0f0f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+    border: 2px solid hsl(var(--foreground) / 0.2);
+    border-radius: 0;
+    padding-right: 32px;
+    padding-inline-end: 32px;
+    font-family: inherit;
+    color: hsl(var(--foreground));
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+
+  select:focus-visible {
+    outline: none;
+    border-color: hsl(var(--foreground));
+    box-shadow: 2px 2px 0 hsl(var(--foreground));
+  }
+
+  select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Dark-mode chevron: invert to near-white */
+  .dark select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f5f5f5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   }
 }

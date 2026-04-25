@@ -22,18 +22,38 @@ const badgeVariants = cva(
       },
       variant: {
         default:
-          "bg-primary text-primary-foreground [button,a&]:hover:bg-primary/90",
+          "border-foreground bg-primary text-primary-foreground [button,a&]:hover:bg-primary/90",
         destructive:
-          "bg-destructive text-white [button,a&]:hover:bg-destructive/90",
-        error:
-          "bg-destructive/8 text-destructive-foreground dark:bg-destructive/16",
-        info: "bg-info/8 text-info-foreground dark:bg-info/16",
-        outline:
-          "border-input bg-background text-foreground dark:bg-input/32 [button,a&]:hover:bg-accent/50 dark:[button,a&]:hover:bg-input/48",
+          "border-foreground bg-destructive text-white [button,a&]:hover:bg-destructive/90",
         secondary:
-          "bg-secondary text-secondary-foreground [button,a&]:hover:bg-secondary/90",
-        success: "bg-success/8 text-success-foreground dark:bg-success/16",
-        warning: "bg-warning/8 text-warning-foreground dark:bg-warning/16",
+          "border-foreground bg-secondary text-secondary-foreground [button,a&]:hover:bg-secondary/90",
+        outline:
+          "border-foreground/30 bg-background text-foreground [button,a&]:hover:bg-muted",
+        /* Status-style: tinted fill + strong-colored text/border. Mirrors design bundle chips. */
+        active:
+          "border-success/40 bg-success/10 text-success",
+        new: "border-primary/40 bg-primary/10 text-primary",
+        churned:
+          "border-destructive/40 bg-destructive/10 text-destructive",
+        draft:
+          "border-foreground/20 bg-muted text-muted-foreground",
+        pending:
+          "border-foreground/20 bg-background text-muted-foreground",
+        auto: "border-primary/40 bg-primary/10 text-primary",
+        custom:
+          "border-foreground/20 bg-background text-muted-foreground",
+        running:
+          "border-primary/40 bg-primary/10 text-primary",
+        completed:
+          "border-success/40 bg-success/10 text-success",
+        failed:
+          "border-destructive/40 bg-destructive/10 text-destructive",
+        /* Legacy semantic tints (kept for existing callers). */
+        error:
+          "border-destructive/40 bg-destructive/10 text-destructive",
+        info: "border-primary/40 bg-primary/10 text-primary",
+        success: "border-success/40 bg-success/10 text-success",
+        warning: "border-warning/40 bg-warning/10 text-warning-foreground",
       },
     },
   },

@@ -5,24 +5,34 @@
 
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
   [![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js-black)](https://nextjs.org)
+
+  <p>
+    <a href="https://www.getbeton.ai/">Website</a> ·
+    <a href="https://www.getbeton.ai/pricing/">Pricing</a> ·
+    <a href="https://www.getbeton.ai/integrations/">Integrations</a> ·
+    <a href="https://www.getbeton.ai/blog/">Blog</a>
+  </p>
 </div>
 
 ---
 
 ## What is Beton Inspector?
 
-Beton Inspector connects to your product analytics (PostHog) and turns raw usage data into actionable revenue signals. Instead of guessing which accounts are ready to buy, expand, or churn, Beton detects concrete behavioral patterns — trial conversion intent, power user emergence, feature adoption velocity — and scores each account automatically.
+Beton Inspector connects to your product analytics ([PostHog](https://www.getbeton.ai/integrations/posthog/)) and turns raw usage data into actionable revenue signals. Instead of guessing which accounts are ready to buy, expand, or churn, Beton detects concrete behavioral patterns — trial conversion intent, power user emergence, feature adoption velocity — and scores each account automatically.
 
-The signals and scores flow into your CRM (Attio), giving your sales team a prioritized list of accounts with context on *why* they should reach out and *when*.
+The signals and scores flow into your CRM ([Attio](https://www.getbeton.ai/integrations/attio/), [HubSpot](https://www.getbeton.ai/integrations/hubspot/), [Pipedrive](https://www.getbeton.ai/integrations/pipedrive/), [Zoho](https://www.getbeton.ai/integrations/zoho/)), giving your sales team a prioritized list of accounts with context on *why* they should reach out and *when*.
 
 **Key value:** Your product data already contains the buying signals. Beton Inspector surfaces them without requiring data engineering or custom dashboards.
+
+Prefer managed hosting? See [Beton Cloud pricing](https://www.getbeton.ai/pricing/) — $0.50 per tracked user, free trial, no credit card required.
 
 ## Features
 
 - **20+ Signal Detectors** — Trial intent, power users, feature adoption, engagement drops, and more
 - **Account Scoring** — Health, expansion potential, and churn risk on a 0–100 scale (concrete grades: M100, M75, M50, M25, M10)
-- **PostHog Integration** — Reads events, persons, and group data from your PostHog data warehouse
-- **CRM Sync** — Routes scored accounts and signals to Attio with full context
+- **[PostHog Integration](https://www.getbeton.ai/integrations/posthog/)** — Reads events, persons, and group data from your PostHog data warehouse
+- **CRM Sync** — Routes scored accounts and signals to [Attio](https://www.getbeton.ai/integrations/attio/), [HubSpot](https://www.getbeton.ai/integrations/hubspot/), [Pipedrive](https://www.getbeton.ai/integrations/pipedrive/), or [Zoho](https://www.getbeton.ai/integrations/zoho/) with full context
+- **[Webhooks & n8n](https://www.getbeton.ai/integrations/n8n/)** — Route signals to custom destinations via [webhooks](https://www.getbeton.ai/integrations/webhook/) or n8n workflows
 - **Multi-tenant** — Workspace-based isolation with Supabase Row Level Security
 - **Metered Billing** — Optional Stripe integration for SaaS billing (can be disabled for self-hosting)
 - **Agent System** — AI-powered data exploration that learns your schema and business model

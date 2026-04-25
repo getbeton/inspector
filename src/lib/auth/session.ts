@@ -1,13 +1,14 @@
 import { redirect } from 'next/navigation'
-import { type SessionUser } from './constants'
+import { cookies } from 'next/headers'
+import { type SessionUser, type WorkspaceMembership, ACTIVE_WORKSPACE_COOKIE } from './constants'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // Re-export for convenience
-export { SESSION_COOKIE_NAME, type SessionUser } from './constants'
+export { SESSION_COOKIE_NAME, ACTIVE_WORKSPACE_COOKIE, type SessionUser, type WorkspaceMembership } from './constants'
 
-// Type for workspace membership query result
-type WorkspaceMembership = {
+// Type for workspace membership query result (raw DB row)
+type WorkspaceMembershipRow = {
   workspace_id: string
   role: string
   workspaces: { id: string; name: string; slug: string } | null
@@ -15,7 +16,11 @@ type WorkspaceMembership = {
 
 /**
  * Get the current session using Supabase Auth
- * Returns user info with workspace context
+ * Returns user info with all workspace memberships and active workspace context.
+ *
+ * Active workspace resolution order:
+ * 1. `beton_active_workspace` cookie
+ * 2. First workspace in membership list
  */
 export async function getSession(): Promise<SessionUser | null> {
   // Return a stub session when auth is bypassed (test/preview deployments)
@@ -26,7 +31,9 @@ export async function getSession(): Promise<SessionUser | null> {
       name: 'Auth Bypass',
       workspace_id: undefined,
       workspace_name: undefined,
+      workspace_slug: undefined,
       role: undefined,
+      workspaces: [],
     }
   }
 
@@ -40,31 +47,46 @@ export async function getSession(): Promise<SessionUser | null> {
       return null
     }
 
-    // Get workspace membership using admin client to bypass RLS
-    // This is safe because we've already authenticated the user above
-    // and we're only fetching THEIR membership (filtered by user_id)
+    // Get ALL workspace memberships using admin client to bypass RLS
     const adminClient = createAdminClient()
-    const { data: rawMembership, error: membershipError } = await adminClient
+    const { data: rawMemberships, error: membershipError } = await adminClient
       .from('workspace_members')
       .select('workspace_id, role, workspaces(id, name, slug)')
       .eq('user_id', user.id)
-      .single()
 
-    // Log actual database errors (PGRST116 = no rows found, which is expected for new users)
-    if (membershipError && membershipError.code !== 'PGRST116') {
+    if (membershipError) {
       console.error('[getSession] Membership query failed:', membershipError.code, membershipError.message)
     }
 
-    const membership = rawMembership as WorkspaceMembership | null
+    const memberships = (rawMemberships as WorkspaceMembershipRow[] | null) ?? []
 
-    // Build session user object
+    // Build workspace list
+    const workspaces: WorkspaceMembership[] = memberships
+      .filter(m => m.workspaces)
+      .map(m => ({
+        workspace_id: m.workspace_id,
+        workspace_name: m.workspaces!.name,
+        workspace_slug: m.workspaces!.slug,
+        role: m.role,
+      }))
+
+    // Resolve active workspace: cookie → first membership
+    const cookieStore = await cookies()
+    const activeWorkspaceCookie = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value
+    let active = workspaces.find(w => w.workspace_id === activeWorkspaceCookie)
+    if (!active && workspaces.length > 0) {
+      active = workspaces[0]
+    }
+
     return {
       sub: user.id,
       email: user.email || '',
       name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-      workspace_id: membership?.workspace_id,
-      workspace_name: membership?.workspaces?.name,
-      role: membership?.role
+      workspace_id: active?.workspace_id,
+      workspace_name: active?.workspace_name,
+      workspace_slug: active?.workspace_slug,
+      role: active?.role,
+      workspaces,
     }
   } catch (error) {
     console.error('[getSession] Exception:', error)

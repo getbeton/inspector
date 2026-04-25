@@ -23,6 +23,9 @@ export default async function DashboardRootLayout({
         email: session.email,
         name: session.name,
         workspace_name: session.workspace_name,
+        workspace_id: session.workspace_id,
+        role: session.role,
+        workspaces: session.workspaces,
       } : null}
     >
       {session && (

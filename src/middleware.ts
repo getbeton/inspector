@@ -87,6 +87,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(target, request.url))
   }
 
+  // Skip invite accept pages — they need to work for unauthenticated users
+  if (pathname.startsWith('/invite/')) {
+    return response
+  }
+
+  // Forward active workspace as header for API routes
+  // This allows server-side code to read the active workspace from the request
+  const activeWorkspace = request.cookies.get('beton_active_workspace')?.value
+  if (activeWorkspace) {
+    response.headers.set('x-workspace-id', activeWorkspace)
+  }
+
   return response
 }
 

@@ -53,11 +53,11 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
   }
 
   return (
-    <div className={cn('border border-border rounded-lg overflow-hidden', className)}>
+    <div className={cn('border-2 border-foreground bg-card shadow-card overflow-hidden', className)}>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-muted/50 border-b border-border">
+            <tr className="bg-muted border-b-2 border-foreground">
               <th className="w-12 px-4 py-3">
                 <Checkbox
                   checked={allSelected}
@@ -65,25 +65,25 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                   onCheckedChange={toggleAll}
                 />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-left font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Signal
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-left font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Status
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-right font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 With Signal
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-right font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Without
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-right font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Lift
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-right font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Est. ARR
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-left font-heading text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                 Source
               </th>
             </tr>
@@ -123,20 +123,13 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                   </div>
                 </td>
                 <td className="px-4 py-4">
-                  <Badge
-                    variant={signal.status === 'active' ? 'default' : 'secondary'}
-                    className={cn(
-                      signal.status === 'active'
-                        ? 'bg-success/10 text-success border-success/20'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
+                  <Badge variant={signal.status === 'active' ? 'active' : 'draft'}>
                     {signal.status}
                   </Badge>
                 </td>
                 <td className="px-4 py-4 text-right">
                   {signal.conversion_with < 0 ? (
-                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                    <Badge variant="pending" className="text-xs">Pending</Badge>
                   ) : (
                     <>
                       <div className="font-medium">{formatPercent(signal.conversion_with)}</div>
@@ -148,7 +141,7 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                 </td>
                 <td className="px-4 py-4 text-right">
                   {signal.conversion_without < 0 ? (
-                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                    <Badge variant="pending" className="text-xs">Pending</Badge>
                   ) : (
                     <>
                       <div className="font-medium">{formatPercent(signal.conversion_without)}</div>
@@ -160,7 +153,7 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                 </td>
                 <td className="px-4 py-4 text-right">
                   {signal.lift < 0 ? (
-                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                    <Badge variant="pending" className="text-xs">Pending</Badge>
                   ) : (
                     <>
                       <div className="flex items-center justify-end gap-2">
@@ -182,14 +175,7 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
                   {formatCurrency(signal.estimated_arr)}
                 </td>
                 <td className="px-4 py-4">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      signal.source === 'Beton-Discovered'
-                        ? 'border-primary/30 text-primary'
-                        : 'border-muted-foreground/30 text-muted-foreground'
-                    )}
-                  >
+                  <Badge variant={signal.source === 'Beton-Discovered' ? 'auto' : 'custom'}>
                     {signal.source === 'Beton-Discovered' ? 'Auto' : 'Custom'}
                   </Badge>
                 </td>
@@ -200,7 +186,7 @@ export function SignalsTable({ signals, selectedIds, onSelectionChange, classNam
       </div>
 
       {/* Summary row */}
-      <div className="px-4 py-3 bg-muted/30 border-t border-border flex items-center justify-between text-sm">
+      <div className="px-4 py-3 bg-muted border-t-2 border-foreground flex items-center justify-between text-sm">
         <span className="text-muted-foreground">
           {signals.length} signal{signals.length !== 1 ? 's' : ''}
           {selectedIds.length > 0 && (

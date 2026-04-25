@@ -31,6 +31,13 @@ export {
   trackAttioEntityCreationFailed,
   trackAttioContactPickerUsed,
   setOnboardingUserProperties,
+  trackWorkspaceInviteSent,
+  trackWorkspaceInviteAccepted,
+  trackWorkspaceMemberRemoved,
+  trackWorkspaceSwitched,
+  trackWorkspaceDomainClaimed,
+  trackWorkspaceDomainJoinSuggested,
+  trackWorkspaceDomainJoinAccepted,
 } from './gtm'
 
 export { usePostHogIdentify } from './use-posthog-identify'

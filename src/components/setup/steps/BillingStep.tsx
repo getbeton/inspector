@@ -285,8 +285,9 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
           <AlertTitle>Within Free Tier</AlertTitle>
           <AlertDescription>
             You have <strong>{mtuCount.toLocaleString()}</strong> users (within the{" "}
-            {freeTierLimit.toLocaleString()} user free tier). You won&apos;t be
-            charged now, but we need a card on file for when you grow.
+            {freeTierLimit.toLocaleString()} user free tier). No card required — if
+            you exceed {freeTierLimit.toLocaleString()} users, we&apos;ll ask for a
+            card then.
           </AlertDescription>
         </Alert>
       )}
@@ -311,8 +312,15 @@ export function BillingStep({ mtuCount, onComplete, className }: BillingStepProp
         </Alert>
       )}
 
-      {/* Info State - Show add card button */}
-      {state === "info" && (
+      {/* Info State - Free-tier users skip card entry; above-threshold users go through Stripe */}
+      {state === "info" && !isOverLimit && (
+        <Button onClick={onComplete} className="w-full">
+          <Check className="h-4 w-4" />
+          Continue
+        </Button>
+      )}
+
+      {state === "info" && isOverLimit && (
         <>
           <div className="flex items-start gap-2 text-xs text-muted-foreground">
             <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />

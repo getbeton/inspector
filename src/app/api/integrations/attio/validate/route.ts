@@ -32,7 +32,7 @@ import { encryptCredentials } from '@/lib/crypto/encryption'
 import { createModuleLogger } from '@/lib/utils/logger'
 import { validateAttioApiKey } from '@/lib/integrations/validation'
 import { applyRateLimit, RATE_LIMITS } from '@/lib/utils/api-rate-limit'
-import type { IntegrationConfigInsert } from '@/lib/supabase/types'
+import type { IntegrationConfigInsert, Json } from '@/lib/supabase/types'
 
 const log = createModuleLogger('[Attio Validate]')
 
@@ -134,11 +134,34 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Missing field_mapping' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    // `integration_configs` has no top-level `field_mapping` column — it stores
+    // per-integration config in the JSONB `config_json` blob. Read, merge, write.
+    const fetchResult = await supabase
       .from('integration_configs')
-      .update({ field_mapping } as never)
+      .select('id, config_json')
       .eq('workspace_id', membership.workspaceId)
       .eq('integration_name', 'attio')
+      .single()
+
+    const existing = fetchResult.data as { id: string; config_json: Record<string, Json> | null } | null
+
+    if (fetchResult.error || !existing) {
+      return NextResponse.json(
+        { error: 'Attio integration not configured. Connect Attio first.' },
+        { status: 404 }
+      )
+    }
+
+    const existingConfig = existing.config_json ?? {}
+    const updatedConfig: Record<string, Json> = {
+      ...existingConfig,
+      field_mapping: field_mapping as Json,
+    }
+
+    const { error } = await supabase
+      .from('integration_configs')
+      .update({ config_json: updatedConfig as Json } as never)
+      .eq('id', existing.id)
 
     if (error) {
       log.error('Error saving field mapping:', error)
