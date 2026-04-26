@@ -889,10 +889,13 @@ export async function assertCompanyByDomain(
   apiKey: string,
   domain: string
 ): Promise<{ recordId: string; wasCreated: boolean; webUrl?: string }> {
+  // Attio's `domains` is a multi-domain attribute and expects the wire form
+  // [{domain: "..."}], even for a single value. Sending a bare string trips
+  // the matching_attribute=domains query-params validator with HTTP 400.
   const result = await upsertRecord(
     apiKey,
     'companies',
-    { domains: domain },
+    { domains: [{ domain }] },
     'domains'
   )
   return {
