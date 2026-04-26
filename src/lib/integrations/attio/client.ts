@@ -452,23 +452,22 @@ export async function upsertRecord(
     }
   }
 
-  const payload: {
-    data: {
-      values: Record<string, unknown>
-      matching_attribute?: string
-    }
-  } = {
+  const payload = {
     data: {
       values: formattedValues,
     },
   }
 
-  // Add matching attribute for upsert
-  if (matchingAttribute && matchingAttribute in values) {
-    payload.data.matching_attribute = matchingAttribute
-  }
+  // Attio expects `matching_attribute` as a URL query parameter on the
+  // `PUT /records` endpoint. Putting it in the body returns a 400
+  // "Query params validation error" since the server's query-param
+  // validator never sees it.
+  const url =
+    matchingAttribute && matchingAttribute in values
+      ? `${ATTIO_BASE_URL}/objects/${objectSlug}/records?matching_attribute=${encodeURIComponent(matchingAttribute)}`
+      : `${ATTIO_BASE_URL}/objects/${objectSlug}/records`
 
-  const response = await fetch(`${ATTIO_BASE_URL}/objects/${objectSlug}/records`, {
+  const response = await fetch(url, {
     method: 'PUT',
     headers: createHeaders(apiKey),
     body: JSON.stringify(payload),
