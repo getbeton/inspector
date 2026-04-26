@@ -72,6 +72,8 @@ export interface AttioAttribute {
   isRequired: boolean
   isUnique: boolean
   isWritable: boolean
+  /** True when Attio expects an array of values (multi-select, multi-domain, etc.). */
+  isMulti?: boolean
   selectOptions?: Array<{ value: string; label: string }>
   /** For record-reference attributes: allowed target object slugs (e.g. ['people']). */
   targetObjectSlugs?: string[]
@@ -244,6 +246,10 @@ export async function getObjectAttributes(
       is_required?: boolean
       is_unique?: boolean
       is_writable?: boolean
+      is_multiselect?: boolean
+      relationship?: {
+        object_slug?: string | null
+      } | null
       config?: {
         record_reference?: {
           allowed_objects?: Array<{ api_slug?: string }>
@@ -253,19 +259,40 @@ export async function getObjectAttributes(
     }>
   }>(response)
 
+  // Types where Attio always expects an array shape regardless of the
+  // is_multiselect flag (the underlying value is a list of structured
+  // sub-objects: domains/emails/phones, etc.).
+  const ALWAYS_MULTI = new Set([
+    'domain',
+    'email-address',
+    'phone-number',
+    'personal-name',
+    'location',
+    'record-reference',
+    'reference',
+    'actor-reference',
+  ])
+
   const attributes: AttioAttribute[] = (data.data || []).map((attr) => {
-    const allowed = attr.config?.record_reference?.allowed_objects ?? []
-    const slugs = allowed
+    // Two routes for the target object:
+    // 1. config.record_reference.allowed_objects[].api_slug (older schema variant)
+    // 2. relationship.object_slug (current schema; Attio's API consistently
+    //    populates this on record-reference attributes)
+    const fromConfig = (attr.config?.record_reference?.allowed_objects ?? [])
       .map((o) => o.api_slug)
       .filter((s): s is string => !!s)
+    const fromRelationship = attr.relationship?.object_slug ? [attr.relationship.object_slug] : []
+    const slugs = fromConfig.length ? fromConfig : fromRelationship
+    const type = attr.type || ''
     return {
       id: attr.id?.attribute_id || '',
       slug: attr.api_slug || '',
       title: attr.title || '',
-      type: attr.type || '',
+      type,
       isRequired: attr.is_required || false,
       isUnique: attr.is_unique || false,
       isWritable: attr.is_writable !== false,
+      isMulti: attr.is_multiselect === true || ALWAYS_MULTI.has(type),
       targetObjectSlugs: slugs.length ? slugs : undefined,
     }
   })
@@ -498,6 +525,7 @@ export async function createRecord(
   const data = await handleResponse<{
     data?: {
       id?: { record_id?: string }
+      web_url?: string
     }
   }>(response)
 
@@ -505,6 +533,7 @@ export async function createRecord(
   return {
     recordId: record.id?.record_id || '',
     action: 'created',
+    webUrl: record.web_url,
   }
 }
 

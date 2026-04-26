@@ -83,6 +83,8 @@ export interface FieldSchema {
   group?: string            // UI grouping hint (Core / Timeline / etc.)
   options?: string[]        // for select / multi-select
   recordHint?: string       // for record-type (e.g. "Company", "Person")
+  /** True when the destination expects an array shape (multi-select, domains, emails, ...). */
+  isMulti?: boolean
   /** For record-reference fields: which ObjectId the reference points to. */
   targetObjectId?: ObjectId
 }

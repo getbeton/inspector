@@ -179,6 +179,7 @@ function attrToFieldSchema(attr: AttioAttribute): FieldSchema {
     kind: attioKindToUiKind(attr.type),
     required: attr.isRequired,
     options: attr.selectOptions?.map((o) => o.value),
+    isMulti: attr.isMulti,
     targetObjectId: mapped[0],
   }
 }
@@ -252,18 +253,18 @@ function shapeAttioPayload(
       out[fieldId] = value
       continue
     }
-    out[fieldId] = shapeAttioValue(field.kind, value)
+    out[fieldId] = shapeAttioValue(field, value)
   }
   return out
 }
 
-function shapeAttioValue(kind: string, value: unknown): unknown {
+function shapeAttioValue(field: FieldSchema, value: unknown): unknown {
   // Already shaped by the caller (e.g. formula returned an object) — trust it.
   if (Array.isArray(value)) return value
   if (typeof value === 'object' && value !== null) return value
 
   const str = String(value)
-  switch (kind) {
+  switch (field.kind) {
     case 'email':
       return [{ email_address: str }]
     case 'phone':
@@ -275,16 +276,31 @@ function shapeAttioValue(kind: string, value: unknown): unknown {
       // Treat bare strings as a single-line address. Users who want more
       // structure can emit a JSON object from a formula.
       return [{ line_1: str }]
+    case 'domain':
+      // Attio domain attributes are always array-of-objects, even for single values.
+      return [{ domain: str }]
+    case 'boolean': {
+      // Coerce any truthy string ("true", "TRUE", "1", "yes") to true; everything
+      // else (including the string "false") becomes false. Lets formula expressions
+      // and string-typed property sources flow through cleanly.
+      if (typeof value === 'boolean') return value
+      const v = str.trim().toLowerCase()
+      return v === 'true' || v === '1' || v === 'yes' || v === 'y'
+    }
     case 'record':
     case 'ref':
       // Record references need {target_object, target_record_id}. We don't
-      // resolve references yet — pass the raw value through so Attio returns
+      // resolve references here — pass the raw value through so Attio returns
       // a clear per-attribute error (which humanizeAttioMessage will friendly).
       return value
-    default:
-      // text, number, currency, date, datetime, select, status, url, domain,
-      // boolean, domain, etc. — Attio accepts primitive shorthand.
+    default: {
+      // Multi-select with a non-array primitive: wrap in array so Attio doesn't
+      // reject with "expected array but received single value".
+      if (field.isMulti) return [value]
+      // text, number, currency, date, datetime, select, status, url — Attio
+      // accepts primitive shorthand.
       return value
+    }
   }
 }
 

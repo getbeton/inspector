@@ -75,10 +75,20 @@ export function SourcePicker({
   onPick,
   children,
 }: SourcePickerProps) {
-  const hasOptions =
-    (field.kind === 'select' || field.kind === 'multiselect' || field.kind === 'multi-select') &&
-    Array.isArray(field.options) &&
-    field.options.length > 0
+  // Effective options for the OPTION tab — booleans synthesize a true/false
+  // pair so the user can pick a constant without diving into the Formula tab.
+  const effectiveOptions: string[] | null = (() => {
+    if (field.kind === 'boolean') return ['true', 'false']
+    if (
+      (field.kind === 'select' || field.kind === 'multiselect' || field.kind === 'multi-select') &&
+      Array.isArray(field.options) &&
+      field.options.length > 0
+    ) {
+      return field.options
+    }
+    return null
+  })()
+  const hasOptions = effectiveOptions !== null
 
   const isLinkable = LINKABLE_KINDS.has(field.kind)
   const isActor = field.kind === 'actor'
@@ -235,7 +245,7 @@ export function SourcePicker({
               <div className="max-h-[280px] overflow-y-auto">
                 {(() => {
                   const s = optQ.trim().toLowerCase()
-                  const shown = (field.options ?? []).filter((o) => !s || o.toLowerCase().includes(s))
+                  const shown = (effectiveOptions ?? []).filter((o) => !s || o.toLowerCase().includes(s))
                   if (shown.length === 0) {
                     return <div className="p-6 text-center text-xs text-foreground/50">No option matches "{optQ}"</div>
                   }
@@ -262,7 +272,7 @@ export function SourcePicker({
               </div>
               <div className="border-t-2 border-foreground/10 px-3 py-2 text-[10px] text-foreground/50 bg-muted/30 flex items-center justify-between">
                 <span>Send the same option on every record</span>
-                <span>{(field.options ?? []).length} options</span>
+                <span>{(effectiveOptions ?? []).length} options</span>
               </div>
             </div>
           ) : null}
