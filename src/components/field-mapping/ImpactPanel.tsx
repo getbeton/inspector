@@ -147,7 +147,9 @@ function ObjectImpact({ summary }: { summary: ImpactSummary }) {
         {summary.objectId} · {summary.sampleSize} sample{summary.sampleSize === 1 ? '' : 's'}
       </div>
       {summary.byField.length === 0 ? (
-        <div className="text-[11px] text-foreground/50">No linkable fields to preview.</div>
+        <div className="text-[11px] text-foreground/50">
+          Only owner/actor sources mapped — these resolve at write time and aren&apos;t previewable.
+        </div>
       ) : (
         <ul className="space-y-1.5 text-xs">
           {summary.byField.map((f) => (

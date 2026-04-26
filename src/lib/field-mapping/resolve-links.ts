@@ -184,13 +184,11 @@ async function resolveMarker(
 
     case 'specific_record': {
       if (!marker.recordId || !marker.targetObject) return null
-      // Confirm the record still exists so we fail fast with a clear outcome.
-      // Cheap GET vs. writing a reference that Attio will 400 on later.
-      try {
-        await getRecord(ctx.apiKey, marker.targetObject, marker.recordId)
-      } catch {
-        // Let the write attempt surface the real error downstream.
-      }
+      // Confirm the record still exists. Throwing here propagates to the
+      // outer catch and emits an `error` outcome — without this check, a
+      // pinned-but-deleted record reports `matched` and only fails at the
+      // actual write, which is too late for ImpactPanel and TestModal.
+      await getRecord(ctx.apiKey, marker.targetObject, marker.recordId)
       return {
         value: [
           { target_object: marker.targetObject, target_record_id: marker.recordId },
