@@ -20,7 +20,8 @@ import { toastManager } from '@/components/ui/toast'
 import { useSession } from '@/components/auth/session-provider'
 import { GuestSignInPrompt } from '@/components/auth/GuestSignInPrompt'
 import { Select, SelectTrigger, SelectPopup, SelectItem } from '@/components/ui/select'
-import { ExternalLink, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { ExternalLink, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
 import {
   useIntegrationCredentials,
@@ -34,6 +35,10 @@ import { DataSourcesSection } from '@/components/settings/DataSourcesSection'
 // ---------------------------------------------------------------------------
 // Category display labels
 // ---------------------------------------------------------------------------
+
+// CRMs that expose the dedicated field-mapping settings page.
+// Keep in sync with supported destinations in src/lib/field-mapping/adapter.ts.
+const FIELD_MAPPABLE_CRMS = new Set(['attio'])
 
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
   data_source: 'Data Sources',
@@ -557,6 +562,16 @@ function IntegrationCard({
                 <Button variant="outline" size="sm" onClick={handleEdit}>
                   {isConnected ? 'Update' : 'Configure'}
                 </Button>
+                {isConnected && definition.category === 'crm' && FIELD_MAPPABLE_CRMS.has(definition.name) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link href={`/settings/integrations/${definition.name}/field-mapping`} />}
+                  >
+                    Field mapping
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                )}
                 {isConnected && (
                   <>
                     <Button variant="outline" size="sm" onClick={handleTestConnection} disabled={testing}>
