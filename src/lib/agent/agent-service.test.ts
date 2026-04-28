@@ -178,14 +178,27 @@ describe('AgentService.triggerAnalysis', () => {
 
   it('uses default AGENT_API_URL when env var is not set', async () => {
     vi.stubEnv('AGENT_API_URL', '');
+    vi.stubEnv('API_URL', '');
     const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
     mockCreateClient.mockResolvedValue(mock);
     mockFetchSuccess();
 
     await AgentService.triggerAnalysis('ws-default');
 
-    // Since AGENT_API_URL is empty string (falsy), the || fallback kicks in
+    // Both env vars empty → falls through to DEFAULT_AGENT_API_URL
     expect(fetchCalls[0].url).toContain('inspector-ml-backend-production.up.railway.app');
+  });
+
+  it('falls back to API_URL when AGENT_API_URL is not set', async () => {
+    vi.stubEnv('AGENT_API_URL', '');
+    vi.stubEnv('API_URL', 'https://inspector-ml-backend-staging.up.railway.app');
+    const mock = createSupabaseMock({ website_url: 'https://example.com', slug: 'test' });
+    mockCreateClient.mockResolvedValue(mock);
+    mockFetchSuccess();
+
+    await AgentService.triggerAnalysis('ws-staging');
+
+    expect(fetchCalls[0].url).toContain('inspector-ml-backend-staging.up.railway.app');
   });
 
   it('continues even when session DB persistence fails', async () => {

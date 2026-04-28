@@ -12,7 +12,18 @@ const DEFAULT_AGENT_API_URL = 'https://inspector-ml-backend-production.up.railwa
 const APP_NAME = 'upsell_agent';
 
 function getAgentApiUrl(): string {
-    return process.env.AGENT_API_URL || DEFAULT_AGENT_API_URL;
+    // Accept the legacy `API_URL` name too — Vercel staging is provisioned with
+    // `API_URL` while `.env.example` documents `AGENT_API_URL`. Without this,
+    // staging falls through to the prod default and emits logs in prod Railway.
+    const url = process.env.AGENT_API_URL || process.env.API_URL;
+    if (!url) {
+        log.warn(
+            'Neither AGENT_API_URL nor API_URL is set; falling back to production default. ' +
+            'This will route traffic to the production ML backend.'
+        );
+        return DEFAULT_AGENT_API_URL;
+    }
+    return url;
 }
 
 export class AgentService {
