@@ -51,7 +51,6 @@ export interface DBSignal {
     name: string
     domain: string | null
     arr: number | null
-    health_score: number | null
   } | null
 }
 

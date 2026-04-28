@@ -98,8 +98,7 @@ export async function GET(request: NextRequest) {
               id,
               name,
               domain,
-              arr,
-              health_score
+              arr
             )
           `, { count: 'exact' })
           .eq('workspace_id', workspaceId)

@@ -77,26 +77,8 @@ export function registerAllTools(server: McpServer, workspaceId: string): void {
   )
 
   server.tool(
-    'get_account_scores',
-    'Get health, expansion, and churn risk scores for a specific account',
-    { account_id: z.string().uuid().describe('The account UUID') },
-    async ({ account_id }) => {
-      try {
-        const { data, error } = await admin
-          .from('accounts')
-          .select('*')
-          .eq('id', account_id)
-          .eq('workspace_id', workspaceId)
-          .single()
-        if (error) return err(error.message)
-        return ok(data)
-      } catch (e) { return handle(e) }
-    }
-  )
-
-  server.tool(
     'list_accounts',
-    'List accounts with health scores, ARR, and signal counts. Supports pagination and filtering.',
+    'List accounts with ARR and signal counts. Supports pagination and filtering.',
     {
       page: z.number().int().positive().default(1).describe('Page number (default: 1)'),
       limit: z.number().int().min(1).max(100).default(50).describe('Results per page (default: 50, max: 100)'),
@@ -234,44 +216,6 @@ export function registerAllTools(server: McpServer, workspaceId: string): void {
         return ok({
           signal: def,
           metrics: { occurrence_count: count ?? 0 },
-        })
-      } catch (e) { return handle(e) }
-    }
-  )
-
-  server.tool(
-    'get_dashboard_metrics',
-    'Get aggregated dashboard metrics: total accounts, signal counts, and health score distribution',
-    {
-      lookback_days: z.number().int().min(1).max(365).default(30).describe('Lookback period in days'),
-    },
-    async ({ lookback_days }) => {
-      try {
-        const since = new Date()
-        since.setDate(since.getDate() - lookback_days)
-        const sinceISO = since.toISOString()
-
-        const [accountsResult, signalsResult, definitionsResult] = await Promise.all([
-          admin
-            .from('accounts')
-            .select('*', { count: 'exact', head: true })
-            .eq('workspace_id', workspaceId),
-          admin
-            .from('signals')
-            .select('*', { count: 'exact', head: true })
-            .eq('workspace_id', workspaceId)
-            .gte('timestamp', sinceISO),
-          db
-            .from('signal_definitions')
-            .select('*', { count: 'exact', head: true })
-            .eq('workspace_id', workspaceId),
-        ])
-
-        return ok({
-          total_accounts: accountsResult.count ?? 0,
-          signals_in_period: signalsResult.count ?? 0,
-          signal_definitions: definitionsResult.count ?? 0,
-          lookback_days,
         })
       } catch (e) { return handle(e) }
     }

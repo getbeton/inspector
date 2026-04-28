@@ -14,7 +14,6 @@ export const BETON_VARIABLES = [
   { key: "company_domain", label: "Domain" },
   { key: "signal_name", label: "Signal Name" },
   { key: "signal_type", label: "Signal Type" },
-  { key: "health_score", label: "Health Score" },
   { key: "signal_count", label: "Signal Count" },
   { key: "deal_value", label: "Deal Value" },
   { key: "detected_at", label: "Detected At" },
