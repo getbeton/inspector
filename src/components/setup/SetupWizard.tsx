@@ -647,8 +647,19 @@ export function SetupWizard({
           ),
         };
 
-      default:
+      default: {
+        // Step in DB but no UI implementation on this branch (e.g. integration_definitions
+        // seeded ahead of the wizard step component). Auto-advance instead of
+        // showing an empty card. queueMicrotask defers the state change to after
+        // render to avoid setState-in-render warnings.
+        if (currentStepIndex !== null) {
+          if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+            console.warn(`[SetupWizard] No UI for step "${currentKey}"; auto-skipping.`);
+          }
+          queueMicrotask(() => advanceFrom("skipped"));
+        }
         return { config: null, preview: null };
+      }
     }
   };
 
