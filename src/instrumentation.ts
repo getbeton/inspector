@@ -69,13 +69,30 @@ function validateCloudModeEnvironment(): void {
 }
 
 /**
+ * Required in every deployment mode. The agent powers signal discovery, so a
+ * running Inspector without an Agent ML backend URL is broken-by-default.
+ */
+function validateAgentEnvironment(): void {
+  if (!process.env.AGENT_API_URL) {
+    throw new Error(
+      'AGENT_API_URL is not set. Configure it to your Agent ML backend URL ' +
+      '(e.g. https://your-ml-backend-location.com). See .env.example.'
+    );
+  }
+}
+
+/**
  * Validates environment on startup.
+ * Always validates AGENT_API_URL.
  * In self-hosted mode, validates ENCRYPTION_KEY if set.
  * In cloud mode, validates all required billing environment variables.
  */
 function validateEnvironment(): void {
   const mode = isCloudDeployment() ? 'cloud' : 'self-hosted';
   console.log(`[Instrumentation] Starting in ${mode} mode`);
+
+  validateAgentEnvironment();
+  console.log('[Instrumentation] AGENT_API_URL validated');
 
   if (isCloudDeployment()) {
     // Cloud mode: strict validation of all required env vars
