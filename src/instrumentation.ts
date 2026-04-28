@@ -76,7 +76,7 @@ function validateAgentEnvironment(): void {
   if (!process.env.AGENT_API_URL) {
     throw new Error(
       'AGENT_API_URL is not set. Configure it to your Agent ML backend URL ' +
-      '(e.g. https://inspector-ml-backend-staging.up.railway.app). See .env.example.'
+      '(e.g. https://your-ml-backend-location.com). See .env.example.'
     );
   }
 }
