@@ -13,6 +13,7 @@ import {
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
 import type { DestinationAdapter } from './adapter'
 import { fetchSampleSubjects } from './sample-subjects'
+import { resolveAttioLinks } from './resolve-links'
 import type {
   FetchSampleSubjectsOptions,
   FieldSchema,
@@ -122,11 +123,17 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
       const apiKey = await apiKeyFor(workspaceId)
       const slug = OBJECT_TO_SLUG[objectId]
 
-      // Shape each value into Attio's expected wire format based on the
-      // destination field's type. Simple types pass through; email/phone/
-      // personal-name/location get wrapped into the array-of-object forms
-      // Attio requires.
-      const shaped = shapeAttioPayload(payload, fields)
+      // 1. Resolve entity-linking markers in the payload into real record-ref
+      //    arrays / email arrays via Attio assert calls. Records the per-field
+      //    outcome so the TestModal can render which links matched vs created.
+      const resolved = await resolveAttioLinks(payload, fields, apiKey, {
+        autoLinkPersonToCompany: true,
+      })
+
+      // 2. Re-shape any remaining primitive values that need Attio's wire
+      //    form (email-address, phone-number, etc.). Already-resolved
+      //    record-ref arrays pass through unchanged.
+      const shaped = shapeAttioPayload(resolved.payload, fields)
 
       try {
         // Pick a matching attribute for upsert only when a natural unique key
@@ -144,6 +151,8 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
           title: 'Test record created in Attio',
           detail: `Record ${result.recordId} ${result.action}.`,
           payload: shaped,
+          outcomes: resolved.outcomes,
+          webUrl: result.webUrl,
         }
       } catch (err) {
         // On error, best-effort fetch of the schema so we can translate
@@ -152,20 +161,35 @@ export function createAttioAdapter(ctx: { supabase: SupabaseClient }): Destinati
         try {
           attrs = await getObjectAttributes(apiKey, slug)
         } catch {}
-        return attioErrorToResult(err, shaped, attrs)
+        const result = attioErrorToResult(err, shaped, attrs)
+        return { ...result, outcomes: resolved.outcomes }
       }
     },
   }
 }
 
 function attrToFieldSchema(attr: AttioAttribute): FieldSchema {
+  const slugs = attr.targetObjectSlugs ?? []
+  const mapped = slugs
+    .map((s) => attioSlugToObjectId(s))
+    .filter((o): o is ObjectId => o !== null)
   return {
     id: attr.slug,
     label: attr.title,
     kind: attioKindToUiKind(attr.type),
     required: attr.isRequired,
     options: attr.selectOptions?.map((o) => o.value),
+    isMulti: attr.isMulti,
+    targetObjectId: mapped[0],
   }
+}
+
+function attioSlugToObjectId(slug: string): ObjectId | null {
+  if (slug === 'deals') return 'deals'
+  if (slug === 'people') return 'people'
+  if (slug === 'companies') return 'companies'
+  if (slug === 'workspaces') return 'workspaces'
+  return null
 }
 
 function attioKindToUiKind(t: string): string {
@@ -195,6 +219,8 @@ function attioKindToUiKind(t: string): string {
     case 'record-reference':
     case 'reference':
       return 'record'
+    case 'actor-reference':
+      return 'actor'
     case 'location':
       return 'location'
     case 'checkbox':
@@ -227,18 +253,18 @@ function shapeAttioPayload(
       out[fieldId] = value
       continue
     }
-    out[fieldId] = shapeAttioValue(field.kind, value)
+    out[fieldId] = shapeAttioValue(field, value)
   }
   return out
 }
 
-function shapeAttioValue(kind: string, value: unknown): unknown {
+function shapeAttioValue(field: FieldSchema, value: unknown): unknown {
   // Already shaped by the caller (e.g. formula returned an object) — trust it.
   if (Array.isArray(value)) return value
   if (typeof value === 'object' && value !== null) return value
 
   const str = String(value)
-  switch (kind) {
+  switch (field.kind) {
     case 'email':
       return [{ email_address: str }]
     case 'phone':
@@ -250,16 +276,31 @@ function shapeAttioValue(kind: string, value: unknown): unknown {
       // Treat bare strings as a single-line address. Users who want more
       // structure can emit a JSON object from a formula.
       return [{ line_1: str }]
+    case 'domain':
+      // Attio domain attributes are always array-of-objects, even for single values.
+      return [{ domain: str }]
+    case 'boolean': {
+      // Coerce any truthy string ("true", "TRUE", "1", "yes") to true; everything
+      // else (including the string "false") becomes false. Lets formula expressions
+      // and string-typed property sources flow through cleanly.
+      if (typeof value === 'boolean') return value
+      const v = str.trim().toLowerCase()
+      return v === 'true' || v === '1' || v === 'yes' || v === 'y'
+    }
     case 'record':
     case 'ref':
       // Record references need {target_object, target_record_id}. We don't
-      // resolve references yet — pass the raw value through so Attio returns
+      // resolve references here — pass the raw value through so Attio returns
       // a clear per-attribute error (which humanizeAttioMessage will friendly).
       return value
-    default:
-      // text, number, currency, date, datetime, select, status, url, domain,
-      // boolean, domain, etc. — Attio accepts primitive shorthand.
+    default: {
+      // Multi-select with a non-array primitive: wrap in array so Attio doesn't
+      // reject with "expected array but received single value".
+      if (field.isMulti) return [value]
+      // text, number, currency, date, datetime, select, status, url — Attio
+      // accepts primitive shorthand.
       return value
+    }
   }
 }
 

@@ -8,9 +8,23 @@
 -- Related PRD: .claude/plans/i-need-your-help-jazzy-robin.md
 
 -- ============================================================
--- 1. Extend field_mappings source_type CHECK constraint
+-- 1. Widen source_type for the new variants
 -- ============================================================
 
+-- v2 migration sized this VARCHAR(20). The longest new type
+-- ("link_subject_company_via_person") is 31 chars.
+ALTER TABLE field_mappings ALTER COLUMN source_type TYPE VARCHAR(50);
+
+-- ============================================================
+-- 2. Replace source_type CHECK constraint
+-- ============================================================
+
+-- The v2 migration created two anonymous CHECK constraints, which Postgres
+-- auto-named field_mappings_check and field_mappings_check1. Drop those
+-- alongside the named variants so this migration is idempotent regardless
+-- of whether v2 was installed with named or unnamed constraints.
+ALTER TABLE field_mappings DROP CONSTRAINT IF EXISTS field_mappings_check;
+ALTER TABLE field_mappings DROP CONSTRAINT IF EXISTS field_mappings_check1;
 ALTER TABLE field_mappings DROP CONSTRAINT IF EXISTS field_mappings_source_type_check;
 
 ALTER TABLE field_mappings
@@ -32,7 +46,7 @@ ALTER TABLE field_mappings
     ));
 
 -- ============================================================
--- 2. New columns for link_specific_record
+-- 3. New columns for link_specific_record
 -- ============================================================
 
 ALTER TABLE field_mappings
@@ -40,7 +54,7 @@ ALTER TABLE field_mappings
     ADD COLUMN IF NOT EXISTS link_record_id UUID;
 
 -- ============================================================
--- 3. Update payload-shape CHECK
+-- 4. Replace payload-shape CHECK
 -- ============================================================
 
 ALTER TABLE field_mappings DROP CONSTRAINT IF EXISTS field_mappings_source_shape_check;
@@ -70,7 +84,7 @@ COMMENT ON COLUMN field_mappings.link_record_id IS
     'For source_type=link_specific_record: the destination CRM record UUID the user pinned.';
 
 -- ============================================================
--- 4. accounts.owner_email for actor_account_owner variant
+-- 5. accounts.owner_email for actor_account_owner variant
 -- ============================================================
 
 ALTER TABLE accounts

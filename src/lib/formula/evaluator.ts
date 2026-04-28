@@ -10,6 +10,18 @@ export interface EvaluateOptions {
    * Default: all scopes map to `subject.props` — simplest case.
    */
   scopes?: Partial<Record<PropKind, Record<string, unknown>>>
+
+  /**
+   * Workspace members keyed by email (lowercased). Enables the `member.*`
+   * scope in formulas — e.g. `member.jane@acme.io` resolves to that member's
+   * email (shorthand wire form for Attio actor-reference).
+   *
+   * Typically populated in the browser by a React Query hook that calls
+   * /api/integrations/[name]/workspace-members and cached in-memory; on the
+   * server, populated by the send-test / preview-impact routes before calling
+   * buildPayload's evalSource.
+   */
+  members?: Record<string, { id: string; email: string; firstName?: string; lastName?: string }>
 }
 
 const SCOPE_ALIASES: Record<string, PropKind> = {
@@ -38,8 +50,10 @@ export function evaluateFormula(
     beton_computed: options.scopes?.beton_computed ?? subject?.props ?? {},
   }
 
+  const members = options.members ?? {}
+
   try {
-    const value = evalAst(ast, scopes)
+    const value = evalAst(ast, scopes, members)
     if (value === undefined || value === null || value === '') {
       return { ok: false, reason: 'Formula referenced an empty property' }
     }
@@ -50,7 +64,11 @@ export function evaluateFormula(
   }
 }
 
-function evalAst(ast: Ast, scopes: Record<PropKind, Record<string, unknown>>): unknown {
+function evalAst(
+  ast: Ast,
+  scopes: Record<PropKind, Record<string, unknown>>,
+  members: Record<string, { id: string; email: string; firstName?: string; lastName?: string }>,
+): unknown {
   switch (ast.type) {
     case 'num':
       return ast.value
@@ -82,6 +100,19 @@ function evalAst(ast: Ast, scopes: Record<PropKind, Record<string, unknown>>): u
       return cur
     }
     case 'call': {
+      // Special-cased built-in: member("jane@acme.io") → member email if known,
+      // null otherwise. Uses the injected member map rather than FORMULA_FUNCTIONS
+      // because it needs closure over scopes.
+      if (ast.name === 'member') {
+        if (ast.args.length !== 1) {
+          throw new Error('member() expects exactly 1 argument — an email string')
+        }
+        const v = evalAst(ast.args[0], scopes, members)
+        const email = typeof v === 'string' ? v.toLowerCase() : ''
+        const m = members[email]
+        return m ? m.email : null
+      }
+
       const fn = FORMULA_FUNCTIONS[ast.name]
       if (!fn) throw new Error(`Unknown function "${ast.name}"`)
       if (ast.args.length < fn.minArgs) {
@@ -90,11 +121,11 @@ function evalAst(ast: Ast, scopes: Record<PropKind, Record<string, unknown>>): u
       if (ast.args.length > fn.maxArgs) {
         throw new Error(`${fn.name} expects at most ${fn.maxArgs} argument${fn.maxArgs === 1 ? '' : 's'}`)
       }
-      const args = ast.args.map((a) => evalAst(a, scopes))
+      const args = ast.args.map((a) => evalAst(a, scopes, members))
       return fn.run(args)
     }
     case 'unary': {
-      const v = evalAst(ast.arg, scopes)
+      const v = evalAst(ast.arg, scopes, members)
       if (ast.op === '-') {
         const n = toNumber(v)
         return -n
@@ -102,8 +133,8 @@ function evalAst(ast: Ast, scopes: Record<PropKind, Record<string, unknown>>): u
       return v
     }
     case 'binop': {
-      const l = evalAst(ast.left, scopes)
-      const r = evalAst(ast.right, scopes)
+      const l = evalAst(ast.left, scopes, members)
+      const r = evalAst(ast.right, scopes, members)
       switch (ast.op) {
         case '+':
           // Overload: if either is string, concat; else numeric add.

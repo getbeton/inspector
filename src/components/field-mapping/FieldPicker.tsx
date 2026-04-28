@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -10,7 +10,7 @@ interface FieldPickerProps {
   fields: FieldSchema[]
   takenIds: Set<string>
   onPick: (fieldId: string) => void
-  trigger: ReactNode
+  trigger: ReactElement
 }
 
 export function FieldPicker({ fields, takenIds, onPick, trigger }: FieldPickerProps) {
@@ -47,7 +47,7 @@ export function FieldPicker({ fields, takenIds, onPick, trigger }: FieldPickerPr
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger render={<span className="inline-block" />}>{trigger}</PopoverTrigger>
+      <PopoverTrigger render={trigger} />
       <PopoverContent className="!p-0" viewportClassName="!p-0" side="bottom" align="start">
         <div className="w-[420px] max-w-[92vw] flex flex-col">
           <div className="p-2 border-b-2 border-foreground/10">

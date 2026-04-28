@@ -85,8 +85,21 @@ export function FieldMappingStoreProvider({
     try {
       const raw = window.localStorage.getItem(lsKey)
       if (raw) {
-        const parsed = JSON.parse(raw) as { mappings?: Record<ObjectId, MappingRow[]> }
-        if (parsed?.mappings) return withDefaults(parsed.mappings)
+        const parsed = JSON.parse(raw) as {
+          mappings?: Record<ObjectId, MappingRow[]>
+          savedAt?: Record<ObjectId, MappingRow[]>
+        }
+        // The cache is only valid if the server's saved state matches the one
+        // we cached against. If `savedAt` is missing (older cache) or differs
+        // from the freshly-fetched `initialMappings`, the server moved while
+        // we were away — discard the local cache and trust the server.
+        if (
+          parsed?.mappings &&
+          parsed.savedAt &&
+          isSameMappings(withDefaults(parsed.savedAt), withDefaults(initialMappings))
+        ) {
+          return withDefaults(parsed.mappings)
+        }
       }
     } catch {}
     return withDefaults(initialMappings)
@@ -100,13 +113,24 @@ export function FieldMappingStoreProvider({
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Persist dirty edits whenever mappings change
+  // Persist dirty edits whenever mappings change. Stash the server-saved
+  // snapshot too so the next page load can detect when the server has moved
+  // and invalidate the cache instead of showing phantom unsaved changes.
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      window.localStorage.setItem(lsKey, JSON.stringify({ mappings }))
+      if (isSameMappings(mappings, savedMappings)) {
+        // Nothing to recover — keep localStorage clean so a fresh visit
+        // doesn't pick up a stale entry.
+        window.localStorage.removeItem(lsKey)
+      } else {
+        window.localStorage.setItem(
+          lsKey,
+          JSON.stringify({ mappings, savedAt: savedMappings }),
+        )
+      }
     } catch {}
-  }, [mappings, lsKey])
+  }, [mappings, savedMappings, lsKey])
 
   // ── derivations ─────────────────────────────────────────────
   const dirtyByObj = useMemo<Record<ObjectId, number>>(() => {
@@ -268,6 +292,24 @@ export function useFieldMappingStore() {
 
 function withDefaults(m: Partial<Record<ObjectId, MappingRow[]>>): Record<ObjectId, MappingRow[]> {
   return { ...EMPTY_MAPPINGS, ...m }
+}
+
+/**
+ * Deep-equal two mapping bundles by serializing each object's rows in a
+ * stable order. Cheap enough at this size and avoids pulling in lodash.
+ */
+function isSameMappings(
+  a: Record<ObjectId, MappingRow[]>,
+  b: Record<ObjectId, MappingRow[]>,
+): boolean {
+  const sortKey = (r: MappingRow) => r.fieldId
+  const norm = (m: Record<ObjectId, MappingRow[]>) =>
+    JSON.stringify(
+      (Object.keys(m) as ObjectId[]).sort().map((k) => [k, [...(m[k] ?? [])].sort(
+        (x, y) => sortKey(x).localeCompare(sortKey(y)),
+      )]),
+    )
+  return norm(a) === norm(b)
 }
 
 function trimNoneRows(m: Record<ObjectId, MappingRow[]>): Record<ObjectId, MappingRow[]> {

@@ -160,6 +160,19 @@ export const FORMULA_FUNCTIONS: Record<string, FormulaFn> = {
       }
     },
   },
+  // Virtual: evaluator overrides this name to use the injected workspace-member
+  // map. Kept here so autocomplete surfaces it; run() is a stub (never called
+  // because evalAst short-circuits before FORMULA_FUNCTIONS lookup).
+  member: {
+    name: 'member',
+    sig: 'member(email)',
+    desc: 'Workspace member lookup',
+    minArgs: 1,
+    maxArgs: 1,
+    run: () => {
+      throw new Error('member() must be evaluated through evaluateFormula with a members option.')
+    },
+  },
 }
 
 export const FORMULA_FN_LIST: FormulaFn[] = Object.values(FORMULA_FUNCTIONS)

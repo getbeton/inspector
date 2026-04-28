@@ -2,12 +2,15 @@ export type {
   Destination,
   FetchSampleSubjectsOptions,
   FieldSchema,
+  ImpactSummary,
+  LinkOutcome,
   MappingRow,
   ObjectId,
   ObjectSchema,
   SampleSubject,
   SendTestResult,
   Source,
+  WorkspaceMember,
 } from './types'
 
 export { BETON_PROPERTIES, type BetonProperty } from './beton-properties'

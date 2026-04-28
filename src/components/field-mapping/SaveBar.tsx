@@ -14,22 +14,37 @@ const OBJECT_LABELS: Record<ObjectId, string> = {
   workspaces: 'Workspaces',
 }
 
-export function SaveBar() {
+interface SaveBarProps {
+  /**
+   * Called instead of saveAll when the user invokes save (button or ⌘S).
+   * If omitted, SaveBar calls saveAll directly. FieldMappingPage passes an
+   * interceptor that checks for link/actor sources and shows the ImpactPanel.
+   */
+  onRequestSave?: () => void
+}
+
+export function SaveBar({ onRequestSave }: SaveBarProps = {}) {
   const { dirtyByObj, dirtyCount, isSaving, saveError, saveAll, discardAll } =
     useFieldMappingStore()
   const hasDirty = dirtyCount > 0
+
+  const triggerSave = () => {
+    if (onRequestSave) onRequestSave()
+    else void saveAll()
+  }
 
   // ⌘S / Ctrl+S
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        void saveAll()
+        triggerSave()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [saveAll])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRequestSave, saveAll])
 
   const parts = (Object.entries(dirtyByObj) as Array<[ObjectId, number]>)
     .filter(([, n]) => n > 0)
@@ -71,7 +86,7 @@ export function SaveBar() {
             <Button variant="ghost" size="xs" onClick={discardAll} disabled={isSaving}>
               Discard
             </Button>
-            <Button size="sm" onClick={() => void saveAll()} disabled={isSaving}>
+            <Button size="sm" onClick={triggerSave} disabled={isSaving}>
               {isSaving ? (
                 'Saving…'
               ) : (

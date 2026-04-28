@@ -23,6 +23,8 @@ interface FieldMappingDbRow {
   source_formula: string | null
   source_option: string | null
   match_on: string | null
+  link_target_object: string | null
+  link_record_id: string | null
   updated_at: string
 }
 
@@ -120,6 +122,22 @@ function dbToSource(raw: FieldMappingDbRow): Source {
       return { type: 'formula', expr: raw.source_formula ?? '' }
     case 'option':
       return { type: 'option', value: raw.source_option ?? '' }
+    case 'link_subject_person':
+      return { type: 'link_subject_person' }
+    case 'link_subject_company_by_domain':
+      return { type: 'link_subject_company_by_domain' }
+    case 'link_subject_company_via_person':
+      return { type: 'link_subject_company_via_person' }
+    case 'link_specific_record':
+      return {
+        type: 'link_specific_record',
+        targetObject: (raw.link_target_object as ObjectId) ?? 'people',
+        recordId: raw.link_record_id ?? '',
+      }
+    case 'actor_subject_email':
+      return { type: 'actor_subject_email' }
+    case 'actor_account_owner':
+      return { type: 'actor_account_owner' }
     default:
       return { type: 'none' }
   }
@@ -143,6 +161,8 @@ function mappingRowToDbInsert(
     source_transform: null,
     source_formula: null,
     source_option: null,
+    link_target_object: null,
+    link_record_id: null,
     match_on: row.matchOn ?? null,
   }
   if (src.type === 'property') {
@@ -153,6 +173,10 @@ function mappingRowToDbInsert(
     base.source_formula = src.expr
   } else if (src.type === 'option') {
     base.source_option = src.value
+  } else if (src.type === 'link_specific_record') {
+    base.link_target_object = src.targetObject
+    base.link_record_id = src.recordId
   }
+  // link_subject_person, link_subject_company_*, actor_* — no extra columns
   return base
 }

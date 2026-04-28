@@ -245,3 +245,44 @@ describe('autocomplete', () => {
     expect(autocomplete('', 0, ctx)).toBeNull()
   })
 })
+
+describe('member() scope', () => {
+  const members = {
+    'jane@acme.io': { id: 'wm-1', email: 'jane@acme.io', firstName: 'Jane', lastName: 'Cooper' },
+    'bob@acme.io': { id: 'wm-2', email: 'bob@acme.io', firstName: 'Bob', lastName: 'Smith' },
+  }
+
+  it('resolves known member email', () => {
+    const r = evaluateFormula('member("jane@acme.io")', JANE, { members })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe('jane@acme.io')
+  })
+
+  it('is case-insensitive on the email key', () => {
+    const r = evaluateFormula('member("Jane@Acme.IO")', JANE, { members })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe('jane@acme.io')
+  })
+
+  it('returns null for unknown email', () => {
+    const r = evaluateFormula('member("nobody@example.com")', JANE, { members })
+    // null result short-circuits evaluateFormula to ok:false (empty value) —
+    // treat that as the "no match" signal.
+    expect(r.ok).toBe(false)
+  })
+
+  it('rejects wrong arity', () => {
+    const r = evaluateFormula('member()', JANE, { members })
+    expect(r.ok).toBe(false)
+  })
+
+  it('nests inside if()', () => {
+    const r = evaluateFormula(
+      'if(person.sessions_30d > 5, member("jane@acme.io"), member("bob@acme.io"))',
+      JANE,
+      { members },
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe('jane@acme.io')
+  })
+})
