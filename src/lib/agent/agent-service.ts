@@ -1,5 +1,4 @@
 import { after } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createModuleLogger } from '@/lib/utils/logger';
 import { createSession, updateSessionStatus } from '@/lib/agent/session';
@@ -63,7 +62,13 @@ export class AgentService {
     static async triggerAnalysis(workspaceId: string) {
         log.info(`Triggering agent analysis for workspace: ${workspaceId}`);
 
-        const supabase = await createClient();
+        // Workspace lookup uses the admin client so this works from any
+        // server-side context (cron self-heal, /api/agent/trigger-test, the
+        // post-cookie-auth /api/onboarding/complete). The cookie gate at the
+        // calling route already validates membership; this lookup just needs
+        // to read the row, which RLS would otherwise block in cookie-less
+        // server contexts.
+        const supabase = createAdminClient();
 
         // 1. Get Workspace Details (Website URL)
         const { data: workspaceRaw, error: wsError } = await supabase
