@@ -100,9 +100,9 @@ export function rateLimitResponse(
     const isMasonE2E =
         process.env.VERCEL_GIT_COMMIT_REF === 'mason-e2e-test' ||
         process.env.MASON_E2E_RATE_LIMIT_BYPASS === '1';
-    const effectiveOptions = isMasonE2E
-        ? { windowMs: 60_000, maxRequests: 600, ...(options ?? {}), maxRequests: 600 }
-        : options;
+    const effectiveOptions: RateLimitOptions = isMasonE2E
+        ? { ...(options ?? {}), maxRequests: 600 }
+        : (options ?? {});
 
     const result = checkRateLimit(workspaceId, effectiveOptions);
 
