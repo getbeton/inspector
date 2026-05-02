@@ -516,16 +516,23 @@ function LinkTabContent({
   const [results, setResults] = useState<RecordSearchResult[]>([])
   const [searching, setSearching] = useState(false)
 
-  useEffect(() => {
-    if (!isRecord || !target) return
-    const trimmed = q.trim()
-    if (trimmed.length < 2) {
-      setResults([])
-      return
-    }
-    let cancelled = false
+  const trimmedQ = q.trim()
+  const searchActive = isRecord && !!target && trimmedQ.length >= 2
+  const searchKey = searchActive ? `${target}|${trimmedQ}` : null
+
+  // Flip "searching" during render when a new query lands; the async fetch in
+  // the effect resolves results + clears searching afterwards. Avoids
+  // setState-in-effect lint errors.
+  const [lastSearchKey, setLastSearchKey] = useState<string | null>(null)
+  if (searchKey !== null && searchKey !== lastSearchKey) {
+    setLastSearchKey(searchKey)
     setSearching(true)
-    fetch(`/api/integrations/attio/records/search?objectId=${target}&q=${encodeURIComponent(trimmed)}`)
+  }
+
+  useEffect(() => {
+    if (!searchActive) return
+    let cancelled = false
+    fetch(`/api/integrations/attio/records/search?objectId=${target}&q=${encodeURIComponent(trimmedQ)}`)
       .then((r) => r.ok ? r.json() : { results: [] })
       .then((data) => {
         if (cancelled) return
@@ -541,7 +548,7 @@ function LinkTabContent({
     return () => {
       cancelled = true
     }
-  }, [q, isRecord, target])
+  }, [searchActive, target, trimmedQ])
 
   return (
     <div className="flex flex-col">
