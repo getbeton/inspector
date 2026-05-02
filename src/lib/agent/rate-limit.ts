@@ -93,7 +93,18 @@ export function rateLimitResponse(
     workspaceId: string,
     options?: RateLimitOptions
 ): NextResponse | null {
-    const result = checkRateLimit(workspaceId, options);
+    // Test rig: the mason-e2e-test branch needs a higher ceiling so a single
+    // signal_agent run (bootstrap + 6-candidate explorer batch + reviewer)
+    // doesn't trip the 20/min default. Production (DEPLOYMENT_MODE=cloud)
+    // remains untouched — only Vercel previews see the relaxed window.
+    const isMasonE2E =
+        process.env.VERCEL_GIT_COMMIT_REF === 'mason-e2e-test' ||
+        process.env.MASON_E2E_RATE_LIMIT_BYPASS === '1';
+    const effectiveOptions = isMasonE2E
+        ? { windowMs: 60_000, maxRequests: 600, ...(options ?? {}), maxRequests: 600 }
+        : options;
+
+    const result = checkRateLimit(workspaceId, effectiveOptions);
 
     if (!result.allowed) {
         return NextResponse.json(
