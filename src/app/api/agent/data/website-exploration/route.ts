@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const {
             workspace_id,
+            session_id,
             is_b2b,
             plg_type,
             website_url,
@@ -37,10 +38,30 @@ export async function POST(req: NextRequest) {
 
         const supabase = createAdminClient();
 
+        // Resolve the agent session_id (string) to its internal UUID PK so
+        // the upsert can land under the correct (workspace_id, session_id)
+        // unique key. Without this, the upsert would target a non-existent
+        // unique on workspace_id alone and 500 with PGRST/onConflict errors.
+        let sessionUUID: string | null = null;
+        if (session_id) {
+            const { data: sessionRow } = await supabase
+                .from('workspace_agent_sessions')
+                .select('id')
+                .eq('session_id', session_id)
+                .maybeSingle();
+            sessionUUID = (sessionRow as { id: string } | null)?.id ?? null;
+        }
+
+        // The unique index `ux_website_exploration_ws_session` is defined as
+        // `(workspace_id, COALESCE(session_id, '00000000-...'::uuid))`. PostgREST's
+        // `onConflict` matches it by listing both columns. session_id is nullable;
+        // when null, the COALESCE in the index makes one-row-per-workspace the
+        // implicit slot — same semantics as before for sessionless writes.
         const { error } = await supabase
             .from('website_exploration_results')
             .upsert({
                 workspace_id,
+                session_id: sessionUUID,
                 is_b2b,
                 plg_type,
                 website_url,
@@ -49,14 +70,14 @@ export async function POST(req: NextRequest) {
                 product_description,
                 pricing_model,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'workspace_id' });
+            } as never, { onConflict: 'workspace_id,session_id' });
 
         if (error) {
             log.error(`Failed to store website results: ${error.message}`);
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        log.warn(`[AUDIT] Website exploration upsert workspace=${workspace_id}`);
+        log.warn(`[AUDIT] Website exploration upsert workspace=${workspace_id} session=${session_id ?? 'none'}`);
         return NextResponse.json({ success: true });
     } catch (e) {
         log.error(`Error processing website results: ${e}`);
