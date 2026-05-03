@@ -10,11 +10,15 @@
  * workspace stuck without a session (e.g. the Stefan / Plenty case) recovers
  * on next login.
  *
- * Idempotent: safe to call on every mount. A recent (created/running/completed)
- * session within 24h short-circuits the trigger.
+ * Idempotent by default: safe to call on every mount. A recent
+ * (created/running/completed) session within 24h short-circuits the trigger.
+ *
+ * `?force=true` (or body `{ force: true }`) bypasses the idempotency window
+ * and always starts a fresh run. Used by the explicit "New signal discovery"
+ * button on /signals.
  */
 
-import { NextResponse, after } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getWorkspaceMembership } from '@/lib/supabase/helpers';
 import { computeSetupStatus } from '@/lib/setup/status';
@@ -30,7 +34,7 @@ const log = createModuleLogger('[Onboarding Complete]');
 // stuck at status='created' even when the agent itself completed successfully.
 export const maxDuration = 600;
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
 
@@ -58,6 +62,15 @@ export async function POST() {
       );
     }
 
+    // Force flag: bypass the idempotency window and always trigger a fresh run.
+    // Read from query string (?force=true) or JSON body ({force:true}).
+    const url = new URL(req.url);
+    let force = url.searchParams.get('force') === 'true';
+    if (!force) {
+      const body = await req.json().catch(() => null);
+      if (body && body.force === true) force = true;
+    }
+
     // Schedule the trigger via after() so the Vercel lambda stays alive until
     // createSession + the /run fetch complete. Without this, fire-and-forget
     // gets killed when the response returns, leaving no session row and no
@@ -65,13 +78,18 @@ export async function POST() {
     // returns 200" we saw during Fix 4 E2E testing.
     after(async () => {
       try {
-        await AgentService.triggerAnalysisIfNotRecentlyRun(membership.workspaceId);
+        if (force) {
+          log.info(`Force-triggering agent analysis for ${membership.workspaceId} (idempotency bypassed)`);
+          await AgentService.triggerAnalysis(membership.workspaceId);
+        } else {
+          await AgentService.triggerAnalysisIfNotRecentlyRun(membership.workspaceId);
+        }
       } catch (err) {
         log.error(`Failed to trigger agent analysis for ${membership.workspaceId}: ${err}`);
       }
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, forced: force });
   } catch (error) {
     log.error(`Unexpected error: ${error}`);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
