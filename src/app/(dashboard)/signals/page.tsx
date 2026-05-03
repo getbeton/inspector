@@ -44,7 +44,9 @@ function dbSignalToDisplay(signal: DBSignal): SignalData {
 /** Map source filter value to API param */
 function sourceFilterToAPI(source: string): string | undefined {
   if (source === 'User-Defined') return 'manual'
-  if (source === 'Beton-Discovered') return 'heuristic'
+  // "Beton-Discovered" used to map to the now-dropped legacy `signals.type='heuristic'`
+  // path. After PR #83 it points at agent-emitted signal_definitions rows.
+  if (source === 'Beton-Discovered') return 'agent'
   return undefined
 }
 
