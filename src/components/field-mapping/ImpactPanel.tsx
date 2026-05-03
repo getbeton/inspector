@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -40,26 +40,35 @@ export function ImpactPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!open) return
-
-    const objectsWithLinks = (Object.keys(mappings) as ObjectId[]).filter((objId) =>
-      (mappings[objId] ?? []).some(
-        (r) =>
-          r.source &&
-          (r.source.type.startsWith('link_') || r.source.type.startsWith('actor_')),
+  const objectsWithLinks = useMemo(
+    () =>
+      (Object.keys(mappings) as ObjectId[]).filter((objId) =>
+        (mappings[objId] ?? []).some(
+          (r) =>
+            r.source &&
+            (r.source.type.startsWith('link_') || r.source.type.startsWith('actor_')),
+        ),
       ),
-    )
+    [mappings],
+  )
 
-    if (objectsWithLinks.length === 0) {
-      // Nothing to preview — summaries stay empty, user can save directly.
-      setSummaries([])
-      return
-    }
+  const hasLinks = objectsWithLinks.length > 0
+  const fetchKey = open && hasLinks ? `${destination}|${JSON.stringify(mappings)}` : null
 
-    let cancelled = false
+  // Reset loading/error during render whenever a new fetch is about to start.
+  // Avoids setState-in-effect; the actual fetch + setSummaries/setError on
+  // resolution happens in the effect below (async, allowed).
+  const [lastFetchKey, setLastFetchKey] = useState<string | null>(null)
+  if (fetchKey !== null && fetchKey !== lastFetchKey) {
+    setLastFetchKey(fetchKey)
     setLoading(true)
     setError(null)
+  }
+
+  useEffect(() => {
+    if (!open || !hasLinks) return
+
+    let cancelled = false
 
     Promise.all(
       objectsWithLinks.map((objectId) =>
@@ -85,7 +94,7 @@ export function ImpactPanel({
     return () => {
       cancelled = true
     }
-  }, [open, destination, mappings])
+  }, [open, hasLinks, destination, mappings, objectsWithLinks])
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel() }}>
@@ -107,7 +116,7 @@ export function ImpactPanel({
               <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
-          ) : summaries.length === 0 ? (
+          ) : !hasLinks || summaries.length === 0 ? (
             <p className="text-xs text-foreground/60">
               No link/owner mappings in this save — nothing to pre-resolve. Proceed to save.
             </p>

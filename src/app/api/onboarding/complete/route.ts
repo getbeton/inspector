@@ -23,6 +23,13 @@ import { createModuleLogger } from '@/lib/utils/logger';
 
 const log = createModuleLogger('[Onboarding Complete]');
 
+// Lambda must outlive the synchronous ADK /run call (upsell → dwh → mason
+// signal_agent typically takes 60–240s on first run; default 300s is too tight
+// because after() needs an extra buffer for status update + cleanup). Without
+// this, the function recycles before the catch path runs, leaving sessions
+// stuck at status='created' even when the agent itself completed successfully.
+export const maxDuration = 600;
+
 export async function POST() {
   try {
     const supabase = await createClient();
