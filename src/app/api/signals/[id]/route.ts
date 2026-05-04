@@ -15,9 +15,9 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
-import type { Signal, Account, HeuristicScore } from '@/lib/supabase/types'
+import type { Signal, Account } from '@/lib/supabase/types'
 
-type SignalWithAccount = Signal & { accounts: Pick<Account, 'id' | 'name' | 'domain' | 'arr' | 'plan' | 'status' | 'health_score' | 'fit_score' | 'last_activity_at'> | null }
+type SignalWithAccount = Signal & { accounts: Pick<Account, 'id' | 'name' | 'domain' | 'arr' | 'plan' | 'status' | 'fit_score' | 'last_activity_at'> | null }
 
 // ─── GET handler ──────────────────────────────────────────────────────────────
 
@@ -87,7 +87,6 @@ async function handleGet(
         arr,
         plan,
         status,
-        health_score,
         fit_score,
         last_activity_at
       )
@@ -118,16 +117,6 @@ async function handleGet(
 
   const relatedSignals = relatedData as Pick<Signal, 'id' | 'type' | 'value' | 'timestamp' | 'source'>[] | null
 
-  // Get account's current heuristic scores
-  const { data: scoresData } = await anySupabase
-    .from('heuristic_scores')
-    .select('score_type, score_value, calculated_at')
-    .eq('account_id', signal.account_id)
-    .order('calculated_at', { ascending: false })
-    .limit(3)
-
-  const scores = scoresData as Pick<HeuristicScore, 'score_type' | 'score_value' | 'calculated_at'>[] | null
-
   // Get calculated metrics from signal_aggregates
   const { data: metricsData } = await anySupabase
     .from('signal_aggregates')
@@ -153,7 +142,6 @@ async function handleGet(
     signal,
     metrics,
     related_signals: relatedSignals || [],
-    scores: scores || []
   })
 }
 

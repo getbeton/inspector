@@ -8,11 +8,14 @@ import { randomUUID } from 'crypto';
 
 const log = createModuleLogger('[AgentService]');
 
-const DEFAULT_AGENT_API_URL = 'https://inspector-ml-backend-production.up.railway.app';
 const APP_NAME = 'upsell_agent';
 
 function getAgentApiUrl(): string {
-    return process.env.AGENT_API_URL || DEFAULT_AGENT_API_URL;
+    const url = process.env.AGENT_API_URL;
+    if (!url) {
+        throw new Error('AGENT_API_URL is not set. Configure the Agent ML backend URL.');
+    }
+    return url;
 }
 
 export class AgentService {
@@ -131,9 +134,15 @@ export class AgentService {
                 context: {
                     workspace_id: workspaceId,
                     session_id: sessionId,
-                    inspector_callback_url: process.env.NEXT_PUBLIC_VERCEL_URL
-                        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-                        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                    // Prefer NEXT_PUBLIC_APP_URL — the publicly-reachable hostname
+                    // (e.g. staging.getbeton.org). NEXT_PUBLIC_VERCEL_URL points at
+                    // a deploy-specific preview URL that's behind Vercel deployment
+                    // protection on staging; ml-backend cannot reach it for callbacks.
+                    inspector_callback_url:
+                        process.env.NEXT_PUBLIC_APP_URL
+                        || (process.env.NEXT_PUBLIC_VERCEL_URL
+                            ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+                            : 'http://localhost:3000'),
                     capabilities: {
                         fetch_url: firecrawlConfigured,
                     },

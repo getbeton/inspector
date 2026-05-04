@@ -60,21 +60,27 @@ export async function GET(request: NextRequest) {
       workspaceId = membership.workspaceId
     }
 
-    // If requesting only custom/manual signals, query signal_definitions
-    // If requesting heuristic, query signals. Otherwise merge both.
-    const wantCustom = !source || source === 'manual'
-    const wantHeuristic = !source || source !== 'manual'
+    // signal_definitions covers both manual + agent-emitted signals (post-PR-#83).
+    // The legacy `signals` table is heuristic occurrence rows from the deprecated
+    // scoring path — it stays read-only for backwards compatibility but no new
+    // rows are written to it. Filter routing:
+    //   source='manual' or 'agent' → signal_definitions only (filter on .source)
+    //   source='heuristic'         → signals (legacy occurrences) only
+    //   source unset               → both
+    const wantDefinitions = !source || source === 'manual' || source === 'agent'
+    const wantHeuristic = !source || source === 'heuristic'
 
     // Run all queries in parallel
     const [definitionsResult, signalsResult, aggregatesResult] = await Promise.all([
-      // Custom signal definitions
-      wantCustom ? (async () => {
+      // Signal definitions (both source='manual' and source='agent')
+      wantDefinitions ? (async () => {
         let q = anySupabase
           .from('signal_definitions')
           .select('*', { count: 'exact' })
           .eq('workspace_id', workspaceId)
           .order('created_at', { ascending: false })
 
+        if (source === 'manual' || source === 'agent') q = q.eq('source', source)
         if (type) q = q.eq('type', type)
         if (startDate) q = q.gte('created_at', startDate)
         if (endDate) q = q.lte('created_at', endDate)
@@ -98,8 +104,7 @@ export async function GET(request: NextRequest) {
               id,
               name,
               domain,
-              arr,
-              health_score
+              arr
             )
           `, { count: 'exact' })
           .eq('workspace_id', workspaceId)
@@ -110,7 +115,7 @@ export async function GET(request: NextRequest) {
         if (startDate) q = q.gte('timestamp', startDate)
         if (endDate) q = q.lte('timestamp', endDate)
 
-        if (!wantCustom) {
+        if (!wantDefinitions) {
           const from = (page - 1) * limit
           q = q.range(from, from + limit - 1)
         }
@@ -145,7 +150,10 @@ export async function GET(request: NextRequest) {
         id: def.id,
         workspace_id: def.workspace_id,
         type: def.type,
-        source: 'manual',
+        // Pass through the actual source ('manual' or 'agent') rather than
+        // hard-coding 'manual'; otherwise the UI's "Beton-Discovered" filter
+        // hides every agent-emitted definition.
+        source: (def.source as string) || 'manual',
         timestamp: def.created_at,
         created_at: def.created_at,
         value: null,
@@ -198,7 +206,7 @@ export async function GET(request: NextRequest) {
 
     // Apply pagination to merged result if both sources were queried
     let paginatedItems = allItems
-    if (wantCustom && wantHeuristic) {
+    if (wantDefinitions && wantHeuristic) {
       const from = (page - 1) * limit
       paginatedItems = allItems.slice(from, from + limit)
     }

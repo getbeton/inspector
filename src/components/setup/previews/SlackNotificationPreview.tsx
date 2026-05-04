@@ -113,10 +113,6 @@ export function SlackNotificationPreview({
               <span className="text-gray-500 w-20">Signal</span>
               <span className="text-gray-800">{sampleData.signal_name}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-gray-500 w-20">Health</span>
-              <span className="text-gray-800">{sampleData.health_score}/100</span>
-            </div>
           </div>
         </div>
 

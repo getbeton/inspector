@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const {
             workspace_id,
+            session_id,
             is_b2b,
             plg_type,
             website_url,
@@ -37,26 +38,69 @@ export async function POST(req: NextRequest) {
 
         const supabase = createAdminClient();
 
-        const { error } = await supabase
-            .from('website_exploration_results')
-            .upsert({
-                workspace_id,
-                is_b2b,
-                plg_type,
-                website_url,
-                product_assumptions,
-                icp_description,
-                product_description,
-                pricing_model,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'workspace_id' });
-
-        if (error) {
-            log.error(`Failed to store website results: ${error.message}`);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        // Resolve the agent session_id (string) to its internal UUID PK so
+        // the row links to the correct workspace_agent_sessions entry.
+        let sessionUUID: string | null = null;
+        if (session_id) {
+            const { data: sessionRow } = await supabase
+                .from('workspace_agent_sessions')
+                .select('id')
+                .eq('session_id', session_id)
+                .maybeSingle();
+            sessionUUID = (sessionRow as { id: string } | null)?.id ?? null;
         }
 
-        log.warn(`[AUDIT] Website exploration upsert workspace=${workspace_id}`);
+        // Manual upsert: the table's only relevant unique index is an
+        // EXPRESSION index `(workspace_id, COALESCE(session_id, '...sentinel...'))`,
+        // which PostgREST cannot infer from any plain column-list `onConflict`
+        // value. So we look up the matching row ourselves and dispatch
+        // UPDATE-or-INSERT. Same one-row-per-(workspace, session) semantics
+        // (and one-row-per-workspace when session is null) as the index.
+        const payload = {
+            workspace_id,
+            is_b2b,
+            plg_type,
+            website_url,
+            product_assumptions,
+            icp_description,
+            product_description,
+            pricing_model,
+            updated_at: new Date().toISOString(),
+        } as Record<string, unknown>;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const adminAny = supabase as any;
+        const lookup = sessionUUID
+            ? adminAny.from('website_exploration_results').select('id').eq('workspace_id', workspace_id).eq('session_id', sessionUUID).maybeSingle()
+            : adminAny.from('website_exploration_results').select('id').eq('workspace_id', workspace_id).is('session_id', null).maybeSingle();
+        const { data: existing, error: lookupError } = await lookup;
+
+        if (lookupError) {
+            log.error(`Lookup failed: ${lookupError.message}`);
+            return NextResponse.json({ error: lookupError.message }, { status: 500 });
+        }
+
+        let writeError: { message: string } | null = null;
+        if (existing && (existing as { id: string }).id) {
+            const { error } = await adminAny
+                .from('website_exploration_results')
+                .update(payload)
+                .eq('id', (existing as { id: string }).id);
+            writeError = error;
+        } else {
+            const insertPayload = { ...payload, session_id: sessionUUID };
+            const { error } = await adminAny
+                .from('website_exploration_results')
+                .insert(insertPayload);
+            writeError = error;
+        }
+
+        if (writeError) {
+            log.error(`Failed to store website results: ${writeError.message}`);
+            return NextResponse.json({ error: writeError.message }, { status: 500 });
+        }
+
+        log.warn(`[AUDIT] Website exploration upsert workspace=${workspace_id} session=${session_id ?? 'none'} mode=${existing ? 'update' : 'insert'}`);
         return NextResponse.json({ success: true });
     } catch (e) {
         log.error(`Error processing website results: ${e}`);

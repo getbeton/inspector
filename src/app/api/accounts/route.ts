@@ -14,7 +14,6 @@ import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middlew
 
 // H6 fix: Allowlist of valid sort columns prevents column name injection
 const ALLOWED_SORT_COLUMNS = new Set([
-  'health_score',
   'name',
   'domain',
   'arr',
@@ -36,8 +35,8 @@ async function handleListAccounts(
   const sortOrder = searchParams.get('sort_order') || 'desc'
 
   // H6 fix: Validate sort_by against allowlist
-  const rawSortBy = searchParams.get('sort_by') || 'health_score'
-  const sortBy = ALLOWED_SORT_COLUMNS.has(rawSortBy) ? rawSortBy : 'health_score'
+  const rawSortBy = searchParams.get('sort_by') || 'arr'
+  const sortBy = ALLOWED_SORT_COLUMNS.has(rawSortBy) ? rawSortBy : 'arr'
 
   let query = supabase
     .from('accounts')

@@ -12,7 +12,7 @@ import { DemoBanner } from '@/components/home/DemoBanner'
 import { useSetupStatus } from '@/lib/hooks/use-setup-status'
 import { useDemoMode } from '@/lib/hooks/use-demo-mode'
 import { useRealSignals, useDeleteSignal } from '@/lib/hooks/use-signals'
-import { RefreshButton } from '@/components/ui/refresh-button'
+import { NewDiscoveryButton } from '@/components/ui/new-discovery-button'
 import { MOCK_SIGNALS, type SignalData } from '@/lib/data/mock-signals'
 import type { DBSignal } from '@/lib/api/signals'
 
@@ -44,7 +44,9 @@ function dbSignalToDisplay(signal: DBSignal): SignalData {
 /** Map source filter value to API param */
 function sourceFilterToAPI(source: string): string | undefined {
   if (source === 'User-Defined') return 'manual'
-  if (source === 'Beton-Discovered') return 'heuristic'
+  // "Beton-Discovered" used to map to the now-dropped legacy `signals.type='heuristic'`
+  // path. After PR #83 it points at agent-emitted signal_definitions rows.
+  if (source === 'Beton-Discovered') return 'agent'
   return undefined
 }
 
@@ -188,7 +190,7 @@ export default function SignalsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {!isDemo && <RefreshButton syncType="signal_detection" />}
+          {!isDemo && <NewDiscoveryButton workspaceId={setupStatus?.workspaceId} />}
           {!isDemo && (
             <Link href="/signals/new">
               <Button size="sm">New Signal</Button>

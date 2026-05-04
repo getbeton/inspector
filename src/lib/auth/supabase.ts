@@ -60,6 +60,55 @@ export async function signInWithGoogle(next?: string) {
 }
 
 /**
+ * Trigger GitHub OAuth sign-in.
+ * Mirrors signInWithGoogle — same redirect handling, same callback flow.
+ */
+export async function signInWithGithub(next?: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  let redirectTo = `${origin}/auth/callback`
+  if (next) {
+    redirectTo += `?next=${encodeURIComponent(next)}`
+  }
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'github',
+    options: {
+      redirectTo,
+      // Read user email + basic profile only
+      scopes: 'read:user user:email',
+    },
+  })
+
+  return { data, error }
+}
+
+/**
+ * Send a magic-link / OTP email. The link in the email points to
+ * /auth/callback?code=… which the existing route handles uniformly.
+ */
+export async function signInWithEmail(email: string, next?: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  let emailRedirectTo = `${origin}/auth/callback`
+  if (next) {
+    emailRedirectTo += `?next=${encodeURIComponent(next)}`
+  }
+
+  const { data, error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo,
+      // Auto-create the auth user on first sign-in (matches Google flow's
+      // user-creation-on-first-login expectation).
+      shouldCreateUser: true,
+    },
+  })
+
+  return { data, error }
+}
+
+/**
  * Sign out the current user
  * Clears Supabase session via API and redirects to login
  */

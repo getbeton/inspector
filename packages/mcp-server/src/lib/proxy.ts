@@ -31,7 +31,6 @@ const ALLOWED_PATH_PREFIXES = [
   '/api/integrations',
   '/api/mcp',
   '/api/agent',
-  '/api/heuristics',
   '/api/workspace',
   '/api/sync',
   '/api/posthog',

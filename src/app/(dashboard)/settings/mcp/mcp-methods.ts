@@ -82,16 +82,6 @@ export const MCP_METHODS: McpToolDefinition[] = [
     ],
   },
   {
-    name: 'get_dashboard_metrics',
-    description: 'Get aggregated dashboard metrics: total accounts, active accounts, signal counts, ARR, health scores.',
-    category: 'Signals',
-    access: 'read',
-    httpMethod: 'GET',
-    parameters: [
-      { name: 'lookback_days', type: 'number', required: false, description: 'Lookback period in days, 1\u2013365 (default: 30)' },
-    ],
-  },
-  {
     name: 'create_signal',
     description: 'Create a custom signal definition with PostHog event matching. Metrics are calculated asynchronously.',
     category: 'Signals',
@@ -220,18 +210,8 @@ export const MCP_METHODS: McpToolDefinition[] = [
     parameters: [],
   },
   {
-    name: 'get_account_scores',
-    description: 'Get health, expansion, and churn risk scores for a specific account.',
-    category: 'Workspace',
-    access: 'read',
-    httpMethod: 'GET',
-    parameters: [
-      { name: 'account_id', type: 'string (UUID)', required: true, description: 'The account UUID' },
-    ],
-  },
-  {
     name: 'list_accounts',
-    description: 'List accounts with health scores, ARR, and signal counts. Supports pagination and filtering.',
+    description: 'List accounts with ARR and signal counts. Supports pagination and filtering.',
     category: 'Workspace',
     access: 'read',
     httpMethod: 'GET',
@@ -239,7 +219,7 @@ export const MCP_METHODS: McpToolDefinition[] = [
       { name: 'page', type: 'number', required: false, description: 'Page number (default: 1)' },
       { name: 'limit', type: 'number', required: false, description: 'Results per page, max 100 (default: 50)' },
       { name: 'status', type: 'enum', required: false, description: 'Filter: active, churned, trial' },
-      { name: 'sort_by', type: 'enum', required: false, description: 'Sort: health_score, arr, name, created_at (default: health_score)' },
+      { name: 'sort_by', type: 'enum', required: false, description: 'Sort: arr, name, created_at, domain, last_activity_at (default: arr)' },
       { name: 'sort_order', type: 'enum', required: false, description: 'Direction: asc, desc (default: desc)' },
     ],
   },

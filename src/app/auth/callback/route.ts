@@ -19,7 +19,13 @@ export async function GET(request: NextRequest) {
   const error_param = requestUrl.searchParams.get('error')
   const error_description = requestUrl.searchParams.get('error_description')
   const origin = requestUrl.origin
-  const next = requestUrl.searchParams.get('next') ?? '/'
+  // Restrict `next` to a same-origin path. `new URL("https://app.com" + next)`
+  // would happily resolve `next=@evil.com` to `https://app.com@evil.com`
+  // (userinfo=app.com, host=evil.com) and redirect off-origin — open-redirect
+  // bait for OAuth phishing pages. Allow only paths that begin with `/` and
+  // do NOT begin with `//` or `/\` (which would also escape origin).
+  const rawNext = requestUrl.searchParams.get('next')
+  const next = rawNext && /^\/[^/\\]/.test(rawNext) ? rawNext : '/'
 
   // Handle OAuth errors from Supabase
   if (error_param) {
@@ -116,9 +122,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Redirect to the requested page with signup flag for new users
+      // Redirect to the requested page with signup flag for new users.
+      // `next` is already validated to be a same-origin path (see top of
+      // function); use the URL constructor's base-URL form to make the
+      // origin authoritative regardless.
       const isNewUser = !existingMember
-      const redirectUrl = new URL(`${origin}${next}`)
+      const redirectUrl = new URL(next, origin)
       if (isNewUser) {
         redirectUrl.searchParams.set('signup', 'true')
       }

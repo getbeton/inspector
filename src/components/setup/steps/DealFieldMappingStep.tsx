@@ -92,7 +92,6 @@ const DEMO_ATTRIBUTES: Record<string, AttioAttribute[]> = {
     { id: "c2", slug: "domain", title: "Domain", type: "text", isWritable: true },
     { id: "c3", slug: "industry", title: "Industry", type: "text", isWritable: true },
     { id: "c4", slug: "employee_count", title: "Employee Count", type: "number", isWritable: true },
-    { id: "c5", slug: "health_score", title: "Health Score", type: "number", isWritable: true },
   ],
   people: [
     { id: "p1", slug: "name", title: "Full Name", type: "text", isWritable: true },

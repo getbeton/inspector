@@ -67,7 +67,6 @@ describe('getDefaultSampleData', () => {
     expect(sample).toHaveProperty('user_email')
     expect(sample).toHaveProperty('signal_name')
     expect(sample).toHaveProperty('signal_type')
-    expect(sample).toHaveProperty('health_score')
     expect(sample).toHaveProperty('signal_count')
     expect(sample).toHaveProperty('deal_value')
     expect(sample).toHaveProperty('detected_at')
@@ -82,8 +81,7 @@ describe('getDefaultSampleData', () => {
 
   it('has realistic numeric values', () => {
     const sample = getDefaultSampleData()
-    expect(sample.health_score).toBeGreaterThan(0)
-    expect(sample.health_score).toBeLessThanOrEqual(100)
+    expect(sample.signal_count).toBeGreaterThan(0)
     expect(sample.deal_value).toBeGreaterThan(0)
   })
 
