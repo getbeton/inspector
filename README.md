@@ -131,3 +131,21 @@ This means you can freely use, modify, and distribute the software, but any modi
 
 - [GitHub Issues](https://github.com/getbeton/inspector/issues) — Bug reports and feature requests
 - [GitHub Discussions](https://github.com/getbeton/inspector/discussions) — Questions and community support
+
+
+---
+
+## More from Beton
+
+[Beton](https://www.getbeton.ai/) is open-source revenue intelligence. Inspector is the flagship product. We also maintain:
+
+- [DryFit](https://www.getbeton.ai/oss-tools/dryfit/) — synthetic analytics datasets for agent benchmarking
+- [openclaw-gtm-skills](https://www.getbeton.ai/oss-tools/openclaw-gtm-skills/) — company research pipeline for OpenClaw
+- [seqd](https://www.getbeton.ai/oss-tools/seqd/) — self-hosted email sequencer
+
+Resources:
+
+- [PostHog integration](https://www.getbeton.ai/integrations/posthog/)
+- [Attio integration](https://www.getbeton.ai/integrations/attio/)
+- [Apollo integration](https://www.getbeton.ai/integrations/apollo/)
+- [All integrations](https://www.getbeton.ai/integrations/) · [Blog](https://www.getbeton.ai/blog/) · [All open-source tools](https://www.getbeton.ai/oss-tools/)
