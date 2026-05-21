@@ -7,6 +7,7 @@ export interface SetupStatus {
   integrations: {
     posthog: boolean
     attio: boolean
+    hubspot: boolean
   }
   billing: {
     required: boolean
@@ -22,7 +23,7 @@ async function fetchSetupStatus(): Promise<SetupStatus> {
     // Guest user — return default "not set up" so pages fall into demo mode
     return {
       setupComplete: false,
-      integrations: { posthog: false, attio: false },
+      integrations: { posthog: false, attio: false, hubspot: false },
       billing: { required: false, configured: false, status: null },
       workspaceId: '',
     }
