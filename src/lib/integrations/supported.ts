@@ -10,6 +10,7 @@ const _SUPPORTED_INTEGRATIONS = [
   'apollo',
   'firecrawl',
   'postgres',
+  'hubspot',
 ] as const
 
 export type IntegrationName = (typeof _SUPPORTED_INTEGRATIONS)[number]
