@@ -2,11 +2,11 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceMembership } from '@/lib/supabase/helpers'
 import { getIntegrationCredentials } from '@/lib/integrations/credentials'
-import { createAttioAdapter, listMappings } from '@/lib/field-mapping'
+import { adapterFor, listMappings } from '@/lib/field-mapping'
 import { FieldMappingPage } from '@/components/field-mapping'
 import type { Destination, ObjectSchema } from '@/lib/field-mapping'
 
-const SUPPORTED: Destination[] = ['attio']
+const SUPPORTED: Destination[] = ['attio', 'hubspot']
 
 interface PageProps {
   params: Promise<{ name: string }>
@@ -30,7 +30,7 @@ export default async function Page({ params }: PageProps) {
     redirect('/setup')
   }
 
-  const adapter = createAttioAdapter({ supabase })
+  const adapter = adapterFor(destination, { supabase })
 
   let objects: ObjectSchema[] = []
   try {

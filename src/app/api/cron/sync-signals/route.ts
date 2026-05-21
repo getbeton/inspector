@@ -19,6 +19,11 @@ import {
   upsertPersonRecords,
   syncListEntries,
 } from '@/lib/integrations/attio/client'
+import {
+  createHubSpotClientForWorkspace,
+  ensureBetonProperties,
+  upsertContact,
+} from '@/lib/integrations/hubspot'
 import { verifyCronAuth } from '@/lib/middleware/cron-auth'
 
 export const maxDuration = 300
@@ -157,6 +162,32 @@ export async function GET(request: Request) {
                   target.external_id,
                   recordIds
                 )
+              }
+            } else if (target.target_type === 'hubspot') {
+              // Sync matched people into HubSpot as contacts (upsert by email).
+              // `external_id` names the HubSpot object type to write to.
+              const hubspotCreds = await getIntegrationCredentialsAdmin(
+                config.workspace_id,
+                'hubspot'
+              )
+
+              if (hubspotCreds?.apiKey) {
+                const objectType = target.external_id || 'contacts'
+                const hubspotClient = await createHubSpotClientForWorkspace(
+                  config.workspace_id
+                )
+                // Ensure beton_* custom properties exist before stamping signal data.
+                await ensureBetonProperties(hubspotClient, objectType)
+
+                const matchedAt = new Date().toISOString()
+                for (const distinctId of distinctIds) {
+                  // distinct_ids are emails — upsert each as a contact carrying
+                  // the signal stamp; mirrors the Attio person-record upsert.
+                  await upsertContact(hubspotClient, {
+                    email: distinctId,
+                    beton_last_signal_date: matchedAt,
+                  })
+                }
               }
             }
 
