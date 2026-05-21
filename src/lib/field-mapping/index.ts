@@ -25,6 +25,8 @@ export {
 
 export { createAttioAdapter } from './attio-adapter'
 
+export { createHubSpotDestinationAdapter } from './hubspot-adapter'
+
 export {
   listMappings,
   replaceAllMappings,
