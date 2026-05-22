@@ -23,12 +23,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    # Loads all variables from .env (copy .env.example to .env first).
+    # Variable names match .env.example exactly so the app picks them up.
+    env_file:
+      - .env
     volumes:
       - .:/app
       - frontend_node_modules:/app/node_modules
     environment:
-      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:

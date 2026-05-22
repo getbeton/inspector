@@ -1,10 +1,14 @@
 <div align="center">
   <h1>Beton Inspector</h1>
-  <p><strong>Open-source RevOps intelligence for product-led growth</strong></p>
-  <p>Detect product usage signals, score accounts, and route high-intent leads to your CRM — all from your existing analytics data.</p>
+  <p><strong>Open-source revenue intelligence for product-led growth.</strong></p>
+  <p>Turn your PostHog product data into buying signals, score every account, and route the warmest leads to your CRM — no data engineering required.</p>
+  <p><em>The open-source alternative to Pocus and Common Room.</em></p>
 
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+  [![Stars](https://img.shields.io/github/stars/getbeton/inspector?style=social)](https://github.com/getbeton/inspector/stargazers)
+  [![Last commit](https://img.shields.io/github/last-commit/getbeton/inspector)](https://github.com/getbeton/inspector/commits)
   [![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js-black)](https://nextjs.org)
+  [![Self-hostable](https://img.shields.io/badge/Self--hostable-Docker-2496ED)](#self-hosting-quick-start)
 
   <p>
     <a href="https://www.getbeton.ai/">Website</a> ·
@@ -12,9 +16,19 @@
     <a href="https://www.getbeton.ai/integrations/">Integrations</a> ·
     <a href="https://www.getbeton.ai/blog/">Blog</a>
   </p>
+
+  <br/>
+  <br/>
+  <a href="https://inspector.getbeton.ai"><img src="docs/assets/hero.png" alt="Beton Inspector dashboard — buying signals, account scores, and CRM routing" width="860"/></a>
+  <br/>
+  <sub><a href="https://inspector.getbeton.ai">Live demo</a></sub>
 </div>
 
 ---
+
+## Why it exists
+
+Your product already knows which accounts are about to buy, expand, or churn — the signals are sitting in PostHog. But they never reach the people who act on them: by the time usage data becomes a dashboard, the moment has passed, and sales is still working off gut feel and lead forms. Commercial tools that close this gap (Pocus, Common Room) are closed-source, expensive, and want to own your data. Beton Inspector is the open-source alternative: run it yourself, point it at your own PostHog and CRM, and own the whole pipeline.
 
 ## What is Beton Inspector?
 
@@ -39,38 +53,55 @@ Prefer managed hosting? See [Beton Cloud pricing](https://www.getbeton.ai/pricin
 
 ## Self-Hosting Quick Start
 
+Beton Inspector is fully self-hostable under AGPL-3.0. Leave `DEPLOYMENT_MODE=self-hosted`
+(the default) and all billing/Stripe features are disabled — unlimited use, no payment dependency.
+
 ### Prerequisites
 
-- **Node.js** 18+
+- **Docker** + Docker Compose (recommended), or **Node.js 20+** for local dev
 - **PostgreSQL** — via [Supabase](https://supabase.com) (recommended) or any PostgreSQL instance
 - **PostHog** account with API access
 
-### Setup
+### Configure environment
 
 ```bash
-# Clone the repo
 git clone https://github.com/getbeton/inspector.git
 cd inspector
 
-# Install dependencies
-npm install
+cp .env.example .env
+# Edit .env and set at minimum:
+#   NEXT_PUBLIC_SUPABASE_URL        your Supabase project URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY   Supabase anon key
+#   ENCRYPTION_KEY                  64-char hex (generate below)
+#   AGENT_SECRET                    64-char hex (generate below)
+#   DEPLOYMENT_MODE=self-hosted
 
-# Copy environment template
-cp .env.example .env.local
+# Generate the two secrets:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
-# Edit .env.local with your Supabase and PostHog credentials
-# At minimum, set:
-#   NEXT_PUBLIC_SUPABASE_URL
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY
-#   ENCRYPTION_KEY (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+### Option A — Docker (recommended)
 
-# Start the dev server
-npm run dev
+```bash
+# Reads .env, starts the app on :3000 (and an optional local Postgres on :5432)
+docker compose up
 # → http://localhost:3000
 ```
 
-For production deployments, see the [deployment guide](docs/deployment.md) (coming soon).
+### Option B — Local (npm)
+
+```bash
+npm install
+npm run dev   # next dev loads your .env
+# → http://localhost:3000
+```
+
+### Connect your data
+
+1. Sign in and create a workspace.
+2. Add your **PostHog** credentials in Settings → Integrations.
+3. Pick a **CRM** destination (Attio, HubSpot, Pipedrive, or Zoho) — optional.
+4. Signals and 0–100 account scores (grades M100–M10) populate as events sync.
 
 ### Self-Hosted Mode
 
@@ -131,3 +162,21 @@ This means you can freely use, modify, and distribute the software, but any modi
 
 - [GitHub Issues](https://github.com/getbeton/inspector/issues) — Bug reports and feature requests
 - [GitHub Discussions](https://github.com/getbeton/inspector/discussions) — Questions and community support
+
+
+---
+
+## More from Beton
+
+[Beton](https://www.getbeton.ai/) is open-source revenue intelligence. Inspector is the flagship product. We also maintain:
+
+- [DryFit](https://www.getbeton.ai/oss-tools/dryfit/) — synthetic analytics datasets for agent benchmarking
+- [openclaw-gtm-skills](https://www.getbeton.ai/oss-tools/openclaw-gtm-skills/) — company research pipeline for OpenClaw
+- [seqd](https://www.getbeton.ai/oss-tools/seqd/) — self-hosted email sequencer
+
+Resources:
+
+- [PostHog integration](https://www.getbeton.ai/integrations/posthog/)
+- [Attio integration](https://www.getbeton.ai/integrations/attio/)
+- [Apollo integration](https://www.getbeton.ai/integrations/apollo/)
+- [All integrations](https://www.getbeton.ai/integrations/) · [Blog](https://www.getbeton.ai/blog/) · [All open-source tools](https://www.getbeton.ai/oss-tools/)
