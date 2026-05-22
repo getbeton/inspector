@@ -17,10 +17,18 @@
     <a href="https://www.getbeton.ai/blog/">Blog</a>
   </p>
 
-  <!-- TODO: add a hero screenshot/GIF here, e.g. <img src="docs/assets/hero.png" width="860"/> -->
+  <br/>
+  <br/>
+  <a href="https://inspector.getbeton.ai"><img src="docs/assets/hero.png" alt="Beton Inspector dashboard — buying signals, account scores, and CRM routing" width="860"/></a>
+  <br/>
+  <sub><a href="https://inspector.getbeton.ai">Live demo</a></sub>
 </div>
 
 ---
+
+## Why it exists
+
+Your product already knows which accounts are about to buy, expand, or churn — the signals are sitting in PostHog. But they never reach the people who act on them: by the time usage data becomes a dashboard, the moment has passed, and sales is still working off gut feel and lead forms. Commercial tools that close this gap (Pocus, Common Room) are closed-source, expensive, and want to own your data. Beton Inspector is the open-source alternative: run it yourself, point it at your own PostHog and CRM, and own the whole pipeline.
 
 ## What is Beton Inspector?
 
