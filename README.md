@@ -2,7 +2,7 @@
   <h1>Beton Inspector</h1>
   <p><strong>Open-source revenue intelligence for product-led growth.</strong></p>
   <p>Turn your PostHog product data into buying signals, score every account, and route the warmest leads to your CRM — no data engineering required.</p>
-  <p><em>The open-source alternative to 6sense and Clearbit Reveal.</em></p>
+  <p><em>The open-source alternative to Pocus and Common Room.</em></p>
 
   [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
   [![Stars](https://img.shields.io/github/stars/getbeton/inspector?style=social)](https://github.com/getbeton/inspector/stargazers)
