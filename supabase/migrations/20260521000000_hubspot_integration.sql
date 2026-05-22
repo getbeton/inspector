@@ -18,8 +18,8 @@ VALUES (
     'HubSpot',
     'Sync HubSpot CRM contacts, companies, and deals, and write signals back to HubSpot',
     'crm',
-    'https://cdn.brandfetch.io/idAa1f1f1f/theme/dark/symbol.svg',
-    'https://cdn.brandfetch.io/idAa1f1f1f/theme/light/symbol.svg',
+    'https://cdn.brandfetch.io/idRt0LuzRf/theme/dark/symbol.svg',
+    'https://cdn.brandfetch.io/idRt0LuzRf/theme/light/symbol.svg',
     false,           -- Not required
     25,              -- After Attio (20)
     'hubspot',       -- Maps to wizard step component

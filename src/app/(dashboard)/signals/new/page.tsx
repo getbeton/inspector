@@ -248,7 +248,9 @@ export default function AddSignalPage() {
 
         const data = await res.json()
         if (!firstSignalId) {
-          firstSignalId = data.signal?.id
+          // POST /api/signals/custom returns { signal_definition: {...} } — read the
+          // definition id (not data.signal, which doesn't exist) so sync targets attach.
+          firstSignalId = data.signal_definition?.id ?? null
         }
       }
 
@@ -733,11 +735,10 @@ export default function AddSignalPage() {
                   </div>
                   <fieldset>
                     <legend className="sr-only">HubSpot object type</legend>
-                    <div role="radiogroup" aria-label="HubSpot object type" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div role="radiogroup" aria-label="HubSpot object type" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {([
                         { id: 'contact', label: 'Contact', desc: 'upsert on email' },
                         { id: 'company', label: 'Company', desc: 'upsert on domain' },
-                        { id: 'deal', label: 'Deal', desc: 'create new' },
                       ] as const).map((o) => {
                         const sel = hubspotObject === o.id
                         return (

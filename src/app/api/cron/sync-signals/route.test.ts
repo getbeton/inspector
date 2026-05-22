@@ -42,6 +42,7 @@ vi.mock('@/lib/integrations/hubspot', () => ({
   createHubSpotClientForWorkspace: vi.fn(),
   ensureBetonProperties: vi.fn(),
   upsertContact: vi.fn(),
+  upsertCompany: vi.fn(),
 }))
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -51,6 +52,7 @@ import {
   createHubSpotClientForWorkspace,
   ensureBetonProperties,
   upsertContact,
+  upsertCompany,
 } from '@/lib/integrations/hubspot'
 
 const mockCreateAdminClient = createAdminClient as ReturnType<typeof vi.fn>
@@ -59,6 +61,7 @@ const mockPostHogClient = PostHogClient as unknown as ReturnType<typeof vi.fn>
 const mockCreateHubSpotClient = createHubSpotClientForWorkspace as ReturnType<typeof vi.fn>
 const mockEnsureBetonProperties = ensureBetonProperties as ReturnType<typeof vi.fn>
 const mockUpsertContact = upsertContact as ReturnType<typeof vi.fn>
+const mockUpsertCompany = upsertCompany as ReturnType<typeof vi.fn>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,7 +108,35 @@ describe('GET /api/cron/sync-signals — hubspot target', () => {
     mockCreateHubSpotClient.mockResolvedValue({ __hubspotClient: true })
     mockEnsureBetonProperties.mockResolvedValue({ created: [], skipped: [], errors: [] })
     mockUpsertContact.mockResolvedValue({ recordId: '1', action: 'created', objectType: 'contacts' })
+    mockUpsertCompany.mockResolvedValue({ recordId: '1', action: 'created', objectType: 'companies' })
   })
+
+  /** Build a one-config payload with a single hubspot target of the given object type. */
+  function hubspotConfig(externalId: string) {
+    return [
+      {
+        id: 'cfg-1',
+        signal_definition_id: 'sig-1',
+        workspace_id: 'ws-1',
+        event_names: ['pageview'],
+        condition_operator: 'gte',
+        condition_value: 1,
+        time_window_days: 7,
+        signal_sync_targets: [
+          { id: 'tgt-1', target_type: 'hubspot', external_id: externalId, auto_update: true },
+        ],
+      },
+    ]
+  }
+
+  /** PostHog creds for the query + HubSpot creds for the write. */
+  function credsForHubSpot() {
+    return async (_ws: string, name: string) => {
+      if (name === 'posthog') return { apiKey: 'ph-key', projectId: '1', region: 'us' }
+      if (name === 'hubspot') return { apiKey: 'hs-token', isActive: true }
+      return null
+    }
+  }
 
   it('upserts a contact per matched email through the HubSpot branch', async () => {
     const configs = [
@@ -179,5 +210,58 @@ describe('GET /api/cron/sync-signals — hubspot target', () => {
     expect(json.synced).toBe(1)
     expect(mockCreateHubSpotClient).not.toHaveBeenCalled()
     expect(mockUpsertContact).not.toHaveBeenCalled()
+  })
+
+  it('upserts a company per matched email-domain when external_id is "companies"', async () => {
+    mockCreateAdminClient.mockReturnValue(makeSupabaseStub(hubspotConfig('companies')))
+    mockGetCreds.mockImplementation(credsForHubSpot())
+
+    const res = await GET(makeRequest())
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.synced).toBe(1)
+    expect(mockEnsureBetonProperties).toHaveBeenCalledWith({ __hubspotClient: true }, 'companies')
+    expect(mockUpsertContact).not.toHaveBeenCalled()
+    expect(mockUpsertCompany).toHaveBeenCalledTimes(2)
+    expect(mockUpsertCompany).toHaveBeenCalledWith(
+      { __hubspotClient: true },
+      expect.objectContaining({ domain: 'example.com' }),
+    )
+  })
+
+  it('skips anonymous (non-email) distinct_ids instead of erroring the target', async () => {
+    mockPostHogClient.mockImplementation(function PostHogClientStub() {
+      return {
+        query: vi.fn().mockResolvedValue({
+          results: [['alice@example.com'], ['anon-uuid-1234'], ['bob@example.com']],
+        }),
+        updateStaticCohort: vi.fn(),
+      }
+    })
+    mockCreateAdminClient.mockReturnValue(makeSupabaseStub(hubspotConfig('contacts')))
+    mockGetCreds.mockImplementation(credsForHubSpot())
+
+    const res = await GET(makeRequest())
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.synced).toBe(1)
+    // Only the two email-shaped ids are upserted; the uuid is skipped silently.
+    expect(mockUpsertContact).toHaveBeenCalledTimes(2)
+  })
+
+  it('records a sync error (no writes) for an unsupported object type like deals', async () => {
+    mockCreateAdminClient.mockReturnValue(makeSupabaseStub(hubspotConfig('deals')))
+    mockGetCreds.mockImplementation(credsForHubSpot())
+
+    const res = await GET(makeRequest())
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    // Config still reports synced (per-target failures are caught + recorded on the row).
+    expect(json.synced).toBe(1)
+    expect(mockUpsertContact).not.toHaveBeenCalled()
+    expect(mockUpsertCompany).not.toHaveBeenCalled()
   })
 })

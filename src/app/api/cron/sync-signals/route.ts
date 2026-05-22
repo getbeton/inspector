@@ -22,6 +22,7 @@ import {
 import {
   createHubSpotClientForWorkspace,
   ensureBetonProperties,
+  upsertCompany,
   upsertContact,
 } from '@/lib/integrations/hubspot'
 import { verifyCronAuth } from '@/lib/middleware/cron-auth'
@@ -164,8 +165,12 @@ export async function GET(request: Request) {
                 )
               }
             } else if (target.target_type === 'hubspot') {
-              // Sync matched people into HubSpot as contacts (upsert by email).
-              // `external_id` names the HubSpot object type to write to.
+              // Sync matched people into HubSpot, stamping the signal date.
+              // `external_id` names the HubSpot object type to write to:
+              //   - contacts:  upsert by email
+              //   - companies: upsert by the email's domain
+              // Deals are intentionally unsupported here — createDeal has no dedup
+              // key, so a recurring cron would create duplicate deals every run.
               const hubspotCreds = await getIntegrationCredentialsAdmin(
                 config.workspace_id,
                 'hubspot'
@@ -173,6 +178,13 @@ export async function GET(request: Request) {
 
               if (hubspotCreds?.apiKey) {
                 const objectType = target.external_id || 'contacts'
+                if (objectType !== 'contacts' && objectType !== 'companies') {
+                  throw new Error(
+                    `Unsupported HubSpot auto-sync object type "${objectType}" ` +
+                      `(only contacts and companies are supported)`
+                  )
+                }
+
                 const hubspotClient = await createHubSpotClientForWorkspace(
                   config.workspace_id
                 )
@@ -180,13 +192,24 @@ export async function GET(request: Request) {
                 await ensureBetonProperties(hubspotClient, objectType)
 
                 const matchedAt = new Date().toISOString()
-                for (const distinctId of distinctIds) {
-                  // distinct_ids are emails — upsert each as a contact carrying
-                  // the signal stamp; mirrors the Attio person-record upsert.
-                  await upsertContact(hubspotClient, {
-                    email: distinctId,
-                    beton_last_signal_date: matchedAt,
-                  })
+                // Both objects need an email: contacts match on email, companies on
+                // its domain. Skip anonymous / non-email distinct_ids rather than
+                // erroring the whole target on the first unresolvable id.
+                const emailIds = distinctIds.filter(id => id.includes('@'))
+                for (const email of emailIds) {
+                  if (objectType === 'contacts') {
+                    await upsertContact(hubspotClient, {
+                      email,
+                      beton_last_signal_date: matchedAt,
+                    })
+                  } else {
+                    const domain = email.split('@')[1]
+                    if (!domain) continue
+                    await upsertCompany(hubspotClient, {
+                      domain,
+                      beton_last_signal_date: matchedAt,
+                    })
+                  }
                 }
               }
             }
