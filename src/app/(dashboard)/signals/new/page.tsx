@@ -670,7 +670,7 @@ export default function AddSignalPage() {
                   {([
                     { id: 'posthog_cohort', name: 'PostHog cohort', initials: 'P', desc: 'Maintain an auto-updating cohort.', connected: true },
                     { id: 'attio_list', name: 'Attio list', initials: 'A', desc: 'Append entries to a curated list.', connected: attioConnected },
-                    { id: 'hubspot', name: 'HubSpot', initials: 'H', desc: 'Upsert a contact, company, or deal.', connected: hubspotConnected },
+                    { id: 'hubspot', name: 'HubSpot', initials: 'H', desc: 'Upsert a contact or company.', connected: hubspotConnected },
                   ] as const).map((d) => {
                     const selected = destination === d.id
                     return (
