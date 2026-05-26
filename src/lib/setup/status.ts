@@ -20,6 +20,7 @@ export interface SetupStatus {
   integrations: {
     posthog: boolean;
     attio: boolean;
+    hubspot: boolean;
   };
   billing: {
     required: boolean;
@@ -49,9 +50,13 @@ export async function computeSetupStatus(workspaceId: string): Promise<SetupStat
 
   const posthogConfig = integrations?.find((i) => i.integration_name === 'posthog');
   const attioConfig = integrations?.find((i) => i.integration_name === 'attio');
+  const hubspotConfig = integrations?.find((i) => i.integration_name === 'hubspot');
 
   const posthogConnected = !!(posthogConfig?.is_active && posthogConfig?.status === 'connected');
   const attioConnected = !!(attioConfig?.is_active && attioConfig?.status === 'connected');
+  // HubSpot is an optional destination — surfaced for UI gating only; it does
+  // NOT factor into setupComplete (still posthog + attio).
+  const hubspotConnected = !!(hubspotConfig?.is_active && hubspotConfig?.status === 'connected');
 
   const billingRequired = isBillingEnabled();
   let billingConfigured = false;
@@ -97,6 +102,7 @@ export async function computeSetupStatus(workspaceId: string): Promise<SetupStat
     integrations: {
       posthog: posthogConnected,
       attio: attioConnected,
+      hubspot: hubspotConnected,
     },
     billing: {
       required: billingRequired,

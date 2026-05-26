@@ -25,3 +25,8 @@ export type {
   SourceObjectSchema,
   SourceRecord,
 } from './types'
+
+// Side-effect: register built-in source adapters so `getSourceAdapter()` resolves.
+// Placed last so all of this module's exports are defined before the registration
+// module (and the connector adapters it imports) reference them — avoids cycle hazards.
+import './register'

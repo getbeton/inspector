@@ -38,7 +38,12 @@ import { DataSourcesSection } from '@/components/settings/DataSourcesSection'
 
 // CRMs that expose the dedicated field-mapping settings page.
 // Keep in sync with supported destinations in src/lib/field-mapping/adapter.ts.
-const FIELD_MAPPABLE_CRMS = new Set(['attio'])
+const FIELD_MAPPABLE_CRMS = new Set(['attio', 'hubspot'])
+
+// CRMs with a dedicated per-integration management page (Overview + tabs).
+// Keep in sync with MANAGED_INTEGRATIONS in
+// src/app/(dashboard)/settings/integrations/[name]/page.tsx.
+const MANAGED_INTEGRATIONS = new Set(['hubspot'])
 
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
   data_source: 'Data Sources',
@@ -562,7 +567,17 @@ function IntegrationCard({
                 <Button variant="outline" size="sm" onClick={handleEdit}>
                   {isConnected ? 'Update' : 'Configure'}
                 </Button>
-                {isConnected && definition.category === 'crm' && FIELD_MAPPABLE_CRMS.has(definition.name) && (
+                {isConnected && MANAGED_INTEGRATIONS.has(definition.name) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link href={`/settings/integrations/${definition.name}`} />}
+                  >
+                    Manage
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {isConnected && definition.category === 'crm' && FIELD_MAPPABLE_CRMS.has(definition.name) && !MANAGED_INTEGRATIONS.has(definition.name) && (
                   <Button
                     variant="outline"
                     size="sm"
