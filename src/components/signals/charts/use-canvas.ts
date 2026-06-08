@@ -20,7 +20,9 @@ export function useCanvas({ draw, onHover, onLeave }: UseCanvasOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const drawRef = useRef(draw)
-  drawRef.current = draw
+  useEffect(() => {
+    drawRef.current = draw
+  })
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
