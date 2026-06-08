@@ -1,9 +1,18 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSignals, getSignal, getSignalsFromAPI, getRealSignalById, createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, bulkUpdateSignals } from '@/lib/api/signals'
+import {
+  getSignals, getSignal, getSignalsFromAPI, getRealSignalById,
+  createSignal, updateSignal, deleteSignal, enableSignal, disableSignal, bulkUpdateSignals,
+  getSignalAnalytics, getPropertyMappings, savePropertyMappings,
+  getDealMappings, saveDealMappings,
+} from '@/lib/api/signals'
 import { useDataMode } from '@/lib/store/data-mode'
-import type { Signal, SignalDetail, SignalFilterParams, RealSignalDetailResponse } from '@/lib/api/signals'
+import type {
+  Signal, SignalFilterParams, RealSignalDetailResponse,
+  SignalAnalyticsResponse, SignalAnalyticsParams,
+  PostHogPropertyMapping, AttioDealMapping,
+} from '@/lib/api/signals'
 
 /**
  * Hook to fetch all signals (legacy mock-aware)
@@ -150,5 +159,72 @@ export function useBulkUpdateSignals() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['signals'] })
     }
+  })
+}
+
+// ── Signal Analytics Hooks ──────────────────────────────────
+
+/**
+ * Hook to fetch signal analytics (time-series, KPIs, retention, curves).
+ * Keyed by signal ID + analytics params so window/filter changes refetch.
+ */
+export function useSignalAnalytics(signalId: string, params?: SignalAnalyticsParams) {
+  return useQuery<SignalAnalyticsResponse>({
+    queryKey: ['signals', 'analytics', signalId, params ?? {}],
+    queryFn: () => getSignalAnalytics(signalId, params),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!signalId,
+  })
+}
+
+/**
+ * Hook to fetch PostHog property mappings for the workspace.
+ */
+export function usePropertyMappings(mappingType?: 'plan' | 'segment' | 'revenue') {
+  return useQuery({
+    queryKey: ['property-mappings', mappingType ?? 'all'],
+    queryFn: () => getPropertyMappings(mappingType),
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
+/**
+ * Hook to save PostHog property mappings.
+ */
+export function useSavePropertyMappings() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (mappings: Omit<PostHogPropertyMapping, 'id'>[]) =>
+      savePropertyMappings(mappings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['property-mappings'] })
+    },
+  })
+}
+
+/**
+ * Hook to fetch Attio deal mappings.
+ */
+export function useDealMappings() {
+  return useQuery({
+    queryKey: ['deal-mappings'],
+    queryFn: () => getDealMappings(),
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
+/**
+ * Hook to save Attio deal mappings.
+ */
+export function useSaveDealMappings() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (mappings: Omit<AttioDealMapping, 'id'>[]) =>
+      saveDealMappings(mappings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deal-mappings'] })
+    },
   })
 }
