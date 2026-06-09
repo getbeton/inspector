@@ -86,31 +86,63 @@ const ALL_DEFS = [POSTHOG, ATTIO, FIRECRAWL, STRIPE_DEF, APOLLO_DEF]
 // ---------------------------------------------------------------------------
 
 describe('buildStepSequence', () => {
-  it('merges integration + built-in steps with required first, then optional', () => {
+  it('collapses CRM integrations into the unified crm → connect → mapping block', () => {
     const steps = buildStepSequence(ALL_DEFS, false)
     const keys = steps.map((s) => s.key)
 
-    // Required: posthog(10), attio(20), attio_mapping(25), website(55)
+    // Required: posthog(10), crm(20), crm_connect(21), crm_mapping(22), website(55)
     // Optional: firecrawl(60)
+    // The standalone `attio` connect step is subsumed by the CRM block.
     expect(keys).toEqual([
       'posthog',
-      'attio',
-      'attio_mapping',
+      'crm',
+      'crm_connect',
+      'crm_mapping',
       'website',
       'firecrawl',
     ])
+    expect(keys).not.toContain('attio')
+    expect(keys).not.toContain('attio_mapping')
+  })
+
+  it('exposes available CRMs as options on the picker step', () => {
+    // Add HubSpot alongside Attio to prove multiple CRMs collapse into one picker.
+    const HUBSPOT = makeDef({
+      name: 'hubspot',
+      display_name: 'HubSpot',
+      category: 'crm',
+      required: true,
+      display_order: 22,
+      setup_step_key: 'hubspot',
+    })
+    const steps = buildStepSequence([...ALL_DEFS, HUBSPOT], false)
+    const picker = steps.find((s) => s.key === 'crm')
+
+    expect(picker).toBeDefined()
+    expect(picker?.crmOptions?.map((c) => c.id)).toEqual(['attio', 'hubspot'])
+  })
+
+  it('omits the CRM block entirely when no CRM definitions exist', () => {
+    const steps = buildStepSequence([POSTHOG, FIRECRAWL], false)
+    const keys = steps.map((s) => s.key)
+
+    expect(keys).not.toContain('crm')
+    expect(keys).not.toContain('crm_connect')
+    expect(keys).not.toContain('crm_mapping')
+    expect(keys).toEqual(['posthog', 'website', 'firecrawl'])
   })
 
   it('includes billing step when enabled', () => {
     const steps = buildStepSequence(ALL_DEFS, true)
     const keys = steps.map((s) => s.key)
 
-    // Required: posthog(10), attio(20), attio_mapping(25), website(55), billing(90)
+    // Required: posthog(10), crm(20), crm_connect(21), crm_mapping(22), website(55), billing(90)
     // Optional: firecrawl(60)
     expect(keys).toEqual([
       'posthog',
-      'attio',
-      'attio_mapping',
+      'crm',
+      'crm_connect',
+      'crm_mapping',
       'website',
       'billing',
       'firecrawl',
@@ -132,13 +164,13 @@ describe('buildStepSequence', () => {
     expect(firecrawl?.optional).toBe(true)
   })
 
-  it('marks required integrations as non-optional', () => {
+  it('marks required integrations + the CRM block as non-optional', () => {
     const steps = buildStepSequence(ALL_DEFS, false)
     const posthog = steps.find((s) => s.key === 'posthog')
-    const attio = steps.find((s) => s.key === 'attio')
+    const crm = steps.find((s) => s.key === 'crm')
 
     expect(posthog?.optional).toBe(false)
-    expect(attio?.optional).toBe(false)
+    expect(crm?.optional).toBe(false)
   })
 
   it('preserves isConnected status from definitions', () => {
@@ -151,11 +183,11 @@ describe('buildStepSequence', () => {
     expect(posthog?.isConnected).toBe(true)
   })
 
-  it('handles empty definitions (only built-in steps)', () => {
+  it('handles empty definitions (only built-in steps, no CRM block)', () => {
     const steps = buildStepSequence([], false)
     const keys = steps.map((s) => s.key)
 
-    expect(keys).toEqual(['attio_mapping', 'website'])
+    expect(keys).toEqual(['website'])
   })
 })
 
@@ -169,18 +201,19 @@ describe('getInitialStepIndex', () => {
     expect(getInitialStepIndex(steps)).toBe(0)
   })
 
-  it('resumes at first incomplete required step', () => {
-    // PostHog connected, Attio not
+  it('resumes at the CRM picker when PostHog is connected but no CRM is', () => {
+    // PostHog connected, Attio not → CRM block is the next incomplete required step.
     const defs = ALL_DEFS.map((d) =>
       d.name === 'posthog' ? { ...d, is_connected: true } : d
     )
     const steps = buildStepSequence(defs, false)
     const idx = getInitialStepIndex(steps)
 
-    expect(steps[idx].key).toBe('attio') // next incomplete required step
+    expect(steps[idx].key).toBe('crm') // unified CRM picker
   })
 
-  it('resumes at Deal Mapping when PostHog + Attio are connected', () => {
+  it('resumes past the CRM picker when a CRM is already connected', () => {
+    // PostHog + Attio connected → picker & connect are marked done; resume at mapping.
     const defs = ALL_DEFS.map((d) =>
       d.name === 'posthog' || d.name === 'attio'
         ? { ...d, is_connected: true }
@@ -189,19 +222,15 @@ describe('getInitialStepIndex', () => {
     const steps = buildStepSequence(defs, false)
     const idx = getInitialStepIndex(steps)
 
-    expect(steps[idx].key).toBe('attio_mapping')
+    expect(steps[idx].key).toBe('crm_mapping')
   })
 
   it('jumps to first optional step when all required are complete', () => {
-    // Mark all required integration steps as connected
-    // Built-in steps (attio_mapping, website) always have isConnected=false
-    // but they ARE required. So we need to handle this.
-    // Actually, built-in steps never become isConnected=true in the current design.
-    // Let's test with manual step descriptors instead.
     const steps: WizardStepDescriptor[] = [
       { key: 'posthog', label: 'PostHog', optional: false, displayOrder: 10, isConnected: true },
-      { key: 'attio', label: 'Attio', optional: false, displayOrder: 20, isConnected: true },
-      { key: 'attio_mapping', label: 'Deal Mapping', optional: false, displayOrder: 25, isConnected: true },
+      { key: 'crm', label: 'CRM', optional: false, displayOrder: 20, isConnected: true },
+      { key: 'crm_connect', label: 'Connect', optional: false, displayOrder: 21, isConnected: true },
+      { key: 'crm_mapping', label: 'Mapping', optional: false, displayOrder: 22, isConnected: true },
       { key: 'website', label: 'Website', optional: false, displayOrder: 55, isConnected: true },
       { key: 'firecrawl', label: 'Firecrawl', optional: true, displayOrder: 60, isConnected: false },
     ]

@@ -6,7 +6,7 @@
  *
  * PATCH /api/signals/custom
  *
- * Add a sync target (PostHog cohort or Attio list) to an existing signal definition.
+ * Add a sync target (PostHog cohort, Attio list, or HubSpot) to an existing signal definition.
  *
  * Request (POST):
  * {
@@ -27,7 +27,7 @@
  *   "condition_value": 2,
  *   "time_window_days": 7,
  *   "target": {
- *     "type": "posthog_cohort" | "attio_list",
+ *     "type": "posthog_cohort" | "attio_list" | "hubspot",
  *     "external_id": "42",
  *     "external_name": "Signal: Pricing Page Interest",
  *     "auto_update": true
@@ -43,7 +43,7 @@ import { InvalidQueryError } from '@/lib/errors/query-errors'
 import { calculateMatchCount, upsertSignalMetrics } from '@/lib/signals/metrics-calculator'
 
 const VALID_OPERATORS = new Set(['gte', 'gt', 'eq', 'lt', 'lte'])
-const VALID_TARGET_TYPES = new Set(['posthog_cohort', 'attio_list'])
+const VALID_TARGET_TYPES = new Set(['posthog_cohort', 'attio_list', 'hubspot'])
 
 interface CreateCustomSignalBody {
   name: string
