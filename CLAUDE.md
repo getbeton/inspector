@@ -21,8 +21,18 @@ docker-compose down
 
 ### Testing & Building
 ```bash
-# Run tests
+# Run tests (watch mode)
 make test
+# or: npm test
+
+# Run tests once
+npm run test:run
+
+# Test coverage
+npm run test:coverage
+
+# E2E tests (Playwright)
+npm run test:e2e
 
 # Type checking
 make typecheck
@@ -32,9 +42,6 @@ make lint
 
 # Full build (CI-compatible)
 make ci-build
-
-# Setup local environment
-make setup
 ```
 
 ### MANDATORY: Local Build Test Before Commit
@@ -45,16 +52,18 @@ make setup
 npm run build
 ```
 
-This is a **blocking requirement** - do not commit code that fails the local build. The CI pipeline will reject PRs with build failures, so catching them early saves time and review cycles.
+This is a **blocking requirement** - do not commit code that fails the local build.
 
 ## Architecture Overview
 
 ### Tech Stack
-- **Frontend**: Next.js 14 (TypeScript) - Full-stack with API routes
-- **Database**: PostgreSQL via Supabase - user data, workspaces, API keys, signals, accounts
+- **Frontend**: Next.js 16 (TypeScript), React 19 — Full-stack with API routes
+- **Database**: PostgreSQL via Supabase — user data, workspaces, API keys, signals, accounts
 - **Authentication**: Supabase Auth (OAuth with PKCE)
+- **Styling**: Tailwind CSS v4 (no `tailwind.config.js` — uses `@theme` tokens)
 - **Deployment**: Vercel (production, staging, and preview environments)
-- **Background Jobs**: Vercel Cron
+- **Background Jobs**: Vercel Cron (5 scheduled jobs)
+- **MCP**: Packaged MCP server in `packages/mcp-server/`
 
 ### Service Architecture
 ```
@@ -70,15 +79,25 @@ This is a **blocking requirement** - do not commit code that fails the local bui
 │                                                     │
 │  ┌─────────────────────────────────────────────┐   │
 │  │              API Routes                       │   │
-│  │  - /api/signals/* - Signal CRUD              │   │
-│  │  - /api/integrations/* - External services   │   │
+│  │  - /api/accounts/* - Account management      │   │
+│  │  - /api/agent/* - ML-backend agent bridge    │   │
+│  │  - /api/billing/* - Stripe billing           │   │
 │  │  - /api/cron/* - Scheduled jobs              │   │
+│  │  - /api/integrations/* - External services   │   │
+│  │  - /api/mcp/* - MCP server endpoints         │   │
+│  │  - /api/onboarding/* - Setup flow            │   │
+│  │  - /api/signals/* - Signal CRUD              │   │
+│  │  - /api/sync/* - Data sync                   │   │
+│  │  - /api/workspace/* - Workspace management   │   │
 │  └─────────────────────────────────────────────┘   │
 │                                                     │
 │  ┌─────────────────────────────────────────────┐   │
 │  │              Business Logic                   │   │
-│  │  - lib/heuristics/ - Signal detection        │   │
+│  │  - lib/signals/ - Signal metrics & MTU       │   │
+│  │  - lib/agent/ - ML-backend agent bridge      │   │
 │  │  - lib/integrations/ - API clients           │   │
+│  │  - lib/billing/ - Stripe MTU billing         │   │
+│  │  - lib/mcp/ - MCP server tools               │   │
 │  └─────────────────────────────────────────────┘   │
 └─────────────────┬───────────────────────────────────┘
                   │
@@ -103,18 +122,23 @@ Tables managed via Supabase migrations:
 - `workspace_members` - Links users to workspaces with roles
 - `api_keys` - API key auth for programmatic access
 - `accounts`, `contacts`, `signals` - Core business entities
-- `integrations` - PostHog, Stripe, Apollo settings
+- `integrations` - PostHog, Stripe, Apollo, Postgres, Firecrawl settings
 
 #### Integrations (`lib/integrations/`)
 - **PostHog** (`posthog/`): Analytics events, persons, accounts
 - **Stripe** (`stripe/`): Customer data, subscription status
 - **Apollo** (`apollo/`): Company enrichment data
 - **Attio** (`attio/`): CRM sync destination
+- **Postgres** (`postgres/`): Direct DB integration (connection string, security)
+- **Firecrawl** (`firecrawl/`): Web crawl integration
 
-#### Heuristics & Scoring (`lib/heuristics/`)
-- **Signal Detection** (`signals/`): 20+ product usage signal detectors
-- **Scoring Engine** (`engine.ts`): Health, expansion, churn risk scores (0-100)
-- **Concrete Grades** (`concrete-grades.ts`): M100, M75, M50, M25, M10
+#### Signal Detection
+Signal **discovery** is handled by `inspector-ml-backend` (ML pipeline). Inspector itself handles:
+- **Signal metrics** (`lib/signals/`): MTU tracking, evaluator, metrics calculator, cycle/enforcement service
+- **Agent bridge** (`lib/agent/`): Session management, auth, rate limiting for ML-backend calls
+
+#### MCP Server (`packages/mcp-server/`)
+Standalone MCP server package — tools for agent access to Inspector data.
 
 ### Project Structure
 ```
@@ -124,32 +148,57 @@ src/
 │   ├── (dashboard)/         # Protected app pages
 │   │   ├── page.tsx         # Home/Setup
 │   │   ├── signals/         # Signal list & detail
-│   │   ├── playbooks/       # Automation rules
-│   │   ├── backtest/        # Signal testing
 │   │   ├── settings/        # Integrations & config
-│   │   └── identities/      # User/account list
+│   │   ├── setup/           # Onboarding setup flow
+│   │   ├── identities/      # User/account list
+│   │   └── memory/          # Agent memory view
 │   ├── api/                 # API route handlers
+│   │   ├── accounts/
+│   │   ├── agent/           # ML-backend agent bridge
+│   │   ├── billing/
 │   │   ├── cron/            # Vercel Cron endpoints
-│   │   ├── signals/         # Signal CRUD
-│   │   └── integrations/    # Integration management
+│   │   ├── data-sources/
+│   │   ├── integrations/
+│   │   ├── mcp/
+│   │   ├── onboarding/
+│   │   ├── signals/
+│   │   ├── sync/
+│   │   ├── webhooks/
+│   │   ├── well-known/
+│   │   └── workspace/
 │   └── layout.tsx           # Root layout
 ├── components/
 │   ├── ui/                  # Shadcn/Radix component library
-│   ├── signals/             # Signal-specific components
 │   └── layout/              # Layout components
 └── lib/
-    ├── heuristics/          # Signal detection & scoring
-    │   ├── signals/         # 20 signal detectors
-    │   ├── engine.ts        # Scoring engine
-    │   └── concrete-grades.ts
+    ├── agent/               # ML-backend agent bridge & sessions
+    ├── analytics/
+    ├── api/
+    ├── auth/
+    ├── billing/             # Stripe MTU billing
+    ├── data/
+    ├── email/
+    ├── errors/
+    ├── hooks/
     ├── integrations/        # External service clients
     │   ├── posthog/
     │   ├── stripe/
     │   ├── apollo/
-    │   └── attio/
+    │   ├── attio/
+    │   ├── postgres/
+    │   └── firecrawl/
+    ├── mcp/
+    ├── middleware/
+    ├── repositories/
+    ├── services/
+    ├── setup/
+    ├── signals/             # Signal metrics, MTU, evaluator
+    ├── store/               # Zustand state management
     ├── supabase/            # Supabase client & helpers
-    ├── stores/              # Zustand state management
-    └── utils/               # Helpers
+    ├── types/
+    └── utils/
+packages/
+└── mcp-server/              # Standalone MCP server
 ```
 
 ## Deployment Workflow
@@ -167,7 +216,6 @@ src/
 ### Branch Strategy
 ```
 feature/my-feature  →  [PR]  →  staging  →  [PR]  →  main
-      │                          │                   │
       │                          │                   │
    Preview                    Staging           Production
   (staging DB)             (staging DB)        (production DB)
@@ -189,6 +237,15 @@ Database schema is managed via Supabase:
 3. Apply same changes to production Supabase project
 4. Or use Supabase CLI for migration files
 
+### Cron Jobs (`vercel.json`)
+| Path | Schedule |
+|------|----------|
+| `/api/cron/signal-detection` | Daily at 06:00 UTC |
+| `/api/cron/mtu-tracking` | Daily at 02:00 UTC |
+| `/api/cron/threshold-notifications` | Every 6 hours |
+| `/api/cron/sync-signals` | Every 6 hours (offset 30m) |
+| `/api/cron/mcp-cleanup` | Daily at 03:00 UTC |
+
 ## Common Development Patterns
 
 ### Adding a New API Route
@@ -203,19 +260,13 @@ Database schema is managed via Supabase:
 3. Add connection validation
 4. Add UI in settings page
 
-### Adding a New Signal Detector
-1. Create detector in `lib/heuristics/signals/detectors/<name>.ts`
-2. Implement `SignalDetectorDefinition` interface
-3. Export from `lib/heuristics/signals/detectors/index.ts`
-4. Detector will be auto-included in signal processing
-
 ### Working with Pages
 1. **Protected pages**: Place in `app/(dashboard)/`
 2. **Auth pages**: Place in `app/(auth)/`
 3. **Use Server Components** by default (better performance)
 4. **Use Client Components** only when needed (forms, interactivity)
 5. **Data fetching**: Use React Query hooks from `lib/api/`
-6. **State**: Use Zustand stores from `lib/stores/` for global state
+6. **State**: Use Zustand stores from `lib/store/` for global state
 
 ## Important Constraints
 
@@ -234,6 +285,9 @@ Database schema is managed via Supabase:
 - **Max duration**: 5 minutes on Pro plan
 - **Authentication**: Use `CRON_SECRET` header verification
 - **Idempotency**: Design jobs to be safely re-runnable
+
+### Agent Bridge (`/api/agent/*`)
+- Routes proxy OAuth bearer to the ML backend — they only accept `x-agent-secret` header auth, not OAuth bearer. Dual-auth wrapper required to fix 401/405 in prod (known P0 issue).
 
 ## Environment Variables
 
@@ -278,28 +332,32 @@ npm run build
 ## Key Files Reference
 
 - `app/api/cron/signal-detection/route.ts` - Signal detection cron job
-- `lib/heuristics/signals/processor.ts` - Signal processing engine
-- `lib/heuristics/engine.ts` - Scoring engine
+- `app/api/agent/` - ML-backend agent bridge routes
+- `lib/signals/` - Signal metrics, MTU tracking, evaluator
+- `lib/agent/agent-service.ts` - Agent session management
+- `lib/billing/` - Stripe MTU billing service
 - `lib/integrations/index.ts` - Integration client exports
 - `lib/supabase/server.ts` - Supabase server client
 - `vercel.json` - Vercel config including cron schedules
 - `docker-compose.yml` - Local PostgreSQL for development
 - `Makefile` - Common commands
+- `packages/mcp-server/` - Standalone MCP server package
 
 ## Additional Context
 
 ### Project Goal
 Beton Inspector is a RevOps intelligence platform that:
 1. Syncs product usage (PostHog), revenue (Stripe), and firmographic (Apollo) data
-2. Detects 20+ product usage signals (PQL indicators)
-3. Scores accounts on health, expansion risk, and churn risk
+2. Detects product usage signals (PQL indicators) via ML backend (`inspector-ml-backend`)
+3. Scores accounts on health, expansion, and churn risk
 4. Routes high-intent signals to CRM (Attio)
-5. Provides RevOps dashboards and backtesting tools
+5. Tracks MTU (Monitored Tracked Users) for billing
+6. Exposes an MCP server for agent access to Inspector data
 
 ### Naming Convention
-"Beton" (French for concrete) - Construction/building theme throughout:
+"Beton" (French for concrete) — construction/building theme throughout:
 - Signals are "construction plans"
-- Scores are concrete grades (M100, M75, etc.)
+- Scores are concrete grades (M100, M75, M50, M25, M10)
 - Platform "inspects" data like a construction inspector
 
 ### Color Palette (Colorblind-Friendly)
