@@ -11,17 +11,14 @@
   [![Self-hostable](https://img.shields.io/badge/Self--hostable-Docker-2496ED)](#self-hosting-quick-start)
 
   <p>
-    <a href="https://www.getbeton.ai/">Website</a> ·
-    <a href="https://www.getbeton.ai/pricing/">Pricing</a> ·
-    <a href="https://www.getbeton.ai/integrations/">Integrations</a> ·
-    <a href="https://www.getbeton.ai/blog/">Blog</a>
+    <a href="#self-hosting-quick-start">Self-host</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="https://github.com/getbeton">All Beton repos</a>
   </p>
 
   <br/>
   <br/>
-  <a href="https://inspector.getbeton.ai"><img src="docs/assets/hero.png" alt="Beton Inspector dashboard — buying signals, account scores, and CRM routing" width="860"/></a>
-  <br/>
-  <sub><a href="https://inspector.getbeton.ai">Live demo</a></sub>
+  <img src="docs/assets/hero.png" alt="Beton Inspector dashboard: buying signals, account scores and CRM routing" width="860"/>
 </div>
 
 ---
@@ -32,21 +29,20 @@ Your product already knows which accounts are about to buy, expand, or churn —
 
 ## What is Beton Inspector?
 
-Beton Inspector connects to your product analytics ([PostHog](https://www.getbeton.ai/integrations/posthog/)) and turns raw usage data into actionable revenue signals. Instead of guessing which accounts are ready to buy, expand, or churn, Beton detects concrete behavioral patterns — trial conversion intent, power user emergence, feature adoption velocity — and scores each account automatically.
+Beton Inspector connects to your product analytics (PostHog) and turns raw usage data into actionable revenue signals. Instead of guessing which accounts are ready to buy, expand, or churn, Beton detects concrete behavioral patterns — trial conversion intent, power user emergence, feature adoption velocity — and scores each account automatically.
 
-The signals and scores flow into your CRM ([Attio](https://www.getbeton.ai/integrations/attio/), [HubSpot](https://www.getbeton.ai/integrations/hubspot/), [Pipedrive](https://www.getbeton.ai/integrations/pipedrive/), [Zoho](https://www.getbeton.ai/integrations/zoho/)), giving your sales team a prioritized list of accounts with context on *why* they should reach out and *when*.
+The signals and scores flow into your CRM (Attio, HubSpot, Pipedrive, Zoho), giving your sales team a prioritized list of accounts with context on *why* they should reach out and *when*.
 
 **Key value:** Your product data already contains the buying signals. Beton Inspector surfaces them without requiring data engineering or custom dashboards.
 
-Prefer managed hosting? See [Beton Cloud pricing](https://www.getbeton.ai/pricing/) — $0.50 per tracked user, free trial, no credit card required.
 
 ## Features
 
 - **20+ Signal Detectors** — Trial intent, power users, feature adoption, engagement drops, and more
 - **Account Scoring** — Health, expansion potential, and churn risk on a 0–100 scale (concrete grades: M100, M75, M50, M25, M10)
-- **[PostHog Integration](https://www.getbeton.ai/integrations/posthog/)** — Reads events, persons, and group data from your PostHog data warehouse
-- **CRM Sync** — Routes scored accounts and signals to [Attio](https://www.getbeton.ai/integrations/attio/), [HubSpot](https://www.getbeton.ai/integrations/hubspot/), [Pipedrive](https://www.getbeton.ai/integrations/pipedrive/), or [Zoho](https://www.getbeton.ai/integrations/zoho/) with full context
-- **[Webhooks & n8n](https://www.getbeton.ai/integrations/n8n/)** — Route signals to custom destinations via [webhooks](https://www.getbeton.ai/integrations/webhook/) or n8n workflows
+- **PostHog Integration** — Reads events, persons, and group data from your PostHog data warehouse
+- **CRM Sync** — Routes scored accounts and signals to Attio, HubSpot, Pipedrive, or Zoho with full context
+- **Webhooks & n8n** — Route signals to custom destinations via webhooks or n8n workflows
 - **Multi-tenant** — Workspace-based isolation with Supabase Row Level Security
 - **Metered Billing** — Optional Stripe integration for SaaS billing (can be disabled for self-hosting)
 - **Agent System** — AI-powered data exploration that learns your schema and business model
@@ -148,9 +144,7 @@ npm run typecheck    # TypeScript check
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTORS.md](CONTRIBUTORS.md) for guidelines on how to get started.
-
-To report bugs or request features, [open an issue](https://github.com/getbeton/inspector/issues).
+Beton is not in active development, so the team does not review new pull requests. You can fork the repo under the AGPL-3.0 license. [CONTRIBUTORS.md](CONTRIBUTORS.md) lists the people who built it.
 
 ## License
 
@@ -158,25 +152,16 @@ Beton Inspector is licensed under the [GNU Affero General Public License v3.0](L
 
 This means you can freely use, modify, and distribute the software, but any modifications must also be made available under the same license, including when running a modified version as a network service.
 
-## Support
+## Security
 
-- [GitHub Issues](https://github.com/getbeton/inspector/issues) — Bug reports and feature requests
-- [GitHub Discussions](https://github.com/getbeton/inspector/discussions) — Questions and community support
-
+To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ---
 
 ## More from Beton
 
-[Beton](https://www.getbeton.ai/) is open-source revenue intelligence. Inspector is the flagship product. We also maintain:
+[Beton](https://github.com/getbeton) was open-source revenue intelligence. Inspector was the main product. Other Beton repos:
 
-- [DryFit](https://www.getbeton.ai/oss-tools/dryfit/) — synthetic analytics datasets for agent benchmarking
-- [openclaw-gtm-skills](https://www.getbeton.ai/oss-tools/openclaw-gtm-skills/) — company research pipeline for OpenClaw
-- [seqd](https://www.getbeton.ai/oss-tools/seqd/) — self-hosted email sequencer
-
-Resources:
-
-- [PostHog integration](https://www.getbeton.ai/integrations/posthog/)
-- [Attio integration](https://www.getbeton.ai/integrations/attio/)
-- [Apollo integration](https://www.getbeton.ai/integrations/apollo/)
-- [All integrations](https://www.getbeton.ai/integrations/) · [Blog](https://www.getbeton.ai/blog/) · [All open-source tools](https://www.getbeton.ai/oss-tools/)
+- [dryfit](https://github.com/getbeton/dryfit): synthetic analytics data and hidden benchmark truth for agent tests
+- [oss-pricing-data](https://github.com/getbeton/oss-pricing-data): open-source pricing dataset, 20 tools, 2023 vs 2026
+- [beton-main-site](https://github.com/getbeton/beton-main-site): the Beton website, with the blog and the pricing teardowns
