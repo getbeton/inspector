@@ -10,14 +10,20 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import {
+  adapterFor,
   buildPayload,
-  createAttioAdapter,
+  type Destination,
   type DestinationAdapter,
   type MappingRow,
   type ObjectId,
 } from '@/lib/field-mapping'
 
+const VALID_DESTINATIONS: Destination[] = ['attio', 'hubspot']
 const VALID_OBJECT_IDS: ObjectId[] = ['deals', 'people', 'companies', 'workspaces']
+
+function parseDestination(raw: string): Destination | null {
+  return (VALID_DESTINATIONS as string[]).includes(raw) ? (raw as Destination) : null
+}
 
 async function handler(
   request: NextRequest,
@@ -25,7 +31,8 @@ async function handler(
   { params }: { params: Promise<{ name: string }> },
 ): Promise<NextResponse> {
   const { name } = await params
-  if (name !== 'attio') {
+  const destination = parseDestination(name)
+  if (!destination) {
     return NextResponse.json({ error: `Unsupported destination "${name}"` }, { status: 400 })
   }
 
@@ -43,7 +50,7 @@ async function handler(
   const objectId = objectIdRaw as ObjectId
   const rows = Array.isArray(body.rows) ? body.rows : []
 
-  const adapter: DestinationAdapter = createAttioAdapter({ supabase: ctx.supabase })
+  const adapter: DestinationAdapter = adapterFor(destination, ctx)
 
   // Resolve test subject
   const subjects = await adapter.fetchSampleSubjects(ctx.workspaceId, objectId, { limit: 10 })

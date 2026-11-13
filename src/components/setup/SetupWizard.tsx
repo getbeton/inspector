@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } fro
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   trackSetupStepCompleted,
   trackOnboardingCompleted,
@@ -15,25 +16,26 @@ import { ProgressIndicator, type StepInfo } from "./ProgressIndicator";
 import { PostHogStep } from "./steps/PostHogStep";
 import { BillingStep } from "./steps/BillingStep";
 import { AttioStep } from "./steps/AttioStep";
-import { DealFieldMappingStep, type DealMappingState } from "./steps/DealFieldMappingStep";
+import { HubSpotStep } from "./steps/HubSpotStep";
+import { CrmPickerStep, CRM_SKIP, type CrmSelection } from "./steps/CrmPickerStep";
+import { CrmMappingStep } from "./steps/CrmMappingStep";
 import { FirecrawlStep } from "./steps/FirecrawlStep";
 import { PostgresStep } from "./steps/PostgresStep";
-import { ContactPicker, type SelectedContact } from "./fields/ContactPicker";
-import { getDefaultSampleData, deriveCompanyFromEmail, type SampleData } from "@/lib/setup/sample-data";
 import { useSession } from "@/components/auth/session-provider";
 import { WebsiteStep } from "./steps/WebsiteStep";
 import { PostHogPreview } from "./previews/PostHogPreview";
-import { AttioConnectionPreview } from "./previews/AttioConnectionPreview";
 import { FirecrawlPreview } from "./previews/FirecrawlPreview";
 import { PostgresPreview } from "./previews/PostgresPreview";
-import { SlackNotificationPreview } from "./previews/SlackNotificationPreview";
-import { CrmCardPreview } from "./previews/CrmCardPreview";
 import { useIntegrationDefinitions } from "@/lib/hooks/use-integration-definitions";
 import {
   buildStepSequence,
   getInitialStepIndex,
+  CRM_PICKER_STEP,
+  CRM_CONNECT_STEP,
+  CRM_MAPPING_STEP,
   type WizardStepDescriptor,
 } from "@/lib/setup/wizard-sequence";
+import type { Destination } from "@/lib/field-mapping/client";
 
 /**
  * Dual-panel structure returned by each step renderer
@@ -41,14 +43,27 @@ import {
 interface StepPanels {
   config: ReactNode;
   preview: ReactNode;
+  /** When true, the step renders single-column (no preview rail). Used by CRM steps. */
+  fullWidth?: boolean;
 }
 
 // ── Demo mode step list (no API dependency) ─────────────────
 
 const DEMO_STEPS: WizardStepDescriptor[] = [
   { key: "posthog", label: "PostHog", optional: false, displayOrder: 10, isConnected: false },
-  { key: "attio", label: "Attio", optional: false, displayOrder: 20, isConnected: false },
-  { key: "attio_mapping", label: "Deal Mapping", optional: false, displayOrder: 25, isConnected: false },
+  {
+    key: CRM_PICKER_STEP,
+    label: "CRM",
+    optional: false,
+    displayOrder: 20,
+    isConnected: false,
+    crmOptions: [
+      { id: "hubspot", label: "HubSpot", isConnected: false, displayOrder: 20 },
+      { id: "attio", label: "Attio", isConnected: false, displayOrder: 21 },
+    ],
+  },
+  { key: CRM_CONNECT_STEP, label: "Connect", optional: false, displayOrder: 21, isConnected: false },
+  { key: CRM_MAPPING_STEP, label: "Mapping", optional: false, displayOrder: 22, isConnected: false },
   { key: "website", label: "Website", optional: false, displayOrder: 55, isConnected: false },
   { key: "firecrawl", label: "Firecrawl", optional: true, displayOrder: 60, isConnected: false },
 ];
@@ -161,79 +176,24 @@ export function SetupWizard({
   // Cross-step shared data
   const [mtuCount, setMtuCount] = useState<number>(demoMode ? 1_420 : 0);
   const [posthogRegion, setPosthogRegion] = useState<string>(demoMode ? "US" : "");
-  const [attioWorkspaceName, setAttioWorkspaceName] = useState<string>(
-    demoMode ? "Acme Sales" : ""
-  );
   const [posthogConnected, setPosthogConnected] = useState(
     demoMode || (setupStatus?.integrations.posthog ?? false)
   );
   const [attioConnected, setAttioConnected] = useState(
     demoMode || (setupStatus?.integrations.attio ?? false)
   );
+  // Unified CRM flow: which CRM the user picked in the `crm` step. Drives the
+  // routed connect + mapping steps, and the skip short-circuit. Defaults to Attio
+  // when Attio is already connected (resume case).
+  const [selectedCrm, setSelectedCrm] = useState<CrmSelection>(
+    demoMode ? null : (setupStatus?.integrations.attio ? "attio" : null)
+  );
+  const [hubspotConnected, setHubspotConnected] = useState(false);
   const [firecrawlConnected, setFirecrawlConnected] = useState(false);
   const [firecrawlMode, setFirecrawlMode] = useState<"cloud" | "self_hosted" | null>(null);
   const [firecrawlProxy, setFirecrawlProxy] = useState<string | null>(null);
   const [postgresConnected, setPostgresConnected] = useState(false);
   const [postgresDbName, setPostgresDbName] = useState("");
-
-  // Deal mapping state for live preview
-  const [dealMappingState, setDealMappingState] = useState<DealMappingState>({
-    dealNameTemplate: "{{company_name}} — {{signal_name}}",
-    notificationText: "New deal signal detected",
-    fieldMappings: [],
-  });
-
-  // Sample data for previews
-  const [sampleData, setSampleData] = useState<SampleData>(getDefaultSampleData);
-
-  // Selected Attio contact for preview enrichment (production mode only)
-  const [selectedContactData, setSelectedContactData] = useState<SelectedContact | null>(null);
-
-  // Load sample data on mount (skip in demo mode)
-  useEffect(() => {
-    if (demoMode || authBypass) return;
-    fetch("/api/integrations/attio/sample-data")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.sample) setSampleData(data.sample);
-      })
-      .catch(() => {
-        // Keep default sample on error
-      });
-  }, [demoMode, authBypass]);
-
-  // Enrich sample data: selected Attio contact > user email > fallback
-  const enrichedSampleData = useMemo<SampleData>(() => {
-    const base = { ...sampleData };
-    if (selectedContactData?.email) {
-      // Use the picked Attio contact's data
-      const { companyName, companyDomain } = deriveCompanyFromEmail(selectedContactData.email);
-      base.company_name = companyName;
-      base.company_domain = companyDomain;
-      base.user_email = selectedContactData.email;
-    } else if (!demoMode && session?.email && session.sub !== "auth-bypass") {
-      const { companyName, companyDomain } = deriveCompanyFromEmail(session.email);
-      base.company_name = companyName;
-      base.company_domain = companyDomain;
-      base.user_email = session.email;
-    }
-    return base;
-  }, [sampleData, session, demoMode, selectedContactData]);
-
-  // Derive PostHog host from region for deep links
-  const posthogHost = useMemo(() => {
-    if (!posthogConnected || !posthogRegion) return null;
-    if (posthogRegion === "self_hosted") return null; // No standard deep link for self-hosted
-    return posthogRegion === "eu"
-      ? "https://eu.posthog.com"
-      : "https://us.posthog.com";
-  }, [posthogConnected, posthogRegion]);
-
-  // Attio workspace slug (derived from name — lowercase, hyphenated)
-  const attioWorkspaceSlug = useMemo(() => {
-    if (!attioConnected || !attioWorkspaceName) return null;
-    return attioWorkspaceName.toLowerCase().replace(/\s+/g, "-");
-  }, [attioConnected, attioWorkspaceName]);
 
   // Sync posthogConnected from definitions
   useEffect(() => {
@@ -241,7 +201,15 @@ export function SetupWizard({
       const ph = definitions.find((d) => d.name === "posthog");
       if (ph?.is_connected) setPosthogConnected(true);
       const at = definitions.find((d) => d.name === "attio");
-      if (at?.is_connected) setAttioConnected(true);
+      if (at?.is_connected) {
+        setAttioConnected(true);
+        setSelectedCrm((cur) => cur ?? "attio");
+      }
+      const hs = definitions.find((d) => d.name === "hubspot");
+      if (hs?.is_connected) {
+        setHubspotConnected(true);
+        setSelectedCrm((cur) => cur ?? "hubspot");
+      }
       const fc = definitions.find((d) => d.name === "firecrawl");
       if (fc?.is_connected) setFirecrawlConnected(true);
       const pg = definitions.find((d) => d.name === "postgres");
@@ -251,6 +219,16 @@ export function SetupWizard({
 
   const currentStep = currentStepIndex !== null ? steps[currentStepIndex] : null;
   const currentKey = currentStep?.key ?? "";
+
+  // The CRM that connect + mapping steps route to. Falls back to the first
+  // available CRM option (or hubspot) so the routed steps always have a target
+  // even if state hasn't been picked yet (e.g. resuming directly into connect).
+  const effectiveCrm: Destination = useMemo(() => {
+    if (selectedCrm && selectedCrm !== CRM_SKIP) return selectedCrm as Destination;
+    const picker = steps.find((s) => s.key === CRM_PICKER_STEP);
+    const first = picker?.crmOptions?.[0]?.id;
+    return (first as Destination) ?? "hubspot";
+  }, [selectedCrm, steps]);
 
   const markStep = useCallback(
     (key: string, status: "completed" | "skipped") => {
@@ -299,6 +277,7 @@ export function SetupWizard({
         const connectedIntegrations: string[] = [];
         if (posthogConnected) connectedIntegrations.push("posthog");
         if (attioConnected) connectedIntegrations.push("attio");
+        if (hubspotConnected) connectedIntegrations.push("hubspot");
         if (firecrawlConnected) connectedIntegrations.push("firecrawl");
 
         trackOnboardingCompleted({
@@ -330,7 +309,7 @@ export function SetupWizard({
         setCurrentStepIndex(nextIndex);
       }
     },
-    [currentStepIndex, steps, router, demoMode, markStep, stepStatuses, posthogConnected, attioConnected, firecrawlConnected, posthogRegion, firecrawlMode, firecrawlProxy]
+    [currentStepIndex, steps, router, demoMode, markStep, stepStatuses, posthogConnected, attioConnected, hubspotConnected, firecrawlConnected, posthogRegion, firecrawlMode, firecrawlProxy]
   );
 
   const goToPrevStep = useCallback(() => {
@@ -338,6 +317,40 @@ export function SetupWizard({
       setCurrentStepIndex(currentStepIndex - 1);
     }
   }, [currentStepIndex]);
+
+  // ── Unified CRM flow navigation ───────────────────────────
+
+  /**
+   * Continue from the CRM picker. If the user chose "skip", short-circuit past
+   * the connect + mapping steps to whatever follows the CRM block — mirroring the
+   * design's WizardView.advance(). Otherwise advance one step into connect.
+   */
+  const advanceFromCrmPicker = useCallback(() => {
+    if (currentStepIndex === null) return;
+    const pickerStep = steps[currentStepIndex];
+
+    if (selectedCrm === CRM_SKIP) {
+      markStep(CRM_PICKER_STEP, "skipped");
+      markStep(CRM_CONNECT_STEP, "skipped");
+      markStep(CRM_MAPPING_STEP, "skipped");
+      trackOnboardingStepSkipped({ step_key: pickerStep.key, step_name: pickerStep.label });
+
+      // Jump to the first step after crm_mapping.
+      const mappingIdx = steps.findIndex((s) => s.key === CRM_MAPPING_STEP);
+      const nextIndex = (mappingIdx === -1 ? currentStepIndex : mappingIdx) + 1;
+      if (nextIndex >= steps.length) {
+        advanceFrom("skipped"); // no steps after CRM block → finish
+      } else {
+        markStep(pickerStep.key, "skipped");
+        setCurrentStepIndex(nextIndex);
+      }
+      return;
+    }
+
+    // A CRM is selected → record + move into connect.
+    markStep(CRM_PICKER_STEP, "completed");
+    advanceFrom("completed");
+  }, [currentStepIndex, steps, selectedCrm, markStep, advanceFrom]);
 
   // ── Step-specific callbacks ───────────────────────────────
 
@@ -359,13 +372,10 @@ export function SetupWizard({
     [advanceFrom]
   );
 
-  const handleFieldMappingSuccess = useCallback(
-    (mapping: DealMappingState) => {
-      setDealMappingState(mapping);
-      advanceFrom("completed");
-    },
-    [advanceFrom]
-  );
+  const handleHubSpotSuccess = useCallback(() => {
+    setHubspotConnected(true);
+    advanceFrom("completed");
+  }, [advanceFrom]);
 
   const handleWebsiteSuccess = useCallback(() => {
     advanceFrom("completed");
@@ -449,85 +459,54 @@ export function SetupWizard({
           ),
         };
 
-      case "attio":
+      case CRM_PICKER_STEP: {
+        // Footer Continue / Skip is rendered below (this step does not auto-advance).
         return {
-          config: demoMode ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded bg-[#5B5FC7] flex items-center justify-center p-0.5">
-                  <img src="https://cdn.brandfetch.io/idZA7HYRWK/theme/light/symbol.svg" alt="Attio" className="h-full w-full" />
-                </div>
-                <span className="font-medium">Connect Attio CRM</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Enter your Attio API key to sync signals and create deals in your CRM.
-              </p>
-              <div className="space-y-3 opacity-60 pointer-events-none">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">API Key</label>
-                  <div className="h-9 rounded border-2 border-foreground/20 bg-muted/30 px-3 flex items-center text-xs text-muted-foreground font-mono">attio_demo_key_xxxxx</div>
-                </div>
-              </div>
-              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                <p className="text-sm text-green-800 font-medium">Connected (demo)</p>
-                <p className="text-xs text-green-600 mt-1">Workspace: Acme Sales</p>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <AttioStep
-                onSuccess={handleAttioSuccess}
-                onWorkspaceName={setAttioWorkspaceName}
-              />
-              {authBypassSkipButton}
-            </div>
-          ),
-          preview: (
-            <AttioConnectionPreview
-              isConnected={attioConnected}
-              workspaceName={attioWorkspaceName}
+          fullWidth: true,
+          config: (
+            <CrmPickerStep
+              options={currentStep?.crmOptions ?? []}
+              selected={selectedCrm}
+              onSelect={setSelectedCrm}
             />
           ),
+          preview: null,
         };
+      }
 
-      case "attio_mapping":
+      case CRM_CONNECT_STEP: {
+        const crm = effectiveCrm;
         return {
+          fullWidth: true,
           config: (
-            <div>
-              {/* Contact picker — only in production mode with Attio connected */}
-              {!demoMode && !authBypass && attioConnected && (
-                <ContactPicker
-                  onSelect={setSelectedContactData}
-                  className="mb-6"
-                />
+            <div className="max-w-2xl">
+              {crm === "hubspot" ? (
+                <HubSpotStep onSuccess={handleHubSpotSuccess} />
+              ) : (
+                <AttioStep onSuccess={handleAttioSuccess} />
               )}
-              <DealFieldMappingStep
-                onSuccess={handleFieldMappingSuccess}
-                onMappingChange={setDealMappingState}
-                demoMode={demoMode || authBypass}
-              />
               {authBypassSkipButton}
             </div>
           ),
-          preview: (
-            <div className="space-y-4">
-              <SlackNotificationPreview
-                dealNameTemplate={dealMappingState.dealNameTemplate}
-                notificationText={dealMappingState.notificationText}
-                sampleData={enrichedSampleData}
-                posthogHost={posthogHost}
-              />
-              <CrmCardPreview
-                mappingState={dealMappingState}
-                sampleData={enrichedSampleData}
-                attioWorkspaceName={attioWorkspaceName}
-                attioWorkspaceSlug={attioWorkspaceSlug}
-                contactRecordId={selectedContactData?.personId}
-                contactName={selectedContactData?.personName}
-              />
+          preview: null,
+        };
+      }
+
+      case CRM_MAPPING_STEP: {
+        const crm = effectiveCrm as Destination;
+        const wsId = session?.workspace_id ?? "";
+        return {
+          fullWidth: true,
+          config: wsId ? (
+            <CrmMappingStep destination={crm} workspaceId={wsId} />
+          ) : (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              Workspace not ready — reconnect and try again.
             </div>
           ),
+          preview: null,
         };
+      }
 
       case "website":
         return {
@@ -722,25 +701,65 @@ export function SetupWizard({
     );
   }
 
-  const { config, preview } = renderStep();
+  const { config, preview, fullWidth } = renderStep();
+
+  const isCrmStep =
+    currentKey === CRM_PICKER_STEP ||
+    currentKey === CRM_CONNECT_STEP ||
+    currentKey === CRM_MAPPING_STEP;
+
+  // CRM picker continue label mirrors the design (skip → "Continue without CRM").
+  const pickerCtaLabel = selectedCrm === CRM_SKIP ? "Continue without CRM" : "Continue";
+  const pickerCanAdvance = selectedCrm !== null;
 
   return (
-    <div className={cn("w-full max-w-5xl mx-auto", className)} data-slot="setup-wizard">
-      {/* Progress Indicator — spans full width */}
+    <div className={cn("w-full max-w-[980px] mx-auto", className)} data-slot="setup-wizard">
+      {/* Horizontal step strip — spans full width, centered */}
       <div className="mb-8">
         <ProgressIndicator steps={progressSteps} currentIndex={currentStepIndex ?? 0} />
       </div>
 
-      {/* Two-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left column: Config */}
+      {fullWidth ? (
+        /* Single-column CRM steps (picker / connect / mapping) */
         <Card className="p-6">{config}</Card>
-
-        {/* Right column: Preview (sticky, hidden on mobile) */}
-        <div className="hidden lg:block">
-          <div className="sticky top-8">{preview}</div>
+      ) : (
+        /* Two-column grid with live preview */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card className="p-6">{config}</Card>
+          <div className="hidden lg:block">
+            <div className="sticky top-8">{preview}</div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* CRM-step footer: Back + (picker-only) Continue/Skip CTA */}
+      {isCrmStep && !demoMode && (
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <Button
+            variant="ghost"
+            onClick={goToPrevStep}
+            disabled={(currentStepIndex ?? 0) === 0}
+          >
+            Back
+          </Button>
+          {currentKey === CRM_PICKER_STEP && (
+            <div className="flex items-center gap-3">
+              {selectedCrm && selectedCrm !== CRM_SKIP && (
+                <span className="text-xs text-muted-foreground">
+                  Selected:{" "}
+                  <strong className="font-heading uppercase tracking-wider text-foreground">
+                    {currentStep?.crmOptions?.find((c) => c.id === selectedCrm)?.label ??
+                      selectedCrm}
+                  </strong>
+                </span>
+              )}
+              <Button onClick={advanceFromCrmPicker} disabled={!pickerCanAdvance}>
+                {pickerCtaLabel}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Demo mode navigation */}
       {demoMode && (

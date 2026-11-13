@@ -12,11 +12,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import {
-  createAttioAdapter,
+  adapterFor,
   listMappings,
   replaceAllMappings,
   type Destination,
-  type DestinationAdapter,
   type MappingRow,
   type ObjectId,
   type ObjectSchema,
@@ -24,15 +23,10 @@ import {
 } from '@/lib/field-mapping'
 import { validateFormula } from '@/lib/formula'
 
-const VALID_DESTINATIONS: Destination[] = ['attio']
+const VALID_DESTINATIONS: Destination[] = ['attio', 'hubspot']
 
 function parseDestination(raw: string): Destination | null {
   return (VALID_DESTINATIONS as string[]).includes(raw) ? (raw as Destination) : null
-}
-
-function adapterFor(destination: Destination, ctx: RLSContext): DestinationAdapter {
-  if (destination === 'attio') return createAttioAdapter({ supabase: ctx.supabase })
-  throw new Error(`No adapter for destination "${destination}"`)
 }
 
 async function handleGet(

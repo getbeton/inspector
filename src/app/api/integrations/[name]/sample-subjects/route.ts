@@ -9,12 +9,17 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { withRLSContext, withErrorHandler, type RLSContext } from '@/lib/middleware'
 import {
-  createAttioAdapter,
+  adapterFor,
   type Destination,
   type ObjectId,
 } from '@/lib/field-mapping'
 
+const VALID_DESTINATIONS: Destination[] = ['attio', 'hubspot']
 const VALID_OBJECT_IDS: ObjectId[] = ['deals', 'people', 'companies', 'workspaces']
+
+function parseDestination(raw: string): Destination | null {
+  return (VALID_DESTINATIONS as string[]).includes(raw) ? (raw as Destination) : null
+}
 
 async function handler(
   request: NextRequest,
@@ -22,10 +27,10 @@ async function handler(
   { params }: { params: Promise<{ name: string }> },
 ): Promise<NextResponse> {
   const { name } = await params
-  if (name !== 'attio') {
+  const destination = parseDestination(name)
+  if (!destination) {
     return NextResponse.json({ error: `Unsupported destination "${name}"` }, { status: 400 })
   }
-  const destination: Destination = 'attio'
 
   const url = new URL(request.url)
   const objectIdParam = url.searchParams.get('objectId') ?? ''
@@ -35,12 +40,7 @@ async function handler(
   const objectId = objectIdParam as ObjectId
   const limit = parseLimit(url.searchParams.get('limit'))
 
-  const adapter = destination === 'attio'
-    ? createAttioAdapter({ supabase: ctx.supabase })
-    : null
-  if (!adapter) {
-    return NextResponse.json({ error: `No adapter for "${destination}"` }, { status: 500 })
-  }
+  const adapter = adapterFor(destination, ctx)
 
   const subjects = await adapter.fetchSampleSubjects(ctx.workspaceId, objectId, { limit })
   return NextResponse.json({ subjects })
